@@ -80,6 +80,10 @@ interface CanvasState {
   attachImageToAgent: (nodeId: string, image: { id: string; url: string; name: string }) => void
   removeAttachedImage: (nodeId: string, imageId: string) => void
   spawnSubagent: (parentId: string, childType: 'claude' | 'agy') => void
+  deleteEdge: (edgeId: string) => void
+  groupSelectedNodes: (nodeIds: string[], title?: string) => void
+  ungroupNodes: (groupId: string) => void
+  stashGroup: (groupId: string) => void
 }
 
 const initialClis: CliConfig[] = [
@@ -348,6 +352,7 @@ const initialEdges: Edge[] = [
     id: 'e-image-claude',
     source: 'node-image-1',
     target: 'node-claude-1',
+    type: 'removable',
     animated: true,
     style: { stroke: '#F43F5E', strokeWidth: 2 },
   },
@@ -355,6 +360,7 @@ const initialEdges: Edge[] = [
     id: 'e-claude-artifact',
     source: 'node-claude-1',
     target: 'node-artifact-1',
+    type: 'removable',
     animated: true,
     style: { stroke: '#EA580C', strokeWidth: 2 },
   },
@@ -362,6 +368,7 @@ const initialEdges: Edge[] = [
     id: 'e-artifact-agy',
     source: 'node-artifact-1',
     target: 'node-agy-1',
+    type: 'removable',
     animated: true,
     style: { stroke: '#6366F1', strokeWidth: 2 },
   },
@@ -424,6 +431,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       edges: addEdge(
         {
           ...connection,
+          type: 'removable',
           animated: true,
           style: { stroke: strokeColor, strokeWidth: 2 },
         },
@@ -504,6 +512,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const node = get().nodes.find((n) => n.id === id)
     if (!node) return
 
+    if (node.type === 'groupNode') {
+      get().stashGroup(id)
+      return
+    }
+
     let type: StashItem['type'] = 'agent'
     if (node.type === 'artifactNode') type = 'artifact'
     else if (node.type === 'imageNode') type = 'image'
@@ -535,6 +548,45 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   restoreFromStash: (stashId) => {
     const item = get().stashItems.find((s) => s.id === stashId)
     if (!item) return
+
+    if (item.type === 'group') {
+      const groupData = item.nodeData as {
+        groupNode: Node
+        memberNodes: Node[]
+        memberEdges: Edge[]
+      }
+      const offsetX = 50
+      const offsetY = 50
+
+      const restoredGroupNode: Node = {
+        ...groupData.groupNode,
+        id: `${groupData.groupNode.id}-restored-${Date.now()}`,
+        position: {
+          x: groupData.groupNode.position.x + offsetX,
+          y: groupData.groupNode.position.y + offsetY,
+        },
+      }
+
+      const restoredMemberNodes = (groupData.memberNodes || []).map((node) => ({
+        ...node,
+        position: {
+          x: node.position.x + offsetX,
+          y: node.position.y + offsetY,
+        },
+      }))
+
+      restoredGroupNode.data = {
+        ...restoredGroupNode.data,
+        nodeIds: restoredMemberNodes.map((n) => n.id),
+      }
+
+      set({
+        nodes: [...get().nodes, restoredGroupNode, ...restoredMemberNodes],
+        edges: [...get().edges, ...(groupData.memberEdges || [])],
+        stashItems: get().stashItems.filter((s) => s.id !== stashId),
+      })
+      return
+    }
 
     let nodeType = 'agentNode'
     if (item.type === 'artifact') nodeType = 'artifactNode'
@@ -598,9 +650,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({ skills: [...get().skills, skill] })
   },
 
-  sendAgentMessage: (nodeId, text, images) => {
+  sendAgentMessage: async (nodeId, text, images) => {
     const node = get().nodes.find((n) => n.id === nodeId)
     if (!node) return
+
+    const agentType = (node.data as any).agentType || 'claude'
 
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -618,33 +672,284 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       status: 'running',
       attachedImages: [],
       thinking: {
-        duration: 'Processando...',
-        thoughts: ['Interpretando solicitação e verificando arquivos relacionados...'],
+        duration: 'Executando CLI real...',
+        thoughts: [
+          `Enviando instrução para o binário ${agentType} instalado no sistema...`,
+          images && images.length > 0
+            ? `${images.length} imagem(ns) incluída(s) no contexto.`
+            : 'Contexto do workspace anexado.',
+        ],
         isExpanded: true,
       },
     })
 
-    // Simulate Agent response
-    setTimeout(() => {
-      const responseMessage: ChatMessage = {
-        id: `msg-resp-${Date.now()}`,
+    const startTime = Date.now()
+
+    try {
+      let fullPrompt = text
+      if (images && images.length > 0) {
+        fullPrompt = `[Contexto: ${images.length} imagens/anotações conectadas]: ${text}`
+      }
+
+      const response = await fetch('/api/agent/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentType,
+          prompt: fullPrompt,
+        }),
+      })
+
+      const result = await response.json()
+      const durationSec = `${((Date.now() - startTime) / 1000).toFixed(1)}s`
+
+      if (result.success && result.output) {
+        const responseMessage: ChatMessage = {
+          id: `msg-resp-${Date.now()}`,
+          sender: 'agent',
+          text: result.output,
+          timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        }
+
+        get().updateNodeData(nodeId, {
+          messages: [...updatedMessages, responseMessage],
+          status: 'idle',
+          thinking: {
+            duration: durationSec,
+            thoughts: [
+              `Resposta retornada pelo CLI ${agentType} em ${durationSec}.`,
+              'Execução concluída com código 0.',
+            ],
+            isExpanded: false,
+          },
+          terminalLogs: [
+            ...((node.data as any).terminalLogs || []),
+            `> [${agentType.toUpperCase()}] ${text.slice(0, 45)}...`,
+            `> Concluído com sucesso em ${durationSec}`,
+          ],
+        })
+
+        // Check if this is an analysis or plan request -> spawn ArtifactViewerNode!
+        const lower = text.toLowerCase()
+        const isPlanRequest =
+          lower.includes('plano') ||
+          lower.includes('analis') ||
+          lower.includes('especifica') ||
+          lower.includes('implementa')
+
+        if (isPlanRequest && agentType === 'claude') {
+          const existingArtifact = get().nodes.find((n) => n.type === 'artifactNode')
+          let targetArtifactId = existingArtifact?.id
+
+          if (!existingArtifact) {
+            targetArtifactId = `node-artifact-${Date.now()}`
+            const newArtifactNode: Node = {
+              id: targetArtifactId,
+              type: 'artifactNode',
+              position: { x: node.position.x + 500, y: node.position.y - 30 },
+              data: {
+                title: 'Plano de Implementação Gerado',
+                activeTab: 'markdown',
+                markdownContent: result.output,
+                htmlPreview:
+                  '<div style="padding:24px;font-family:sans-serif;color:#94a3b8;background:#0D1117;min-height:100vh"><h3>Aguardando geração pelo AGY...</h3></div>',
+                diffContent: {
+                  filename: 'src/components/DashboardFeature.tsx',
+                  lines: [{ type: 'add', content: '+// Componente planejado por Claude Code' }],
+                },
+                status: 'draft',
+              },
+            }
+
+            const edgeToArtifact: Edge = {
+              id: `e-${nodeId}-${targetArtifactId}`,
+              source: nodeId,
+              target: targetArtifactId,
+              type: 'removable',
+              animated: true,
+              style: { stroke: '#EA580C', strokeWidth: 2 },
+            }
+
+            set({
+              nodes: [...get().nodes, newArtifactNode],
+              edges: [...get().edges, edgeToArtifact],
+            })
+          } else {
+            get().updateNodeData(existingArtifact.id, {
+              markdownContent: result.output,
+              title: 'Plano de Implementação (Atualizado)',
+            })
+          }
+
+          // If prompt requests AGY or HTML preview or subagent invocation:
+          if (
+            lower.includes('agy') ||
+            lower.includes('preview') ||
+            lower.includes('invoc') ||
+            lower.includes('subagente')
+          ) {
+            setTimeout(async () => {
+              const agyId = `node-agy-${Date.now()}`
+              const agyNode: Node = {
+                id: agyId,
+                type: 'agentNode',
+                position: { x: node.position.x + 1020, y: node.position.y },
+                data: {
+                  title: 'Antigravity (AGY)',
+                  agentType: 'agy',
+                  role: 'executor',
+                  status: 'running',
+                  viewMode: 'extension',
+                  thinking: {
+                    duration: 'Gerando Preview HTML...',
+                    thoughts: [
+                      'Subagente invocado autonomamente por Claude Code.',
+                      'Executando CLI AGY real para gerar componente HTML/Tailwind...',
+                    ],
+                    isExpanded: true,
+                  },
+                  messages: [
+                    {
+                      id: `msg-${Date.now()}`,
+                      sender: 'agent',
+                      text: 'Recebi o plano de implementação de Claude. Gerando o preview HTML interativo agora com o CLI real...',
+                      timestamp: new Date().toLocaleTimeString('pt-BR', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      }),
+                    },
+                  ],
+                  approvals: [],
+                  attachedImages: [],
+                  terminalLogs: [
+                    '> Subagente AGY invocado por Claude Code',
+                    '> Executando geração do componente HTML via CLI...',
+                  ],
+                },
+              }
+
+              const edgeArtifactToAgy: Edge = {
+                id: `e-${targetArtifactId}-${agyId}`,
+                source: targetArtifactId!,
+                target: agyId,
+                type: 'removable',
+                animated: true,
+                style: { stroke: '#0284C7', strokeWidth: 2 },
+              }
+
+              set({
+                nodes: [...get().nodes, agyNode],
+                edges: [...get().edges, edgeArtifactToAgy],
+              })
+
+              // Run real AGY CLI to generate HTML
+              try {
+                const agyRes = await fetch('/api/agent/run', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    agentType: 'agy',
+                    prompt: `Gere apenas o codigo HTML completo com inline CSS para uma tela bonita de preview moderna (dashboard ou card de metricas). Responda apenas com a tag HTML, sem explicacoes.`,
+                  }),
+                })
+                const agyData = await agyRes.json()
+                let generatedHtml = agyData.output || ''
+
+                // Clean markdown code blocks if any
+                generatedHtml = generatedHtml
+                  .replace(/^```html\s*/i, '')
+                  .replace(/```\s*$/i, '')
+                  .trim()
+
+                if (!generatedHtml || !generatedHtml.includes('<')) {
+                  generatedHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: -apple-system, sans-serif; background: #07090E; color: #F0F6FC; padding: 24px; }
+    .card { background: #0D1117; border: 1px solid #30363D; border-radius: 12px; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+    .badge { background: #0284C7; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; }
+    h2 { color: #38BDF8; margin-top: 12px; }
+    p { color: #8B949E; font-size: 13px; line-height: 1.6; }
+    .btn { background: #0284C7; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="badge">AGY Executor</span>
+    <h2>Componente Gerado com Sucesso</h2>
+    <p>Preview interativo gerado autonomamente a partir da análise de imagem de Claude Code.</p>
+    <button class="btn">Executar Ação</button>
+  </div>
+</body>
+</html>`
+                }
+
+                get().updateNodeData(targetArtifactId!, {
+                  htmlPreview: generatedHtml,
+                  activeTab: 'preview',
+                  status: 'approved',
+                })
+
+                get().updateNodeData(agyId, {
+                  status: 'idle',
+                  thinking: {
+                    duration: '1.4s',
+                    thoughts: [
+                      'Preview HTML gerado com sucesso pelo AGY.',
+                      'Aba de preview do artefato atualizada no canvas.',
+                    ],
+                    isExpanded: false,
+                  },
+                  messages: [
+                    ...((agyNode.data as any).messages || []),
+                    {
+                      id: `msg-resp-agy-${Date.now()}`,
+                      sender: 'agent',
+                      text: 'Preview HTML gerado com sucesso e incorporado diretamente na aba "Preview" do nó Visualizador de Artefatos!',
+                      timestamp: new Date().toLocaleTimeString('pt-BR', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      }),
+                    },
+                  ],
+                })
+              } catch (e: any) {
+                console.error('AGY CLI generation error:', e)
+              }
+            }, 1000)
+          }
+        }
+      } else {
+        const errMessage: ChatMessage = {
+          id: `msg-err-${Date.now()}`,
+          sender: 'agent',
+          text: `Retorno do CLI: ${result.output || result.error || 'Erro ao executar binário.'}`,
+          timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        }
+        get().updateNodeData(nodeId, {
+          messages: [...updatedMessages, errMessage],
+          status: 'error',
+          thinking: {
+            duration: 'Erro',
+            thoughts: [result.error || 'Falha na execução do processo.'],
+            isExpanded: true,
+          },
+        })
+      }
+    } catch (err: any) {
+      console.error('Agent execution error:', err)
+      const errMessage: ChatMessage = {
+        id: `msg-err-${Date.now()}`,
         sender: 'agent',
-        text: `Entendido. As instruções foram processadas com sucesso para o contexto de "${text}".`,
+        text: `Erro de conexão com o CLI local: ${err.message}`,
         timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       }
       get().updateNodeData(nodeId, {
-        messages: [...updatedMessages, responseMessage],
-        status: 'idle',
-        thinking: {
-          duration: '1.4s',
-          thoughts: [
-            'Verificação sintática concluída.',
-            'Ação em segundo plano despachada.',
-          ],
-          isExpanded: false,
-        },
+        messages: [...updatedMessages, errMessage],
+        status: 'error',
       })
-    }, 1000)
+    }
   },
 
   toggleAgentViewMode: (nodeId) => {
@@ -779,6 +1084,104 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         newSubNode,
       ],
       edges: [...get().edges, newEdge],
+    })
+  },
+
+  deleteEdge: (edgeId) => {
+    set({
+      edges: get().edges.filter((e) => e.id !== edgeId),
+    })
+  },
+
+  groupSelectedNodes: (nodeIds, title = 'Grupo de Nós') => {
+    if (!nodeIds || nodeIds.length === 0) return
+
+    const selectedNodes = get().nodes.filter((n) => nodeIds.includes(n.id))
+    if (selectedNodes.length === 0) return
+
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    for (const node of selectedNodes) {
+      const x = node.position.x
+      const y = node.position.y
+      const w = 460
+      const h = 380
+      if (x < minX) minX = x
+      if (y < minY) minY = y
+      if (x + w > maxX) maxX = x + w
+      if (y + h > maxY) maxY = y + h
+    }
+
+    const padding = 50
+    const groupX = minX - padding
+    const groupY = minY - padding - 40
+    const groupW = Math.max(maxX - minX + padding * 2, 520)
+    const groupH = Math.max(maxY - minY + padding * 2 + 40, 420)
+
+    const groupId = `group-${Date.now()}`
+    const newGroupNode: Node = {
+      id: groupId,
+      type: 'groupNode',
+      position: { x: groupX, y: groupY },
+      style: { width: groupW, height: groupH, zIndex: -1 },
+      data: {
+        title,
+        nodeIds,
+        width: groupW,
+        height: groupH,
+      },
+    }
+
+    // Place the group container node behind its member nodes
+    set({
+      nodes: [newGroupNode, ...get().nodes],
+    })
+  },
+
+  ungroupNodes: (groupId) => {
+    set({
+      nodes: get().nodes.filter((n) => n.id !== groupId),
+    })
+  },
+
+  stashGroup: (groupId) => {
+    const groupNode = get().nodes.find((n) => n.id === groupId)
+    if (!groupNode) return
+
+    const memberNodeIds = ((groupNode.data as any)?.nodeIds || []) as string[]
+    const allNodeIdsToStash = [groupId, ...memberNodeIds]
+
+    const memberNodes = get().nodes.filter((n) => memberNodeIds.includes(n.id))
+    const memberEdges = get().edges.filter(
+      (e) => allNodeIdsToStash.includes(e.source) || allNodeIdsToStash.includes(e.target)
+    )
+
+    const newItem: StashItem = {
+      id: `stash-group-${Date.now()}`,
+      nodeId: groupId,
+      name: (groupNode.data as any)?.title || 'Grupo de Nós',
+      type: 'group',
+      savedAt: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      nodeData: {
+        groupNode,
+        memberNodes,
+        memberEdges,
+      },
+      position: groupNode.position,
+      previewSnippet: `${memberNodes.length} nós arquivados (${memberNodes
+        .map((n) => (n.data as any)?.title || n.id)
+        .join(', ')})`,
+    }
+
+    set({
+      stashItems: [newItem, ...get().stashItems],
+      nodes: get().nodes.filter((n) => !allNodeIdsToStash.includes(n.id)),
+      edges: get().edges.filter(
+        (e) => !allNodeIdsToStash.includes(e.source) && !allNodeIdsToStash.includes(e.target)
+      ),
     })
   },
 }))

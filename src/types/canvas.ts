@@ -115,11 +115,19 @@ export interface ImageGroupNodeData {
   activeImageIndex: number
 }
 
+export interface GroupNodeData {
+  title: string
+  nodeIds: string[]
+  width?: number
+  height?: number
+  color?: string
+}
+
 export interface StashItem {
   id: string
   nodeId: string
   name: string
-  type: 'agent' | 'artifact' | 'image' | 'imageGroup'
+  type: 'agent' | 'artifact' | 'image' | 'imageGroup' | 'group'
   savedAt: string
   nodeData: any
   position: { x: number; y: number }

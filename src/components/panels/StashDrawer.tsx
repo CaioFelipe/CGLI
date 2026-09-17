@@ -2,6 +2,7 @@ import {
   Archive,
   Clock,
   FileCode,
+  FolderArchive,
   Image as ImageIcon,
   RotateCcw,
   Sparkles,
@@ -34,6 +35,8 @@ export const StashDrawer: React.FC = () => {
       case 'image':
       case 'imageGroup':
         return <ImageIcon className="w-3.5 h-3.5 text-rose-500" />
+      case 'group':
+        return <FolderArchive className="w-3.5 h-3.5 text-indigo-400" />
       default:
         return <Sparkles className="w-3.5 h-3.5 text-slate-400" />
     }
@@ -48,6 +51,8 @@ export const StashDrawer: React.FC = () => {
       case 'image':
       case 'imageGroup':
         return 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+      case 'group':
+        return 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30'
       default:
         return 'bg-slate-500/10 text-slate-400 border-slate-500/20'
     }

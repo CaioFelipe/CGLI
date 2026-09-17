@@ -10,13 +10,16 @@ import {
   useReactFlow,
 } from '@xyflow/react'
 import React, { useCallback, useEffect, useRef } from 'react'
+import { Layers } from 'lucide-react'
 import { Topbar } from './components/layout/Topbar'
 import { ImageAnnotationModal } from './components/modais/ImageAnnotationModal'
 import { SettingsModal } from './components/modais/SettingsModal'
 import { AgentCardNode } from './components/nodes/AgentCardNode'
 import { ArtifactViewerNode } from './components/nodes/ArtifactViewerNode'
+import { GroupNode } from './components/nodes/GroupNode'
 import { ImageGroupNode } from './components/nodes/ImageGroupNode'
 import { ImageNode } from './components/nodes/ImageNode'
+import { RemovableEdge } from './components/edges/RemovableEdge'
 import { StashDrawer } from './components/panels/StashDrawer'
 import { useCanvasStore } from './store/canvasStore'
 
@@ -26,6 +29,13 @@ const nodeTypes: NodeTypes = {
   artifactNode: ArtifactViewerNode,
   imageNode: ImageNode,
   imageGroupNode: ImageGroupNode,
+  groupNode: GroupNode,
+}
+
+// Register custom edge types
+const edgeTypes = {
+  removable: RemovableEdge,
+  default: RemovableEdge,
 }
 
 // Inner canvas component to access useReactFlow hook
@@ -38,6 +48,7 @@ const CanvasInner: React.FC = () => {
     onConnect,
     addNode,
     theme,
+    groupSelectedNodes,
   } = useCanvasStore()
 
   const { screenToFlowPosition, fitView } = useReactFlow()
@@ -172,6 +183,7 @@ const CanvasInner: React.FC = () => {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
           minZoom={0.2}
           maxZoom={2.5}
@@ -205,6 +217,7 @@ const CanvasInner: React.FC = () => {
               }
               if (n.type === 'artifactNode') return '#6366F1'
               if (n.type === 'imageNode' || n.type === 'imageGroupNode') return '#F43F5E'
+              if (n.type === 'groupNode') return 'rgba(99, 102, 241, 0.3)'
               return '#64748B'
             }}
             className={`!rounded-xl !border !shadow-md overflow-hidden ${
@@ -214,6 +227,28 @@ const CanvasInner: React.FC = () => {
             }`}
           />
         </ReactFlow>
+
+        {/* Multi-Node Selection Floating Toolbar */}
+        {nodes.filter((n) => n.selected && n.type !== 'groupNode').length > 1 && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-2.5 rounded-xl border shadow-2xl bg-[#0D1117]/95 border-indigo-500/40 text-slate-100 backdrop-blur-md animate-in fade-in slide-in-from-bottom-3 duration-200">
+            <span className="text-xs font-semibold text-indigo-400">
+              {nodes.filter((n) => n.selected && n.type !== 'groupNode').length} nós selecionados
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const selectedIds = nodes
+                  .filter((n) => n.selected && n.type !== 'groupNode')
+                  .map((n) => n.id)
+                groupSelectedNodes(selectedIds)
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-xs"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Criar Grupo</span>
+            </button>
+          </div>
+        )}
       </main>
 
       {/* Overlays & Drawers */}

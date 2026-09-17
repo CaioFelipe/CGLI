@@ -157,44 +157,72 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
   return (
     <div
       className={`group relative rounded-xl border transition-all duration-200 shadow-md ${
-        selected ? 'ring-2' : ''
+        selected ? 'ring-2 ring-indigo-500' : ''
       } ${
         theme === 'dark'
-          ? 'bg-[#111827] border-slate-800 text-slate-100 shadow-black/40'
-          : 'bg-white border-slate-200 text-slate-900 shadow-slate-200/50'
+          ? 'bg-[#0D1117] border-[#30363D] text-[#F0F6FC] shadow-xl shadow-black/50'
+          : 'bg-white border-slate-200 text-slate-900 shadow-lg shadow-slate-200/50'
       }`}
       style={{
-        width: 460,
+        width: 480,
         borderColor: selected ? accentColor : undefined,
       }}
     >
-      {/* Handles */}
+      {/* Handles: Top, Left, Right, Bottom with explicit IDs and dual directions */}
       <Handle
+        id="top"
         type="target"
         position={Position.Top}
-        className="!bg-slate-400 dark:!bg-slate-600"
+        className="!bg-slate-400 dark:!bg-slate-400"
       />
       <Handle
+        id="top-source"
+        type="source"
+        position={Position.Top}
+        className="!opacity-0"
+      />
+      <Handle
+        id="left"
         type="target"
         position={Position.Left}
-        className="!bg-slate-400 dark:!bg-slate-600"
+        className="!bg-slate-400 dark:!bg-slate-400"
       />
       <Handle
+        id="left-source"
+        type="source"
+        position={Position.Left}
+        className="!opacity-0"
+      />
+      <Handle
+        id="right"
         type="source"
         position={Position.Right}
-        className="!bg-slate-400 dark:!bg-slate-600"
+        className="!bg-slate-400 dark:!bg-slate-400"
       />
       <Handle
+        id="right-target"
+        type="target"
+        position={Position.Right}
+        className="!opacity-0"
+      />
+      <Handle
+        id="bottom"
         type="source"
         position={Position.Bottom}
-        className="!bg-slate-400 dark:!bg-slate-600"
+        className="!bg-slate-400 dark:!bg-slate-400"
+      />
+      <Handle
+        id="bottom-target"
+        type="target"
+        position={Position.Bottom}
+        className="!opacity-0"
       />
 
       {/* Header */}
       <div
         className="flex items-center justify-between px-3.5 py-2.5 border-b rounded-t-xl"
         style={{
-          borderBottomColor: theme === 'dark' ? '#1F2937' : '#F1F5F9',
+          borderBottomColor: theme === 'dark' ? '#21262D' : '#F1F5F9',
           borderTop: `3px solid ${accentColor}`,
         }}
       >

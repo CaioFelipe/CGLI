@@ -6,6 +6,7 @@ import {
   Edit3,
   Image as ImageIcon,
   Layers,
+  Plus,
   Trash2,
 } from 'lucide-react'
 import React, { useState } from 'react'
@@ -14,7 +15,7 @@ import type { ImageGroupNodeData } from '../../types/canvas'
 
 export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const nodeData = data as unknown as ImageGroupNodeData
-  const { theme, openAnnotationModal, stashNode, deleteNode } = useCanvasStore()
+  const { theme, openAnnotationModal, stashNode, deleteNode, updateNodeData } = useCanvasStore()
   const [currentIndex, setCurrentIndex] = useState(nodeData.activeImageIndex || 0)
 
   const accentColor = '#F43F5E'
@@ -33,47 +34,86 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     }
   }
 
+  const handleAddImage = () => {
+    const newImg = {
+      id: `img-${Date.now()}`,
+      url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80',
+      name: `captura-${images.length + 1}.png`,
+    }
+    const updated = [...images, newImg]
+    updateNodeData(id, { images: updated })
+    setCurrentIndex(updated.length - 1)
+  }
+
   return (
     <div
       className={`group relative rounded-xl border transition-all duration-200 shadow-md ${
-        selected ? 'ring-2' : ''
+        selected ? 'ring-2 ring-rose-500' : ''
       } ${
         theme === 'dark'
-          ? 'bg-[#111827] border-slate-800 text-slate-100 shadow-black/40'
-          : 'bg-white border-slate-200 text-slate-900 shadow-slate-200/50'
+          ? 'bg-[#0D1117] border-[#30363D] text-[#F0F6FC] shadow-xl shadow-black/50'
+          : 'bg-white border-slate-200 text-slate-900 shadow-lg shadow-slate-200/50'
       }`}
       style={{
         width: 360,
         borderColor: selected ? accentColor : undefined,
       }}
     >
-      {/* Handles */}
+      {/* Handles: Top, Left, Right, Bottom with explicit IDs and dual directions */}
       <Handle
+        id="top"
         type="target"
         position={Position.Top}
-        className="!bg-slate-400 dark:!bg-slate-600"
+        className="!bg-slate-400 dark:!bg-slate-400"
       />
       <Handle
+        id="top-source"
+        type="source"
+        position={Position.Top}
+        className="!opacity-0"
+      />
+      <Handle
+        id="left"
         type="target"
         position={Position.Left}
-        className="!bg-slate-400 dark:!bg-slate-600"
+        className="!bg-slate-400 dark:!bg-slate-400"
       />
       <Handle
+        id="left-source"
+        type="source"
+        position={Position.Left}
+        className="!opacity-0"
+      />
+      <Handle
+        id="right"
         type="source"
         position={Position.Right}
-        className="!bg-slate-400 dark:!bg-slate-600"
+        className="!bg-slate-400 dark:!bg-slate-400"
       />
       <Handle
+        id="right-target"
+        type="target"
+        position={Position.Right}
+        className="!opacity-0"
+      />
+      <Handle
+        id="bottom"
         type="source"
         position={Position.Bottom}
-        className="!bg-slate-400 dark:!bg-slate-600"
+        className="!bg-slate-400 dark:!bg-slate-400"
+      />
+      <Handle
+        id="bottom-target"
+        type="target"
+        position={Position.Bottom}
+        className="!opacity-0"
       />
 
       {/* Header */}
       <div
         className="flex items-center justify-between px-3.5 py-2.5 border-b rounded-t-xl"
         style={{
-          borderBottomColor: theme === 'dark' ? '#1F2937' : '#F1F5F9',
+          borderBottomColor: theme === 'dark' ? '#21262D' : '#F1F5F9',
           borderTop: `3px solid ${accentColor}`,
         }}
       >
@@ -82,7 +122,7 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             <Layers className="w-3.5 h-3.5" />
           </div>
           <div>
-            <span className="font-semibold text-xs tracking-tight">
+            <span className="font-bold text-xs tracking-tight">
               {nodeData.title || 'Grupo de Referências'}
             </span>
             <span className="text-[10px] text-slate-400 block">
@@ -95,9 +135,17 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onClick={handleAddImage}
+            title="Adicionar imagem ao grupo"
+            className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-rose-500 hover:text-rose-400 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
             onClick={() => stashNode(id)}
             title="Guardar no Stash"
-            className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+            className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
           >
             <Archive className="w-3.5 h-3.5" />
           </button>
@@ -105,7 +153,7 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             type="button"
             onClick={() => deleteNode(id)}
             title="Remover Nó"
-            className="p-1.5 rounded hover:bg-rose-100 dark:hover:bg-rose-950/40 text-slate-400 hover:text-rose-600 transition-colors"
+            className="p-1.5 rounded hover:bg-rose-500/20 text-slate-400 hover:text-rose-500 transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>

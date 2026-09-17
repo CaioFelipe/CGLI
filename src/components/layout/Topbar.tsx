@@ -2,8 +2,10 @@ import {
   Archive,
   ChevronDown,
   FileCode,
+  FolderArchive,
   FolderGit2,
   Image as ImageIcon,
+  Layers,
   Moon,
   Plus,
   Settings,
@@ -104,6 +106,49 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
         name: 'design-reference.png',
         url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80',
         annotations: [],
+      },
+    }
+    addNode(newNode)
+    setIsAddNodeOpen(false)
+  }
+
+  const handleAddImageGroup = () => {
+    const newNode = {
+      id: `node-img-group-${Date.now()}`,
+      type: 'imageGroupNode',
+      position: { x: 120 + nodes.length * 25, y: 200 + nodes.length * 20 },
+      data: {
+        title: 'Grupo de Referências',
+        activeImageIndex: 0,
+        images: [
+          {
+            id: `img-g1-${Date.now()}`,
+            name: 'spec-layout.png',
+            url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80',
+          },
+          {
+            id: `img-g2-${Date.now()}`,
+            name: 'dashboard-preview.png',
+            url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80',
+          },
+        ],
+      },
+    }
+    addNode(newNode)
+    setIsAddNodeOpen(false)
+  }
+
+  const handleAddNodeGroup = () => {
+    const newNode = {
+      id: `group-${Date.now()}`,
+      type: 'groupNode',
+      position: { x: 150 + nodes.length * 20, y: 150 + nodes.length * 20 },
+      style: { width: 560, height: 420, zIndex: -1 },
+      data: {
+        title: 'Novo Grupo de Nós',
+        nodeIds: [],
+        width: 560,
+        height: 420,
       },
     }
     addNode(newNode)
@@ -229,6 +274,23 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
               >
                 <ImageIcon className="w-3.5 h-3.5 text-rose-500" />
                 <span>Imagem / Captura</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleAddImageGroup}
+                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2"
+              >
+                <Layers className="w-3.5 h-3.5 text-rose-400" />
+                <span>Grupo de Imagens</span>
+              </button>
+              <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
+              <button
+                type="button"
+                onClick={handleAddNodeGroup}
+                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2"
+              >
+                <FolderArchive className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Novo Grupo de Nós</span>
               </button>
             </div>
           )}
