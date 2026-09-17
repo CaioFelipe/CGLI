@@ -1,0 +1,181 @@
+import { Handle, type NodeProps, Position } from '@xyflow/react'
+import {
+  Archive,
+  ChevronLeft,
+  ChevronRight,
+  Edit3,
+  Image as ImageIcon,
+  Layers,
+  Trash2,
+} from 'lucide-react'
+import React, { useState } from 'react'
+import { useCanvasStore } from '../../store/canvasStore'
+import type { ImageGroupNodeData } from '../../types/canvas'
+
+export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
+  const nodeData = data as unknown as ImageGroupNodeData
+  const { theme, openAnnotationModal, stashNode, deleteNode } = useCanvasStore()
+  const [currentIndex, setCurrentIndex] = useState(nodeData.activeImageIndex || 0)
+
+  const accentColor = '#F43F5E'
+  const images = nodeData.images || []
+  const activeImage = images[currentIndex]
+
+  const handleNext = () => {
+    if (currentIndex < images.length - 1) {
+      setCurrentIndex(currentIndex + 1)
+    }
+  }
+
+  const handlePrev = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(currentIndex - 1)
+    }
+  }
+
+  return (
+    <div
+      className={`group relative rounded-xl border transition-all duration-200 shadow-md ${
+        selected ? 'ring-2' : ''
+      } ${
+        theme === 'dark'
+          ? 'bg-[#111827] border-slate-800 text-slate-100 shadow-black/40'
+          : 'bg-white border-slate-200 text-slate-900 shadow-slate-200/50'
+      }`}
+      style={{
+        width: 360,
+        borderColor: selected ? accentColor : undefined,
+      }}
+    >
+      {/* Handles */}
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!bg-slate-400 dark:!bg-slate-600"
+      />
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="!bg-slate-400 dark:!bg-slate-600"
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="!bg-slate-400 dark:!bg-slate-600"
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!bg-slate-400 dark:!bg-slate-600"
+      />
+
+      {/* Header */}
+      <div
+        className="flex items-center justify-between px-3.5 py-2.5 border-b rounded-t-xl"
+        style={{
+          borderBottomColor: theme === 'dark' ? '#1F2937' : '#F1F5F9',
+          borderTop: `3px solid ${accentColor}`,
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-md flex items-center justify-center font-bold text-xs bg-rose-500/15 text-rose-500">
+            <Layers className="w-3.5 h-3.5" />
+          </div>
+          <div>
+            <span className="font-semibold text-xs tracking-tight">
+              {nodeData.title || 'Grupo de Referências'}
+            </span>
+            <span className="text-[10px] text-slate-400 block">
+              {images.length} capturas agrupadas
+            </span>
+          </div>
+        </div>
+
+        {/* Header Controls */}
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => stashNode(id)}
+            title="Guardar no Stash"
+            className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+          >
+            <Archive className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => deleteNode(id)}
+            title="Remover Nó"
+            className="p-1.5 rounded hover:bg-rose-100 dark:hover:bg-rose-950/40 text-slate-400 hover:text-rose-600 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Image View */}
+      <div className="relative w-full h-56 bg-slate-950 flex items-center justify-center overflow-hidden">
+        {activeImage ? (
+          <img
+            src={activeImage.url}
+            alt={activeImage.name}
+            className="w-full h-full object-cover select-none pointer-events-none"
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-1.5 text-slate-500 text-xs">
+            <ImageIcon className="w-8 h-8 opacity-40" />
+            <span>Nenhuma imagem no grupo</span>
+          </div>
+        )}
+
+        {/* Carousel Navigation Buttons */}
+        {images.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={handlePrev}
+              disabled={currentIndex === 0}
+              className="absolute left-2 p-1.5 rounded-full bg-slate-900/80 text-white disabled:opacity-20 hover:bg-slate-900 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={currentIndex === images.length - 1}
+              className="absolute right-2 p-1.5 rounded-full bg-slate-900/80 text-white disabled:opacity-20 hover:bg-slate-900 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <div className="absolute bottom-2 inset-x-0 flex justify-center">
+              <span className="bg-slate-950/80 px-2 py-0.5 rounded text-[10px] text-white">
+                {currentIndex + 1} de {images.length}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Footer Actions */}
+      <div
+        className="px-3 py-2 border-t rounded-b-xl flex items-center justify-between"
+        style={{
+          borderColor: theme === 'dark' ? '#1F2937' : '#F1F5F9',
+          backgroundColor: theme === 'dark' ? '#0F172A' : '#FAFAFA',
+        }}
+      >
+        <span className="text-[10px] text-slate-400 truncate max-w-[150px]">
+          {activeImage?.name || 'imagem.png'}
+        </span>
+
+        <button
+          type="button"
+          onClick={() => openAnnotationModal(id)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 transition-colors shadow-xs"
+        >
+          <Edit3 className="w-3 h-3" />
+          Anotar
+        </button>
+      </div>
+    </div>
+  )
+}
