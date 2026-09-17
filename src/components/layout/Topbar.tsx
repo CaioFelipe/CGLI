@@ -186,7 +186,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-xs"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Adicionar Nó</span>
+            <span>+ Novo Nó</span>
             <ChevronDown className="w-3 h-3 ml-0.5 opacity-80" />
           </button>
 

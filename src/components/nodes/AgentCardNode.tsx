@@ -11,6 +11,7 @@ import {
   Code2,
   Copy,
   FolderSync,
+  GitFork,
   Image as ImageIcon,
   Paperclip,
   Terminal as TerminalIcon,
@@ -32,6 +33,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     deleteNode,
     attachImageToAgent,
     removeAttachedImage,
+    spawnSubagent,
   } = useCanvasStore()
 
   const [inputVal, setInputVal] = useState('')
@@ -246,6 +248,22 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
         {/* Header Controls */}
         <div className="flex items-center gap-1">
+          {/* Subagent Spawn Button */}
+          <button
+            type="button"
+            onClick={() => spawnSubagent(id, isClaude ? 'agy' : 'claude')}
+            title={isClaude ? 'Spawnar Subagente AGY conectado' : 'Spawnar Subagente Claude conectado'}
+            className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold transition-all border shadow-2xs mr-1"
+            style={{
+              borderColor: isClaude ? '#0284C7' : '#EA580C',
+              color: isClaude ? '#0284C7' : '#EA580C',
+              backgroundColor: isClaude ? 'rgba(2, 132, 199, 0.08)' : 'rgba(234, 88, 12, 0.08)',
+            }}
+          >
+            <GitFork className="w-3 h-3" />
+            <span>+ Subagente {isClaude ? 'AGY' : 'Claude'}</span>
+          </button>
+
           <button
             type="button"
             onClick={() => toggleAgentViewMode(id)}
@@ -513,18 +531,34 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
               backgroundColor: theme === 'dark' ? '#0F172A' : '#FAFAFA',
             }}
           >
-            {/* Quick Slash Commands */}
-            <div className="flex items-center gap-1 mb-1.5 overflow-x-auto text-[10px]">
-              {['/plan', '/test', '/review', '/commit'].map((cmd) => (
-                <button
-                  key={cmd}
-                  type="button"
-                  onClick={() => addSlashCommand(cmd)}
-                  className="px-1.5 py-0.5 rounded bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors font-mono"
-                >
-                  {cmd}
-                </button>
-              ))}
+            {/* Quick Slash Commands & Spawn Subagent */}
+            <div className="flex items-center justify-between gap-1 mb-1.5 overflow-x-auto text-[10px]">
+              <div className="flex items-center gap-1">
+                {['/plan', '/test', '/review', '/commit'].map((cmd) => (
+                  <button
+                    key={cmd}
+                    type="button"
+                    onClick={() => addSlashCommand(cmd)}
+                    className="px-1.5 py-0.5 rounded bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors font-mono"
+                  >
+                    {cmd}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => spawnSubagent(id, isClaude ? 'agy' : 'claude')}
+                className="px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-1 transition-colors border shrink-0"
+                style={{
+                  borderColor: isClaude ? '#0284C7' : '#EA580C',
+                  color: isClaude ? '#0284C7' : '#EA580C',
+                  backgroundColor: isClaude ? 'rgba(2, 132, 199, 0.08)' : 'rgba(234, 88, 12, 0.08)',
+                }}
+              >
+                <GitFork className="w-2.5 h-2.5" />
+                <span>+ Subagente {isClaude ? 'AGY' : 'Claude'}</span>
+              </button>
             </div>
 
             <div className="relative flex items-center">

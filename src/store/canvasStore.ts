@@ -79,6 +79,7 @@ interface CanvasState {
   approveArtifact: (nodeId: string) => void
   attachImageToAgent: (nodeId: string, image: { id: string; url: string; name: string }) => void
   removeAttachedImage: (nodeId: string, imageId: string) => void
+  spawnSubagent: (parentId: string, childType: 'claude' | 'agy') => void
 }
 
 const initialClis: CliConfig[] = [
@@ -409,16 +410,47 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     })
   },
   onConnect: (connection) => {
+    const sourceNode = get().nodes.find((n) => n.id === connection.source)
+    const targetNode = get().nodes.find((n) => n.id === connection.target)
+
+    let strokeColor = '#6366F1'
+    if (sourceNode?.type === 'imageNode' || sourceNode?.type === 'imageGroupNode') {
+      strokeColor = '#F43F5E'
+    } else if (sourceNode?.type === 'agentNode') {
+      strokeColor = (sourceNode.data as any).agentType === 'claude' ? '#EA580C' : '#0284C7'
+    }
+
     set({
       edges: addEdge(
         {
           ...connection,
           animated: true,
-          style: { stroke: '#6366F1', strokeWidth: 2 },
+          style: { stroke: strokeColor, strokeWidth: 2 },
         },
         get().edges
       ),
     })
+
+    // If connecting an image or image group to an agent, automatically attach it
+    if (sourceNode && targetNode && targetNode.type === 'agentNode') {
+      if (sourceNode.type === 'imageNode') {
+        const imgData = sourceNode.data as any
+        get().attachImageToAgent(targetNode.id, {
+          id: sourceNode.id,
+          url: imgData.url,
+          name: imgData.name || imgData.title || 'captura-de-tela.png',
+        })
+      } else if (sourceNode.type === 'imageGroupNode') {
+        const groupData = sourceNode.data as any
+        ;(groupData.images || []).forEach((img: any) => {
+          get().attachImageToAgent(targetNode.id, {
+            id: img.id,
+            url: img.url,
+            name: img.name || 'grupo-imagem.png',
+          })
+        })
+      }
+    }
   },
   addNode: (node) => {
     set({ nodes: [...get().nodes, node] })
@@ -672,6 +704,81 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const current = ((node.data as any).attachedImages || []) as Array<{ id: string; url: string; name: string }>
     get().updateNodeData(nodeId, {
       attachedImages: current.filter((img) => img.id !== imageId),
+    })
+  },
+
+  spawnSubagent: (parentId, childType) => {
+    const parent = get().nodes.find((n) => n.id === parentId)
+    if (!parent) return
+
+    const childId = `node-${childType}-sub-${Date.now()}`
+    const isClaude = childType === 'claude'
+    const color = isClaude ? '#EA580C' : '#0284C7'
+
+    const existingOutEdges = get().edges.filter((e) => e.source === parentId)
+    const posX = parent.position.x + 480
+    const posY = parent.position.y + existingOutEdges.length * 140
+
+    const newSubNode: Node = {
+      id: childId,
+      type: 'agentNode',
+      position: { x: posX, y: posY },
+      data: {
+        title: isClaude ? 'Subagente Claude Code' : 'Subagente Antigravity (AGY)',
+        agentType: childType,
+        role: isClaude ? 'planner' : 'executor',
+        status: 'idle',
+        viewMode: 'extension',
+        thinking: {
+          duration: 'Pronto',
+          thoughts: [
+            `Subagente instanciado dinamicamente a partir do nó [${(parent.data as any).title || parentId}].`,
+            'Canal de comunicação entre agentes configurado via grafo.',
+          ],
+          isExpanded: false,
+        },
+        messages: [
+          {
+            id: `msg-sub-${Date.now()}`,
+            sender: 'agent',
+            text: `Subagente ${childType.toUpperCase()} inicializado e vinculado ao nó pai. Pronto para receber sub-tarefas especializadas.`,
+            timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          },
+        ],
+        approvals: [],
+        attachedImages: [],
+        terminalLogs: [
+          `> [SPAWN] Subagente ${childType.toUpperCase()} criado pelo nó [${parentId}]`,
+          `> Conexão PTY multiplexada pronta`,
+          `> Sessão vinculada ao workspace ativo`,
+        ],
+      },
+    }
+
+    const newEdge: Edge = {
+      id: `e-${parentId}-${childId}`,
+      source: parentId,
+      target: childId,
+      animated: true,
+      style: { stroke: color, strokeWidth: 2, strokeDasharray: '4 4' },
+    }
+
+    const currentParentLogs = ((parent.data as any).terminalLogs || []) as string[]
+    const updatedParentLogs = [
+      ...currentParentLogs,
+      `> [SPAWN] Subagente [${newSubNode.data.title}] criado e conectado com sucesso.`,
+    ]
+
+    set({
+      nodes: [
+        ...get().nodes.map((n) =>
+          n.id === parentId
+            ? { ...n, data: { ...n.data, terminalLogs: updatedParentLogs } }
+            : n
+        ),
+        newSubNode,
+      ],
+      edges: [...get().edges, newEdge],
     })
   },
 }))
