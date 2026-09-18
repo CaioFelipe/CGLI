@@ -99,6 +99,8 @@ interface CanvasState {
   addNodeToGroup: (groupId: string, nodeId: string) => void
   removeNodeFromGroup: (groupId: string, nodeId: string) => void
   autoFitGroup: (groupId: string) => void
+  toggleGroupReactive: (groupId: string) => void
+  setGroupDragOver: (groupId: string | null) => void
   groupSelectedNodes: (nodeIds: string[], title?: string) => void
   ungroupNodes: (groupId: string) => void
   stashGroup: (groupId: string) => void
@@ -258,6 +260,81 @@ const getInitialProjectState = (): { projects: ProjectInfo[]; currentId: string;
 }
 
 const initialProjState = getInitialProjectState()
+
+export const getNodeDimensions = (node: Node): { width: number; height: number } => {
+  const measuredW = Number(node.measured?.width)
+  const measuredH = Number(node.measured?.height)
+  if (measuredW > 0 && measuredH > 0) {
+    return { width: measuredW, height: measuredH }
+  }
+
+  const nodeW = Number(node.width)
+  const nodeH = Number(node.height)
+  if (nodeW > 0 && nodeH > 0) {
+    return { width: nodeW, height: nodeH }
+  }
+
+  const styleW =
+    typeof node.style?.width === 'number'
+      ? node.style.width
+      : parseInt(String(node.style?.width || '0'), 10)
+  const styleH =
+    typeof node.style?.height === 'number'
+      ? node.style.height
+      : parseInt(String(node.style?.height || '0'), 10)
+  if (styleW > 0 && styleH > 0) {
+    return { width: styleW, height: styleH }
+  }
+
+  switch (node.type) {
+    case 'agentNode':
+      return { width: 380, height: 380 }
+    case 'artifactNode':
+      return { width: 440, height: 360 }
+    case 'imageNode':
+      return { width: 340, height: 280 }
+    case 'imageGroupNode':
+      return { width: 360, height: 300 }
+    case 'groupNode':
+      return { width: 560, height: 420 }
+    default:
+      return { width: 380, height: 320 }
+  }
+}
+
+export const calculateGroupBounds = (
+  members: Node[],
+  options: { padX?: number; padTop?: number; padBottom?: number } = {}
+): { x: number; y: number; width: number; height: number } | null => {
+  if (!members || members.length === 0) return null
+
+  const padX = options.padX ?? 36
+  const padTop = options.padTop ?? 94 // Clears header bar and member badges bar cleanly
+  const padBottom = options.padBottom ?? 36
+
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+
+  for (const m of members) {
+    const { width: mw, height: mh } = getNodeDimensions(m)
+    const mx = m.position.x
+    const my = m.position.y
+
+    if (mx < minX) minX = mx
+    if (my < minY) minY = my
+    if (mx + mw > maxX) maxX = mx + mw
+    if (my + mh > maxY) maxY = my + mh
+  }
+
+  const x = Math.round(minX - padX)
+  const y = Math.round(minY - padTop)
+  const width = Math.round(Math.max(maxX - minX + padX * 2, 440))
+  const height = Math.round(Math.max(maxY - minY + padTop + padBottom, 280))
+
+  return { x, y, width, height }
+}
 
 export const useCanvasStore = create<CanvasState>((set, get) => ({
   theme: 'dark',
@@ -502,33 +579,118 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   edges: initialEdges,
   onNodesChange: (changes) => {
     let currentNodes = get().nodes
+    const groupDeltaMap: Record<string, { deltaX: number; deltaY: number }> = {}
+    const affectedGroupIds = new Set<string>()
+
     for (const change of changes) {
       if (change.type === 'position' && change.position) {
         const node = currentNodes.find((n) => n.id === change.id)
-        if (node && node.type === 'groupNode' && (node.data as any)?.nodeIds?.length > 0) {
+        if (node && node.type === 'groupNode') {
           const deltaX = change.position.x - node.position.x
           const deltaY = change.position.y - node.position.y
           if (deltaX !== 0 || deltaY !== 0) {
-            const memberIds = (node.data as any).nodeIds as string[]
-            currentNodes = currentNodes.map((n) => {
-              if (memberIds.includes(n.id)) {
-                return {
-                  ...n,
-                  position: {
-                    x: n.position.x + deltaX,
-                    y: n.position.y + deltaY,
-                  },
-                }
+            groupDeltaMap[node.id] = { deltaX, deltaY }
+          }
+        } else if (node && node.type !== 'groupNode') {
+          for (const g of currentNodes) {
+            if (g.type === 'groupNode') {
+              const memberIds = ((g.data as any)?.nodeIds || []) as string[]
+              if (memberIds.includes(node.id)) {
+                affectedGroupIds.add(g.id)
               }
-              return n
-            })
+            }
+          }
+        }
+      } else if (change.type === 'dimensions') {
+        const node = currentNodes.find((n) => n.id === change.id)
+        if (node && node.type === 'groupNode') {
+          if (change.dimensions) {
+            currentNodes = currentNodes.map((n) =>
+              n.id === change.id
+                ? {
+                    ...n,
+                    style: {
+                      ...n.style,
+                      width: change.dimensions!.width,
+                      height: change.dimensions!.height,
+                      zIndex: -1,
+                    },
+                    data: {
+                      ...n.data,
+                      width: change.dimensions!.width,
+                      height: change.dimensions!.height,
+                      ...((change as any).resizing ? { isReactive: false } : {}),
+                    },
+                  }
+                : n
+            )
+          }
+        } else if (node && node.type !== 'groupNode') {
+          for (const g of currentNodes) {
+            if (g.type === 'groupNode') {
+              const memberIds = ((g.data as any)?.nodeIds || []) as string[]
+              if (memberIds.includes(node.id)) {
+                affectedGroupIds.add(g.id)
+              }
+            }
           }
         }
       }
     }
-    set({
-      nodes: applyNodeChanges(changes, currentNodes),
-    })
+
+    if (Object.keys(groupDeltaMap).length > 0) {
+      currentNodes = currentNodes.map((n) => {
+        for (const [groupId, delta] of Object.entries(groupDeltaMap)) {
+          const gNode = currentNodes.find((g) => g.id === groupId)
+          const memberIds = ((gNode?.data as any)?.nodeIds || []) as string[]
+          if (memberIds.includes(n.id)) {
+            return {
+              ...n,
+              position: {
+                x: n.position.x + delta.deltaX,
+                y: n.position.y + delta.deltaY,
+              },
+            }
+          }
+        }
+        return n
+      })
+    }
+
+    let updatedNodes = applyNodeChanges(changes, currentNodes)
+
+    if (affectedGroupIds.size > 0) {
+      updatedNodes = updatedNodes.map((gNode) => {
+        if (affectedGroupIds.has(gNode.id) && !groupDeltaMap[gNode.id]) {
+          const isReactive = (gNode.data as any)?.isReactive !== false
+          if (isReactive) {
+            const memberIds = ((gNode.data as any)?.nodeIds || []) as string[]
+            const members = updatedNodes.filter((n) => memberIds.includes(n.id))
+            const bounds = calculateGroupBounds(members)
+            if (bounds) {
+              return {
+                ...gNode,
+                position: { x: bounds.x, y: bounds.y },
+                style: {
+                  ...(gNode as any).style,
+                  width: bounds.width,
+                  height: bounds.height,
+                  zIndex: -1,
+                },
+                data: {
+                  ...gNode.data,
+                  width: bounds.width,
+                  height: bounds.height,
+                },
+              }
+            }
+          }
+        }
+        return gNode
+      })
+    }
+
+    set({ nodes: updatedNodes })
   },
   onEdgesChange: (changes) => {
     set({
@@ -599,8 +761,44 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     })
   },
   deleteNode: (id) => {
+    const remainingNodes = get().nodes.filter((node) => node.id !== id)
+    const updatedNodes = remainingNodes.map((n) => {
+      if (n.type === 'groupNode') {
+        const memberIds = ((n.data as any)?.nodeIds || []) as string[]
+        if (memberIds.includes(id)) {
+          const updatedMemberIds = memberIds.filter((mId) => mId !== id)
+          const remainingMembers = remainingNodes.filter((m) => updatedMemberIds.includes(m.id))
+          const isReactive = (n.data as any)?.isReactive !== false
+          if (isReactive && remainingMembers.length > 0) {
+            const bounds = calculateGroupBounds(remainingMembers)
+            if (bounds) {
+              return {
+                ...n,
+                position: { x: bounds.x, y: bounds.y },
+                style: { ...n.style, width: bounds.width, height: bounds.height, zIndex: -1 },
+                data: {
+                  ...n.data,
+                  nodeIds: updatedMemberIds,
+                  width: bounds.width,
+                  height: bounds.height,
+                },
+              }
+            }
+          }
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              nodeIds: updatedMemberIds,
+            },
+          }
+        }
+      }
+      return n
+    })
+
     set({
-      nodes: get().nodes.filter((node) => node.id !== id),
+      nodes: updatedNodes,
       edges: get().edges.filter((edge) => edge.source !== id && edge.target !== id),
     })
   },
@@ -1250,46 +1448,33 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   addNodeToGroup: (groupId, nodeId) => {
     const groupNode = get().nodes.find((n) => n.id === groupId)
     const targetNode = get().nodes.find((n) => n.id === nodeId)
-    if (!groupNode || !targetNode) return
+    if (!groupNode || !targetNode || targetNode.type === 'groupNode') return
 
     const currentMemberIds = ((groupNode.data as any)?.nodeIds || []) as string[]
     if (currentMemberIds.includes(nodeId)) return
 
     const updatedMemberIds = [...currentMemberIds, nodeId]
-
-    // Recalculate group bounding box to comfortably include the new node
     const allMembers = get().nodes.filter((n) => updatedMemberIds.includes(n.id))
-    let minX = groupNode.position.x
-    let minY = groupNode.position.y
-    const groupW = Number((groupNode.data as any)?.width) || (groupNode.style?.width as number) || 560
-    const groupH = Number((groupNode.data as any)?.height) || (groupNode.style?.height as number) || 420
-    let maxX = groupNode.position.x + groupW
-    let maxY = groupNode.position.y + groupH
+    const bounds = calculateGroupBounds(allMembers)
 
-    for (const m of allMembers) {
-      const mw = (m.style as any)?.width || 420
-      const mh = (m.style as any)?.height || 360
-      if (m.position.x < minX + 20) minX = m.position.x - 40
-      if (m.position.y < minY + 60) minY = m.position.y - 60
-      if (m.position.x + mw > maxX - 20) maxX = m.position.x + mw + 40
-      if (m.position.y + mh > maxY - 20) maxY = m.position.y + mh + 40
-    }
-
-    const newW = Math.max(maxX - minX, 520)
-    const newH = Math.max(maxY - minY, 380)
+    const newPosition = bounds ? { x: bounds.x, y: bounds.y } : groupNode.position
+    const newW = bounds ? bounds.width : 520
+    const newH = bounds ? bounds.height : 380
 
     set({
       nodes: get().nodes.map((n) => {
         if (n.id === groupId) {
           return {
             ...n,
-            position: { x: minX, y: minY },
+            position: newPosition,
             style: { ...n.style, width: newW, height: newH, zIndex: -1 },
             data: {
               ...n.data,
               nodeIds: updatedMemberIds,
               width: newW,
               height: newH,
+              isReactive: true,
+              isDragOver: false,
             },
           }
         }
@@ -1304,15 +1489,34 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
     const currentMemberIds = ((groupNode.data as any)?.nodeIds || []) as string[]
     const updatedMemberIds = currentMemberIds.filter((id) => id !== nodeId)
+    const remainingMembers = get().nodes.filter((n) => updatedMemberIds.includes(n.id))
+    const isReactive = (groupNode.data as any)?.isReactive !== false
+
+    let newPosition = groupNode.position
+    let newWidth = Number((groupNode.data as any)?.width) || (groupNode.style?.width as number) || 480
+    let newHeight = Number((groupNode.data as any)?.height) || (groupNode.style?.height as number) || 320
+
+    if (isReactive && remainingMembers.length > 0) {
+      const bounds = calculateGroupBounds(remainingMembers)
+      if (bounds) {
+        newPosition = { x: bounds.x, y: bounds.y }
+        newWidth = bounds.width
+        newHeight = bounds.height
+      }
+    }
 
     set({
       nodes: get().nodes.map((n) =>
         n.id === groupId
           ? {
               ...n,
+              position: newPosition,
+              style: { ...n.style, width: newWidth, height: newHeight, zIndex: -1 },
               data: {
                 ...n.data,
                 nodeIds: updatedMemberIds,
+                width: newWidth,
+                height: newHeight,
               },
             }
           : n
@@ -1328,37 +1532,21 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const members = get().nodes.filter((n) => memberIds.includes(n.id))
     if (members.length === 0) return
 
-    let minX = Infinity
-    let minY = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
-
-    for (const m of members) {
-      const mw = (m.style as any)?.width || 420
-      const mh = (m.style as any)?.height || 360
-      if (m.position.x < minX) minX = m.position.x
-      if (m.position.y < minY) minY = m.position.y
-      if (m.position.x + mw > maxX) maxX = m.position.x + mw
-      if (m.position.y + mh > maxY) maxY = m.position.y + mh
-    }
-
-    const padding = 40
-    const newX = minX - padding
-    const newY = minY - padding - 30
-    const newW = Math.max(maxX - minX + padding * 2, 480)
-    const newH = Math.max(maxY - minY + padding * 2 + 30, 360)
+    const bounds = calculateGroupBounds(members)
+    if (!bounds) return
 
     set({
       nodes: get().nodes.map((n) =>
         n.id === groupId
           ? {
               ...n,
-              position: { x: newX, y: newY },
-              style: { ...n.style, width: newW, height: newH, zIndex: -1 },
+              position: { x: bounds.x, y: bounds.y },
+              style: { ...n.style, width: bounds.width, height: bounds.height, zIndex: -1 },
               data: {
                 ...n.data,
-                width: newW,
-                height: newH,
+                isReactive: true,
+                width: bounds.width,
+                height: bounds.height,
               },
             }
           : n
@@ -1366,33 +1554,75 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     })
   },
 
+  toggleGroupReactive: (groupId) => {
+    const group = get().nodes.find((n) => n.id === groupId)
+    if (!group) return
+    const current = (group.data as any)?.isReactive !== false
+    const next = !current
+
+    let updatedGroup: Node = {
+      ...group,
+      data: {
+        ...(group.data as any),
+        isReactive: next,
+      },
+    }
+
+    if (next) {
+      const memberIds = ((group.data as any)?.nodeIds || []) as string[]
+      const members = get().nodes.filter((n) => memberIds.includes(n.id))
+      const bounds = calculateGroupBounds(members)
+      if (bounds) {
+        updatedGroup = {
+          ...updatedGroup,
+          position: { x: bounds.x, y: bounds.y },
+          style: { ...updatedGroup.style, width: bounds.width, height: bounds.height, zIndex: -1 },
+          data: {
+            ...(updatedGroup.data as any),
+            isReactive: true,
+            width: bounds.width,
+            height: bounds.height,
+          },
+        }
+      }
+    }
+
+    set({
+      nodes: get().nodes.map((n) => (n.id === groupId ? updatedGroup : n)),
+    })
+  },
+
+  setGroupDragOver: (groupId) => {
+    set({
+      nodes: get().nodes.map((n) => {
+        if (n.type === 'groupNode') {
+          const isOver = n.id === groupId
+          if ((n.data as any)?.isDragOver !== isOver) {
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                isDragOver: isOver,
+              },
+            }
+          }
+        }
+        return n
+      }),
+    })
+  },
+
   groupSelectedNodes: (nodeIds, title = 'Grupo de Nós') => {
     if (!nodeIds || nodeIds.length === 0) return
 
-    const selectedNodes = get().nodes.filter((n) => nodeIds.includes(n.id))
+    const selectedNodes = get().nodes.filter((n) => nodeIds.includes(n.id) && n.type !== 'groupNode')
     if (selectedNodes.length === 0) return
 
-    let minX = Infinity
-    let minY = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
-
-    for (const node of selectedNodes) {
-      const x = node.position.x
-      const y = node.position.y
-      const w = 460
-      const h = 380
-      if (x < minX) minX = x
-      if (y < minY) minY = y
-      if (x + w > maxX) maxX = x + w
-      if (y + h > maxY) maxY = y + h
-    }
-
-    const padding = 50
-    const groupX = minX - padding
-    const groupY = minY - padding - 40
-    const groupW = Math.max(maxX - minX + padding * 2, 520)
-    const groupH = Math.max(maxY - minY + padding * 2 + 40, 420)
+    const bounds = calculateGroupBounds(selectedNodes)
+    const groupX = bounds ? bounds.x : 200
+    const groupY = bounds ? bounds.y : 200
+    const groupW = bounds ? bounds.width : 560
+    const groupH = bounds ? bounds.height : 420
 
     const groupId = `group-${Date.now()}`
     const newGroupNode: Node = {
@@ -1402,9 +1632,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       style: { width: groupW, height: groupH, zIndex: -1 },
       data: {
         title,
-        nodeIds,
+        nodeIds: selectedNodes.map((n) => n.id),
         width: groupW,
         height: groupH,
+        isReactive: true,
       },
     }
 

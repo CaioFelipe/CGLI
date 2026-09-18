@@ -31,6 +31,7 @@ export const GroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     addNodeToGroup,
     removeNodeFromGroup,
     autoFitGroup,
+    toggleGroupReactive,
   } = useCanvasStore()
 
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -42,6 +43,8 @@ export const GroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     updateNodeData(id, { title })
   }
 
+  const isReactive = nodeData.isReactive !== false
+  const isDragOver = Boolean(nodeData.isDragOver)
   const memberIds = nodeData.nodeIds || []
   const memberNodes = nodes.filter((n) => memberIds.includes(n.id))
   const candidateNodes = nodes.filter((n) => n.id !== id && n.type !== 'groupNode')
@@ -63,7 +66,11 @@ export const GroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   return (
     <div
       className={`relative rounded-2xl border-2 transition-all duration-150 flex flex-col ${
-        selected ? 'ring-2 ring-indigo-500' : ''
+        isDragOver
+          ? 'ring-4 ring-indigo-500/70 border-indigo-400 bg-indigo-500/15 shadow-indigo-500/30 shadow-2xl scale-[1.005]'
+          : selected
+          ? 'ring-2 ring-indigo-500 border-indigo-500'
+          : ''
       } ${
         theme === 'dark'
           ? 'bg-[#080C14]/60 border-indigo-500/50 shadow-2xl shadow-indigo-950/20'
@@ -76,6 +83,15 @@ export const GroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         minHeight: 240,
       }}
     >
+      {/* Drop zone feedback overlay */}
+      {isDragOver && (
+        <div className="absolute inset-0 bg-indigo-600/15 backdrop-blur-[2px] border-2 border-dashed border-indigo-400 rounded-2xl flex items-center justify-center pointer-events-none z-30 animate-in fade-in zoom-in-95 duration-150">
+          <div className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold text-xs shadow-2xl flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            <span>Solte para adicionar ao grupo</span>
+          </div>
+        </div>
+      )}
       {/* NodeResizer from @xyflow/react */}
       <NodeResizer
         minWidth={340}
@@ -151,7 +167,29 @@ export const GroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         </div>
 
         {/* Group Actions */}
-        <div className="flex items-center gap-1 shrink-0 relative">
+        <div className="flex items-center gap-1.5 shrink-0 relative">
+          {/* Mode Toggle Button: Reactive vs Manual */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleGroupReactive(id)
+            }}
+            title={
+              isReactive
+                ? 'Auto-Ajuste Reativo: Ativado (a moldura acompanha nós automaticamente)'
+                : 'Tamanho Manual: Ativado (clique para ligar o Auto-Ajuste Reativo)'
+            }
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all ${
+              isReactive
+                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25'
+                : 'bg-slate-700/50 text-slate-400 border border-slate-600/40 hover:bg-slate-700/80'
+            }`}
+          >
+            <Sparkles className="w-2.5 h-2.5" />
+            <span>{isReactive ? '⚡ Reativo' : '📐 Manual'}</span>
+          </button>
+
           {/* Add Nodes Button */}
           <button
             type="button"
@@ -316,7 +354,17 @@ export const GroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       )}
 
       {/* Group Canvas Area */}
-      <div className="flex-1 w-full pointer-events-none" />
+      {memberNodes.length === 0 ? (
+        <div className="flex-1 w-full flex flex-col items-center justify-center p-6 text-center pointer-events-none select-none opacity-40">
+          <Layers className="w-8 h-8 text-indigo-400 mb-2" />
+          <span className="text-xs font-semibold text-slate-300">Moldura de Grupo Vazia</span>
+          <span className="text-[10px] text-slate-400 mt-1 max-w-[220px]">
+            Arraste nós para dentro desta moldura ou clique em "+ Adicionar Nós" para agrupar
+          </span>
+        </div>
+      ) : (
+        <div className="flex-1 w-full pointer-events-none" />
+      )}
     </div>
   )
 }

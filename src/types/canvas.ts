@@ -121,6 +121,8 @@ export interface GroupNodeData {
   width?: number
   height?: number
   color?: string
+  isReactive?: boolean
+  isDragOver?: boolean
 }
 
 export interface StashItem {

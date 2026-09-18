@@ -57,6 +57,7 @@ const CanvasInner: React.FC = () => {
     onConnect,
     addNode,
     addNodeToGroup,
+    setGroupDragOver,
     annotatingNodeId,
     theme,
     groupSelectedNodes,
@@ -65,26 +66,60 @@ const CanvasInner: React.FC = () => {
   const { screenToFlowPosition, fitView } = useReactFlow()
   const mousePositionRef = useRef<{ x: number; y: number }>({ x: 300, y: 300 })
 
-  const handleNodeDragStop = useCallback(
+  const handleNodeDrag = useCallback(
     (_: MouseEvent | TouchEvent, node: Node) => {
       if (node.type === 'groupNode') return
       const groups = nodes.filter((n) => n.type === 'groupNode')
+      const nodeWidth = Number(node.measured?.width) || 380
+      const nodeCenterX = node.position.x + nodeWidth / 2
+      const nodeCenterY = node.position.y + 40
+
+      let targetGroupId: string | null = null
       for (const group of groups) {
+        const memberIds = ((group.data as any)?.nodeIds || []) as string[]
+        if (memberIds.includes(node.id)) continue
+
         const gX = group.position.x
         const gY = group.position.y
         const gW = Number((group.data as any)?.width) || (group.style?.width as number) || 560
         const gH = Number((group.data as any)?.height) || (group.style?.height as number) || 420
 
-        const nX = node.position.x + 100
-        const nY = node.position.y + 60
+        if (nodeCenterX >= gX && nodeCenterX <= gX + gW && nodeCenterY >= gY && nodeCenterY <= gY + gH) {
+          targetGroupId = group.id
+          break
+        }
+      }
+      setGroupDragOver(targetGroupId)
+    },
+    [nodes, setGroupDragOver]
+  )
 
-        if (nX >= gX && nX <= gX + gW && nY >= gY && nY <= gY + gH) {
+  const handleNodeDragStop = useCallback(
+    (_: MouseEvent | TouchEvent, node: Node) => {
+      setGroupDragOver(null)
+      if (node.type === 'groupNode') return
+
+      const groups = nodes.filter((n) => n.type === 'groupNode')
+      const nodeWidth = Number(node.measured?.width) || 380
+      const nodeCenterX = node.position.x + nodeWidth / 2
+      const nodeCenterY = node.position.y + 40
+
+      for (const group of groups) {
+        const memberIds = ((group.data as any)?.nodeIds || []) as string[]
+        if (memberIds.includes(node.id)) continue
+
+        const gX = group.position.x
+        const gY = group.position.y
+        const gW = Number((group.data as any)?.width) || (group.style?.width as number) || 560
+        const gH = Number((group.data as any)?.height) || (group.style?.height as number) || 420
+
+        if (nodeCenterX >= gX && nodeCenterX <= gX + gW && nodeCenterY >= gY && nodeCenterY <= gY + gH) {
           addNodeToGroup(group.id, node.id)
           break
         }
       }
     },
-    [nodes, addNodeToGroup]
+    [nodes, addNodeToGroup, setGroupDragOver]
   )
   const [contextMenu, setContextMenu] = useState<{
     x: number
@@ -381,6 +416,7 @@ const CanvasInner: React.FC = () => {
           onPaneClick={() => setContextMenu(null)}
           onMoveStart={() => setContextMenu(null)}
           onNodeClick={() => setContextMenu(null)}
+          onNodeDrag={handleNodeDrag}
           onNodeDragStop={handleNodeDragStop}
           fitView
           minZoom={0.2}
