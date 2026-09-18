@@ -21,6 +21,58 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useCanvasStore } from '../../store/canvasStore'
 import type { ActionApproval, AgentNodeData, ChatMessage } from '../../types/canvas'
 
+interface SlashCommand {
+  cmd: string
+  label: string
+  desc: string
+  category: string
+}
+
+const AVAILABLE_SLASH_COMMANDS: SlashCommand[] = [
+  {
+    cmd: '/plan',
+    label: '/plan',
+    desc: 'Criar plano estruturado de arquitetura e implementação',
+    category: 'Planejador',
+  },
+  {
+    cmd: '/test',
+    label: '/test',
+    desc: 'Executar bateria de testes e validação de código',
+    category: 'Qualidade',
+  },
+  {
+    cmd: '/review',
+    label: '/review',
+    desc: 'Auditar mudanças recentes, identificar bugs e melhorias',
+    category: 'Revisão',
+  },
+  {
+    cmd: '/commit',
+    label: '/commit',
+    desc: 'Gerar mensagem semântica e preparar commit',
+    category: 'Git',
+  },
+  {
+    cmd: '/compact',
+    label: '/compact',
+    desc: 'Reduzir e compactar o histórico de mensagens do nó',
+    category: 'Contexto',
+  },
+  {
+    cmd: '/clear',
+    label: '/clear',
+    desc: 'Limpar histórico e redefinir nó para o estado inicial',
+    category: 'Manutenção',
+  },
+  {
+    cmd: '/help',
+    label: '/help',
+    desc: 'Exibir comandos disponíveis e orientações do agente',
+    category: 'Ajuda',
+  },
+]
+
 export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const nodeData = data as unknown as AgentNodeData
   const {
@@ -32,6 +84,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     deleteNode,
     attachImageToAgent,
     removeAttachedImage,
+    updateNodeData,
   } = useCanvasStore()
 
   const [inputVal, setInputVal] = useState('')
@@ -39,7 +92,9 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const [isThinkingExpanded, setIsThinkingExpanded] = useState(
     nodeData.thinking?.isExpanded ?? false
   )
+  const [selectedSlashIndex, setSelectedSlashIndex] = useState(0)
 
+  const inputRef = useRef<HTMLInputElement>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
   const terminalInstance = useRef<Terminal | null>(null)
   const fitAddonInstance = useRef<FitAddon | null>(null)
@@ -106,6 +161,22 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [nodeData.messages])
 
+  // Autocomplete slash command detection
+  const lastSlashIndex = inputVal.lastIndexOf('/')
+  const isSlashActive =
+    lastSlashIndex !== -1 &&
+    (lastSlashIndex === 0 || inputVal[lastSlashIndex - 1] === ' ') &&
+    !inputVal.slice(lastSlashIndex).includes(' ')
+
+  const slashQuery = isSlashActive ? inputVal.slice(lastSlashIndex).toLowerCase() : ''
+  const filteredSlashCommands = isSlashActive
+    ? AVAILABLE_SLASH_COMMANDS.filter(
+        (c) =>
+          c.cmd.toLowerCase().startsWith(slashQuery) ||
+          c.desc.toLowerCase().includes(slashQuery.replace('/', ''))
+      )
+    : []
+
   const handleSendMessage = () => {
     if (!inputVal.trim() && (!nodeData.attachedImages || nodeData.attachedImages.length === 0)) return
     const attached = nodeData.attachedImages?.map((img) => img.url)
@@ -113,7 +184,49 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     setInputVal('')
   }
 
+  const applySlashCommand = (cmd: string) => {
+    if (cmd === '/clear') {
+      updateNodeData(id, { messages: [], approvals: [], thinking: null })
+      setInputVal('')
+      return
+    }
+    const prefix = lastSlashIndex > 0 ? inputVal.slice(0, lastSlashIndex) : ''
+    const newVal = prefix ? `${prefix}${cmd} ` : `${cmd} `
+    setInputVal(newVal)
+    setSelectedSlashIndex(0)
+    inputRef.current?.focus()
+  }
+
+  const addSlashCommand = (cmd: string) => {
+    applySlashCommand(cmd)
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (isSlashActive && filteredSlashCommands.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedSlashIndex((prev) => (prev + 1) % filteredSlashCommands.length)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedSlashIndex(
+          (prev) => (prev - 1 + filteredSlashCommands.length) % filteredSlashCommands.length
+        )
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        applySlashCommand(filteredSlashCommands[selectedSlashIndex].cmd)
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setInputVal((prev) => prev.trimEnd() + ' ')
+        return
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSendMessage()
@@ -150,10 +263,6 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     navigator.clipboard.writeText(code)
     setCopiedBlock(blockKey)
     setTimeout(() => setCopiedBlock(null), 2000)
-  }
-
-  const addSlashCommand = (cmd: string) => {
-    setInputVal((prev) => (prev ? `${prev} ${cmd} ` : `${cmd} `))
   }
 
   return (
@@ -563,10 +672,51 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
           {/* Input & Slash Command Shortcuts */}
           <div
-            className={`p-2.5 border-t rounded-b-xl ${
+            className={`p-2.5 border-t rounded-b-xl relative ${
               theme === 'dark' ? 'bg-[#090D13] border-[#21262D]' : 'bg-slate-50 border-slate-200'
             }`}
           >
+            {/* Slash Command Autocomplete Popover */}
+            {isSlashActive && filteredSlashCommands.length > 0 && (
+              <div
+                className={`absolute bottom-full mb-1.5 left-2.5 right-2.5 rounded-lg shadow-xl border overflow-hidden z-50 ${
+                  theme === 'dark'
+                    ? 'bg-[#161B22] border-[#30363D] text-[#F0F6FC]'
+                    : 'bg-white border-slate-300 text-slate-900 shadow-md'
+                }`}
+              >
+                <div className="px-2.5 py-1 text-[10px] font-semibold text-slate-400 border-b border-inherit flex items-center justify-between">
+                  <span>Comandos Disponíveis</span>
+                  <span className="text-[9px] font-normal text-slate-400">↑↓ navegar • Enter selecionar</span>
+                </div>
+                <div className="max-h-44 overflow-y-auto py-1">
+                  {filteredSlashCommands.map((cmd, idx) => {
+                    const isSelected = idx === selectedSlashIndex
+                    return (
+                      <button
+                        key={cmd.cmd}
+                        type="button"
+                        onClick={() => applySlashCommand(cmd.cmd)}
+                        onMouseEnter={() => setSelectedSlashIndex(idx)}
+                        className={`w-full px-2.5 py-1.5 flex items-center justify-between text-left transition-colors ${
+                          isSelected
+                            ? theme === 'dark'
+                              ? 'bg-indigo-600/30 text-indigo-300'
+                              : 'bg-indigo-50 text-indigo-700 font-medium'
+                            : theme === 'dark'
+                              ? 'hover:bg-[#21262D] text-slate-300'
+                              : 'hover:bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        <span className="font-mono text-xs font-semibold">{cmd.cmd}</span>
+                        <span className="text-[10px] text-slate-400">{cmd.desc}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Quick Slash Commands */}
             <div className="flex items-center gap-1 mb-2 overflow-x-auto text-[10px]">
               {['/plan', '/test', '/review', '/commit'].map((cmd) => (
@@ -587,9 +737,13 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
             <div className="relative flex items-center">
               <input
+                ref={inputRef}
                 type="text"
                 value={inputVal}
-                onChange={(e) => setInputVal(e.target.value)}
+                onChange={(e) => {
+                  setInputVal(e.target.value)
+                  setSelectedSlashIndex(0)
+                }}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 placeholder="Instruir agente... (Ctrl+V para prints)"

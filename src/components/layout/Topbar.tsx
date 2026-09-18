@@ -167,9 +167,11 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
       <div className="flex items-center gap-4">
         {/* Brand */}
         <div className="flex items-center gap-2 pr-2 border-r border-slate-200 dark:border-slate-800">
-          <div className="w-7 h-7 rounded-lg bg-linear-to-br from-indigo-500 to-sky-500 flex items-center justify-center text-white font-black text-xs shadow-xs">
-            C
-          </div>
+          <img
+            src="/favicon.svg"
+            alt="CGLI Logo"
+            className="w-7 h-7 rounded-lg shadow-xs select-none"
+          />
           <span className="font-bold text-sm tracking-tight">CGLI</span>
         </div>
 
@@ -231,7 +233,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-xs"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>+ Novo Nó</span>
+            <span>Novo Nó</span>
             <ChevronDown className="w-3 h-3 ml-0.5 opacity-80" />
           </button>
 

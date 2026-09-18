@@ -9,8 +9,15 @@ import {
   ReactFlowProvider,
   useReactFlow,
 } from '@xyflow/react'
-import React, { useCallback, useEffect, useRef } from 'react'
-import { Layers } from 'lucide-react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  Layers,
+  Bot,
+  Sparkles,
+  FileCode2,
+  Image as ImageIcon,
+  FolderKanban,
+} from 'lucide-react'
 import { Topbar } from './components/layout/Topbar'
 import { ImageAnnotationModal } from './components/modais/ImageAnnotationModal'
 import { SettingsModal } from './components/modais/SettingsModal'
@@ -53,6 +60,155 @@ const CanvasInner: React.FC = () => {
 
   const { screenToFlowPosition, fitView } = useReactFlow()
   const mousePositionRef = useRef<{ x: number; y: number }>({ x: 300, y: 300 })
+  const [contextMenu, setContextMenu] = useState<{
+    x: number
+    y: number
+    flowX: number
+    flowY: number
+  } | null>(null)
+
+  // Close context menu on outside click or escape
+  useEffect(() => {
+    const handleDismiss = () => setContextMenu(null)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null)
+    }
+    window.addEventListener('click', handleDismiss)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('click', handleDismiss)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
+  const spawnAgent = useCallback((type: 'claude' | 'agy', pos: { x: number; y: number }) => {
+    const isClaude = type === 'claude'
+    const newNode: Node = {
+      id: `node-${type}-${Date.now()}`,
+      type: 'agentNode',
+      position: { x: pos.x - 190, y: pos.y - 150 },
+      data: {
+        title: isClaude ? 'Claude Code' : 'Antigravity (AGY)',
+        agentType: type,
+        role: isClaude ? 'planner' : 'executor',
+        status: 'idle',
+        viewMode: 'extension',
+        thinking: null,
+        messages: [
+          {
+            id: `msg-${Date.now()}`,
+            sender: 'agent',
+            text: isClaude
+              ? 'Pronto para planejar e estruturar tarefas do projeto.'
+              : 'Pronto para executar comandos e testes em segundo plano.',
+            timestamp: new Date().toLocaleTimeString('pt-BR', {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          },
+        ],
+        approvals: [],
+        attachedImages: [],
+        terminalLogs: [`> ${type} session created`],
+      },
+    }
+    addNode(newNode)
+    setContextMenu(null)
+  }, [addNode])
+
+  const spawnArtifact = useCallback((pos: { x: number; y: number }) => {
+    const newNode: Node = {
+      id: `node-artifact-${Date.now()}`,
+      type: 'artifactNode',
+      position: { x: pos.x - 220, y: pos.y - 180 },
+      data: {
+        title: 'Novo Artefato',
+        activeTab: 'markdown',
+        markdownContent: `### Documento de Especificação\n\n> [!NOTE]\n> Descreva o escopo e diretrizes desta entrega aqui.\n\n- [ ] Tarefa inicial\n`,
+        htmlPreview: '<div style="font-family:sans-serif;padding:20px;color:#94a3b8"><h3>Preview Vazio</h3></div>',
+        diffContent: {
+          filename: 'src/index.ts',
+          lines: [{ type: 'normal', content: '// Arquivo inicial' }],
+        },
+        status: 'draft',
+      },
+    }
+    addNode(newNode)
+    setContextMenu(null)
+  }, [addNode])
+
+  const spawnImage = useCallback((pos: { x: number; y: number }) => {
+    const newNode: Node = {
+      id: `node-image-${Date.now()}`,
+      type: 'imageNode',
+      position: { x: pos.x - 170, y: pos.y - 120 },
+      data: {
+        title: 'Nova Captura',
+        name: 'design-reference.png',
+        url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80',
+        annotations: [],
+      },
+    }
+    addNode(newNode)
+    setContextMenu(null)
+  }, [addNode])
+
+  const spawnImageGroup = useCallback((pos: { x: number; y: number }) => {
+    const newNode: Node = {
+      id: `node-img-group-${Date.now()}`,
+      type: 'imageGroupNode',
+      position: { x: pos.x - 190, y: pos.y - 160 },
+      data: {
+        title: 'Grupo de Referências',
+        activeImageIndex: 0,
+        images: [
+          {
+            id: `img-g1-${Date.now()}`,
+            name: 'spec-layout.png',
+            url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80',
+          },
+          {
+            id: `img-g2-${Date.now()}`,
+            name: 'dashboard-preview.png',
+            url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80',
+          },
+        ],
+      },
+    }
+    addNode(newNode)
+    setContextMenu(null)
+  }, [addNode])
+
+  const spawnNodeGroup = useCallback((pos: { x: number; y: number }) => {
+    const newNode: Node = {
+      id: `group-${Date.now()}`,
+      type: 'groupNode',
+      position: { x: pos.x - 200, y: pos.y - 150 },
+      style: { width: 560, height: 420, zIndex: -1 },
+      data: {
+        title: 'Novo Grupo de Nós',
+        nodeIds: [],
+        width: 560,
+        height: 420,
+      },
+    }
+    addNode(newNode)
+    setContextMenu(null)
+  }, [addNode])
+
+  const handlePaneContextMenu = useCallback(
+    (e: React.MouseEvent | MouseEvent) => {
+      e.preventDefault()
+      const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        flowX: flowPos.x,
+        flowY: flowPos.y,
+      })
+    },
+    [screenToFlowPosition]
+  )
 
   // Synchronize document.documentElement dark class with canvasStore theme
   useEffect(() => {
@@ -195,6 +351,10 @@ const CanvasInner: React.FC = () => {
           onConnect={onConnect}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
+          onPaneContextMenu={handlePaneContextMenu}
+          onPaneClick={() => setContextMenu(null)}
+          onMoveStart={() => setContextMenu(null)}
+          onNodeClick={() => setContextMenu(null)}
           fitView
           minZoom={0.2}
           maxZoom={2.5}
@@ -238,6 +398,138 @@ const CanvasInner: React.FC = () => {
             }`}
           />
         </ReactFlow>
+
+        {/* Canvas Right-Click Context Menu */}
+        {contextMenu && (
+          <div
+            data-testid="canvas-context-menu"
+            className={`fixed z-50 min-w-[220px] rounded-xl border p-1.5 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 select-none ${
+              theme === 'dark'
+                ? 'bg-[#161B22]/95 border-[#30363D] text-[#F0F6FC] shadow-black/60'
+                : 'bg-white/95 border-slate-300 text-slate-900 shadow-slate-400/40'
+            }`}
+            style={{
+              top: Math.min(contextMenu.y, window.innerHeight - 340),
+              left: Math.min(contextMenu.x, window.innerWidth - 240),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-2.5 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-inherit mb-1 flex items-center justify-between">
+              <span>Adicionar ao Canvas</span>
+              <span className="text-[9px] font-mono opacity-70">Menu</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => spawnAgent('claude', { x: contextMenu.flowX, y: contextMenu.flowY })}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left transition-colors ${
+                theme === 'dark'
+                  ? 'hover:bg-[#21262D] text-slate-200'
+                  : 'hover:bg-slate-100 text-slate-800'
+              }`}
+            >
+              <div className="w-6 h-6 rounded-md bg-orange-500/15 flex items-center justify-center text-orange-500 shrink-0">
+                <Bot className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex flex-col flex-1 min-w-0">
+                <span className="font-semibold text-xs leading-tight">Claude Code</span>
+                <span className="text-[10px] text-slate-400 leading-tight">Planejador CLI</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => spawnAgent('agy', { x: contextMenu.flowX, y: contextMenu.flowY })}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left transition-colors ${
+                theme === 'dark'
+                  ? 'hover:bg-[#21262D] text-slate-200'
+                  : 'hover:bg-slate-100 text-slate-800'
+              }`}
+            >
+              <div className="w-6 h-6 rounded-md bg-sky-500/15 flex items-center justify-center text-sky-500 shrink-0">
+                <Sparkles className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex flex-col flex-1 min-w-0">
+                <span className="font-semibold text-xs leading-tight">Antigravity AGY</span>
+                <span className="text-[10px] text-slate-400 leading-tight">Executor CLI</span>
+              </div>
+            </button>
+
+            <div className={`my-1 border-t ${theme === 'dark' ? 'border-[#30363D]' : 'border-slate-200'}`} />
+
+            <button
+              type="button"
+              onClick={() => spawnArtifact({ x: contextMenu.flowX, y: contextMenu.flowY })}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left transition-colors ${
+                theme === 'dark'
+                  ? 'hover:bg-[#21262D] text-slate-200'
+                  : 'hover:bg-slate-100 text-slate-800'
+              }`}
+            >
+              <div className="w-6 h-6 rounded-md bg-indigo-500/15 flex items-center justify-center text-indigo-500 shrink-0">
+                <FileCode2 className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex flex-col flex-1 min-w-0">
+                <span className="font-semibold text-xs leading-tight">Artefato</span>
+                <span className="text-[10px] text-slate-400 leading-tight">Plano, Preview & Diff</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => spawnImage({ x: contextMenu.flowX, y: contextMenu.flowY })}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left transition-colors ${
+                theme === 'dark'
+                  ? 'hover:bg-[#21262D] text-slate-200'
+                  : 'hover:bg-slate-100 text-slate-800'
+              }`}
+            >
+              <div className="w-6 h-6 rounded-md bg-rose-500/15 flex items-center justify-center text-rose-500 shrink-0">
+                <ImageIcon className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex flex-col flex-1 min-w-0">
+                <span className="font-semibold text-xs leading-tight">Imagem</span>
+                <span className="text-[10px] text-slate-400 leading-tight">Print & Editor Canvas</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => spawnImageGroup({ x: contextMenu.flowX, y: contextMenu.flowY })}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left transition-colors ${
+                theme === 'dark'
+                  ? 'hover:bg-[#21262D] text-slate-200'
+                  : 'hover:bg-slate-100 text-slate-800'
+              }`}
+            >
+              <div className="w-6 h-6 rounded-md bg-pink-500/15 flex items-center justify-center text-pink-500 shrink-0">
+                <FolderKanban className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex flex-col flex-1 min-w-0">
+                <span className="font-semibold text-xs leading-tight">Grupo de Imagens</span>
+                <span className="text-[10px] text-slate-400 leading-tight">Carrossel de referências</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => spawnNodeGroup({ x: contextMenu.flowX, y: contextMenu.flowY })}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left transition-colors ${
+                theme === 'dark'
+                  ? 'hover:bg-[#21262D] text-slate-200'
+                  : 'hover:bg-slate-100 text-slate-800'
+              }`}
+            >
+              <div className="w-6 h-6 rounded-md bg-purple-500/15 flex items-center justify-center text-purple-500 shrink-0">
+                <Layers className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex flex-col flex-1 min-w-0">
+                <span className="font-semibold text-xs leading-tight">Moldura de Grupo</span>
+                <span className="text-[10px] text-slate-400 leading-tight">Agrupar nós no canvas</span>
+              </div>
+            </button>
+          </div>
+        )}
 
         {/* Multi-Node Selection Floating Toolbar */}
         {nodes.filter((n) => n.selected && n.type !== 'groupNode').length > 1 && (
