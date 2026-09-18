@@ -21,6 +21,8 @@ import {
 import { Topbar } from './components/layout/Topbar'
 import { ImageAnnotationModal } from './components/modais/ImageAnnotationModal'
 import { SettingsModal } from './components/modais/SettingsModal'
+import { NewProjectModal } from './components/modais/NewProjectModal'
+import { ManageWorkspaceModal } from './components/modais/ManageWorkspaceModal'
 import { AgentCardNode } from './components/nodes/AgentCardNode'
 import { ArtifactViewerNode } from './components/nodes/ArtifactViewerNode'
 import { GroupNode } from './components/nodes/GroupNode'
@@ -54,12 +56,36 @@ const CanvasInner: React.FC = () => {
     onEdgesChange,
     onConnect,
     addNode,
+    addNodeToGroup,
+    annotatingNodeId,
     theme,
     groupSelectedNodes,
   } = useCanvasStore()
 
   const { screenToFlowPosition, fitView } = useReactFlow()
   const mousePositionRef = useRef<{ x: number; y: number }>({ x: 300, y: 300 })
+
+  const handleNodeDragStop = useCallback(
+    (_: MouseEvent | TouchEvent, node: Node) => {
+      if (node.type === 'groupNode') return
+      const groups = nodes.filter((n) => n.type === 'groupNode')
+      for (const group of groups) {
+        const gX = group.position.x
+        const gY = group.position.y
+        const gW = Number((group.data as any)?.width) || (group.style?.width as number) || 560
+        const gH = Number((group.data as any)?.height) || (group.style?.height as number) || 420
+
+        const nX = node.position.x + 100
+        const nY = node.position.y + 60
+
+        if (nX >= gX && nX <= gX + gW && nY >= gY && nY <= gY + gH) {
+          addNodeToGroup(group.id, node.id)
+          break
+        }
+      }
+    },
+    [nodes, addNodeToGroup]
+  )
   const [contextMenu, setContextMenu] = useState<{
     x: number
     y: number
@@ -355,6 +381,7 @@ const CanvasInner: React.FC = () => {
           onPaneClick={() => setContextMenu(null)}
           onMoveStart={() => setContextMenu(null)}
           onNodeClick={() => setContextMenu(null)}
+          onNodeDragStop={handleNodeDragStop}
           fitView
           minZoom={0.2}
           maxZoom={2.5}
@@ -557,7 +584,9 @@ const CanvasInner: React.FC = () => {
       {/* Overlays & Drawers */}
       <StashDrawer />
       <SettingsModal />
-      <ImageAnnotationModal />
+      <NewProjectModal />
+      <ManageWorkspaceModal />
+      <ImageAnnotationModal key={annotatingNodeId || 'none'} />
     </div>
   )
 }

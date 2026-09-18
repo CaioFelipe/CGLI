@@ -18,6 +18,7 @@ import type {
   SkillItem,
   StashItem,
   ThemeMode,
+  WorkspaceFolder,
 } from '../types/canvas'
 
 interface CanvasState {
@@ -26,8 +27,22 @@ interface CanvasState {
   setTheme: (theme: ThemeMode) => void
   toggleTheme: () => void
 
-  // Project
+  // Project & Multi-Folder Workspaces
+  projects: ProjectInfo[]
+  currentProjectId: string
   project: ProjectInfo
+  isNewProjectOpen: boolean
+  isManageWorkspaceOpen: boolean
+  openNewProjectModal: () => void
+  closeNewProjectModal: () => void
+  openManageWorkspaceModal: () => void
+  closeManageWorkspaceModal: () => void
+  createProject: (name: string, folders: Array<{ name: string; path: string }>) => void
+  switchProject: (projectId: string) => void
+  addFolderToProject: (projectId: string, folder: { name: string; path: string }) => void
+  removeFolderFromProject: (projectId: string, folderId: string) => void
+  setActiveFolder: (projectId: string, folderId: string) => void
+  deleteProject: (projectId: string) => void
   setProject: (project: Partial<ProjectInfo>) => void
 
   // Canvas Nodes & Edges
@@ -81,6 +96,9 @@ interface CanvasState {
   removeAttachedImage: (nodeId: string, imageId: string) => void
   spawnSubagent: (parentId: string, childType: 'claude' | 'agy') => void
   deleteEdge: (edgeId: string) => void
+  addNodeToGroup: (groupId: string, nodeId: string) => void
+  removeNodeFromGroup: (groupId: string, nodeId: string) => void
+  autoFitGroup: (groupId: string) => void
   groupSelectedNodes: (nodeIds: string[], title?: string) => void
   ungroupNodes: (groupId: string) => void
   stashGroup: (groupId: string) => void
@@ -193,6 +211,54 @@ const initialNodes: Node[] = [
 
 const initialEdges: Edge[] = []
 
+const defaultProjects: ProjectInfo[] = [
+  {
+    id: 'proj-blissful-franklin',
+    name: 'blissful-franklin',
+    path: 'c:/Users/aluno/Documents/antigravity/blissful-franklin',
+    folders: [
+      {
+        id: 'f-default-1',
+        name: 'blissful-franklin',
+        path: 'c:/Users/aluno/Documents/antigravity/blissful-franklin',
+        isPrimary: true,
+      },
+    ],
+    activeFolderId: 'f-default-1',
+    createdAt: new Date().toISOString(),
+    recentProjects: [
+      { name: 'blissful-franklin', path: 'c:/Users/aluno/Documents/antigravity/blissful-franklin' },
+      { name: 'cgli-core', path: 'c:/Users/aluno/Documents/antigravity/cgli-core' },
+      { name: 'studio-clean-demo', path: 'c:/Users/aluno/Documents/antigravity/demo' },
+    ],
+  },
+]
+
+const getInitialProjectState = (): { projects: ProjectInfo[]; currentId: string; project: ProjectInfo } => {
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('cgli_projects_v2')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const lastActive = localStorage.getItem('cgli_current_project_id') || parsed[0].id
+          const current = parsed.find((p: any) => p.id === lastActive) || parsed[0]
+          return { projects: parsed, currentId: current.id, project: current }
+        }
+      }
+    } catch (e) {
+      console.error('Error loading projects from localStorage:', e)
+    }
+  }
+  return {
+    projects: defaultProjects,
+    currentId: defaultProjects[0].id,
+    project: defaultProjects[0],
+  }
+}
+
+const initialProjState = getInitialProjectState()
+
 export const useCanvasStore = create<CanvasState>((set, get) => ({
   theme: 'dark',
   setTheme: (theme) => {
@@ -210,15 +276,224 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     get().setTheme(next)
   },
 
-  project: {
-    name: 'blissful-franklin',
-    path: 'c:/Users/aluno/Documents/antigravity/blissful-franklin',
-    recentProjects: [
-      { name: 'blissful-franklin', path: 'c:/Users/aluno/Documents/antigravity/blissful-franklin' },
-      { name: 'cgli-core', path: 'c:/Users/aluno/Documents/antigravity/cgli-core' },
-      { name: 'studio-clean-demo', path: 'c:/Users/aluno/Documents/antigravity/demo' },
-    ],
+  projects: initialProjState.projects,
+  currentProjectId: initialProjState.currentId,
+  project: initialProjState.project,
+  isNewProjectOpen: false,
+  isManageWorkspaceOpen: false,
+
+  openNewProjectModal: () => set({ isNewProjectOpen: true }),
+  closeNewProjectModal: () => set({ isNewProjectOpen: false }),
+  openManageWorkspaceModal: () => set({ isManageWorkspaceOpen: true }),
+  closeManageWorkspaceModal: () => set({ isManageWorkspaceOpen: false }),
+
+  createProject: (name, folders) => {
+    const projId = `proj-${Date.now()}`
+    const workspaceFolders: WorkspaceFolder[] = folders.map((f, i) => ({
+      id: `f-${Date.now()}-${i}`,
+      name: f.name || `pasta-${i + 1}`,
+      path: f.path,
+      isPrimary: i === 0,
+    }))
+
+    const newProj: ProjectInfo = {
+      id: projId,
+      name: name.trim() || 'Novo Projeto',
+      path: workspaceFolders[0]?.path || '',
+      folders: workspaceFolders,
+      activeFolderId: workspaceFolders[0]?.id,
+      createdAt: new Date().toISOString(),
+      recentProjects: [],
+    }
+
+    const currentId = get().currentProjectId
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(
+        `cgli_canvas_${currentId}`,
+        JSON.stringify({
+          nodes: get().nodes,
+          edges: get().edges,
+        })
+      )
+    }
+
+    const updatedProjects = [newProj, ...get().projects]
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cgli_projects_v2', JSON.stringify(updatedProjects))
+      localStorage.setItem('cgli_current_project_id', projId)
+    }
+
+    const freshClaudeNode: Node = {
+      id: `node-claude-${Date.now()}`,
+      type: 'agentNode',
+      position: { x: 260, y: 160 },
+      data: {
+        title: 'Claude Code',
+        agentType: 'claude',
+        role: 'planner',
+        status: 'idle',
+        viewMode: 'extension',
+        thinking: null,
+        messages: [],
+        approvals: [],
+        attachedImages: [],
+        terminalLogs: [`> Sessão Claude Code inicializada em [${newProj.name}]`],
+      },
+    }
+
+    set({
+      projects: updatedProjects,
+      currentProjectId: projId,
+      project: newProj,
+      nodes: [freshClaudeNode],
+      edges: [],
+      isNewProjectOpen: false,
+      annotatingNodeId: null,
+    })
   },
+
+  switchProject: (projectId) => {
+    if (projectId === get().currentProjectId) return
+    const target = get().projects.find((p) => p.id === projectId)
+    if (!target) return
+
+    const currentId = get().currentProjectId
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(
+        `cgli_canvas_${currentId}`,
+        JSON.stringify({
+          nodes: get().nodes,
+          edges: get().edges,
+        })
+      )
+    }
+
+    let targetNodes = initialNodes
+    let targetEdges = initialEdges
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cgli_current_project_id', projectId)
+      const saved = localStorage.getItem(`cgli_canvas_${projectId}`)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          if (parsed.nodes) targetNodes = parsed.nodes
+          if (parsed.edges) targetEdges = parsed.edges
+        } catch (e) {
+          console.error('Error restoring project canvas:', e)
+        }
+      }
+    }
+
+    set({
+      currentProjectId: projectId,
+      project: target,
+      nodes: targetNodes,
+      edges: targetEdges,
+      annotatingNodeId: null,
+    })
+  },
+
+  addFolderToProject: (projectId, folder) => {
+    const updatedProjects = get().projects.map((p) => {
+      if (p.id === projectId) {
+        const newFolder: WorkspaceFolder = {
+          id: `f-${Date.now()}`,
+          name: folder.name || 'Nova Pasta',
+          path: folder.path,
+          isPrimary: p.folders.length === 0,
+        }
+        const newFolders = [...p.folders, newFolder]
+        return {
+          ...p,
+          folders: newFolders,
+          path: p.path || newFolder.path,
+        }
+      }
+      return p
+    })
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cgli_projects_v2', JSON.stringify(updatedProjects))
+    }
+
+    const current = updatedProjects.find((p) => p.id === get().currentProjectId)
+    set({
+      projects: updatedProjects,
+      project: current || get().project,
+    })
+  },
+
+  removeFolderFromProject: (projectId, folderId) => {
+    const updatedProjects = get().projects.map((p) => {
+      if (p.id === projectId) {
+        const newFolders = p.folders.filter((f) => f.id !== folderId)
+        return {
+          ...p,
+          folders: newFolders,
+          path: newFolders[0]?.path || '',
+          activeFolderId: p.activeFolderId === folderId ? newFolders[0]?.id : p.activeFolderId,
+        }
+      }
+      return p
+    })
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cgli_projects_v2', JSON.stringify(updatedProjects))
+    }
+
+    const current = updatedProjects.find((p) => p.id === get().currentProjectId)
+    set({
+      projects: updatedProjects,
+      project: current || get().project,
+    })
+  },
+
+  setActiveFolder: (projectId, folderId) => {
+    const updatedProjects = get().projects.map((p) => {
+      if (p.id === projectId) {
+        const targetFolder = p.folders.find((f) => f.id === folderId)
+        return {
+          ...p,
+          activeFolderId: folderId,
+          path: targetFolder?.path || p.path,
+        }
+      }
+      return p
+    })
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cgli_projects_v2', JSON.stringify(updatedProjects))
+    }
+
+    const current = updatedProjects.find((p) => p.id === get().currentProjectId)
+    set({
+      projects: updatedProjects,
+      project: current || get().project,
+    })
+  },
+
+  deleteProject: (projectId) => {
+    if (get().projects.length <= 1) return
+    const remaining = get().projects.filter((p) => p.id !== projectId)
+    let nextCurrent = get().currentProjectId
+    if (nextCurrent === projectId) {
+      nextCurrent = remaining[0].id
+    }
+
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(`cgli_canvas_${projectId}`)
+      localStorage.setItem('cgli_projects_v2', JSON.stringify(remaining))
+      localStorage.setItem('cgli_current_project_id', nextCurrent)
+    }
+
+    const current = remaining.find((p) => p.id === nextCurrent) || remaining[0]
+    set({
+      projects: remaining,
+      currentProjectId: nextCurrent,
+      project: current,
+    })
+  },
+
   setProject: (partial) => {
     set((state) => ({ project: { ...state.project, ...partial } }))
   },
@@ -226,8 +501,33 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   nodes: initialNodes,
   edges: initialEdges,
   onNodesChange: (changes) => {
+    let currentNodes = get().nodes
+    for (const change of changes) {
+      if (change.type === 'position' && change.position) {
+        const node = currentNodes.find((n) => n.id === change.id)
+        if (node && node.type === 'groupNode' && (node.data as any)?.nodeIds?.length > 0) {
+          const deltaX = change.position.x - node.position.x
+          const deltaY = change.position.y - node.position.y
+          if (deltaX !== 0 || deltaY !== 0) {
+            const memberIds = (node.data as any).nodeIds as string[]
+            currentNodes = currentNodes.map((n) => {
+              if (memberIds.includes(n.id)) {
+                return {
+                  ...n,
+                  position: {
+                    x: n.position.x + deltaX,
+                    y: n.position.y + deltaY,
+                  },
+                }
+              }
+              return n
+            })
+          }
+        }
+      }
+    }
     set({
-      nodes: applyNodeChanges(changes, get().nodes),
+      nodes: applyNodeChanges(changes, currentNodes),
     })
   },
   onEdgesChange: (changes) => {
@@ -529,9 +829,18 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const startTime = Date.now()
 
     try {
-      let fullPrompt = text
+      const proj = get().project
+      const activeFolder = proj.folders?.find((f) => f.id === proj.activeFolderId) || proj.folders?.[0]
+      const cwd = activeFolder?.path || proj.path
+
+      let workspaceContext = ''
+      if (proj.folders && proj.folders.length > 1) {
+        workspaceContext = `[Workspace Multi-Pastas (${proj.folders.length} pastas): ${proj.folders.map((f) => `${f.name}: "${f.path}"`).join(', ')}. Diretório ativo: "${cwd}"]\n`
+      }
+
+      let fullPrompt = `${workspaceContext}${text}`
       if (allImages.length > 0) {
-        fullPrompt = `[Contexto: ${allImages.length} imagens conectadas pelo canvas]: ${text}`
+        fullPrompt = `${workspaceContext}[Contexto: ${allImages.length} imagens conectadas pelo canvas]: ${text}`
       }
 
       const response = await fetch('/api/agent/run', {
@@ -541,6 +850,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           agentType,
           prompt: fullPrompt,
           images: allImages,
+          cwd,
         }),
       })
 
@@ -934,6 +1244,125 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   deleteEdge: (edgeId) => {
     set({
       edges: get().edges.filter((e) => e.id !== edgeId),
+    })
+  },
+
+  addNodeToGroup: (groupId, nodeId) => {
+    const groupNode = get().nodes.find((n) => n.id === groupId)
+    const targetNode = get().nodes.find((n) => n.id === nodeId)
+    if (!groupNode || !targetNode) return
+
+    const currentMemberIds = ((groupNode.data as any)?.nodeIds || []) as string[]
+    if (currentMemberIds.includes(nodeId)) return
+
+    const updatedMemberIds = [...currentMemberIds, nodeId]
+
+    // Recalculate group bounding box to comfortably include the new node
+    const allMembers = get().nodes.filter((n) => updatedMemberIds.includes(n.id))
+    let minX = groupNode.position.x
+    let minY = groupNode.position.y
+    const groupW = Number((groupNode.data as any)?.width) || (groupNode.style?.width as number) || 560
+    const groupH = Number((groupNode.data as any)?.height) || (groupNode.style?.height as number) || 420
+    let maxX = groupNode.position.x + groupW
+    let maxY = groupNode.position.y + groupH
+
+    for (const m of allMembers) {
+      const mw = (m.style as any)?.width || 420
+      const mh = (m.style as any)?.height || 360
+      if (m.position.x < minX + 20) minX = m.position.x - 40
+      if (m.position.y < minY + 60) minY = m.position.y - 60
+      if (m.position.x + mw > maxX - 20) maxX = m.position.x + mw + 40
+      if (m.position.y + mh > maxY - 20) maxY = m.position.y + mh + 40
+    }
+
+    const newW = Math.max(maxX - minX, 520)
+    const newH = Math.max(maxY - minY, 380)
+
+    set({
+      nodes: get().nodes.map((n) => {
+        if (n.id === groupId) {
+          return {
+            ...n,
+            position: { x: minX, y: minY },
+            style: { ...n.style, width: newW, height: newH, zIndex: -1 },
+            data: {
+              ...n.data,
+              nodeIds: updatedMemberIds,
+              width: newW,
+              height: newH,
+            },
+          }
+        }
+        return n
+      }),
+    })
+  },
+
+  removeNodeFromGroup: (groupId, nodeId) => {
+    const groupNode = get().nodes.find((n) => n.id === groupId)
+    if (!groupNode) return
+
+    const currentMemberIds = ((groupNode.data as any)?.nodeIds || []) as string[]
+    const updatedMemberIds = currentMemberIds.filter((id) => id !== nodeId)
+
+    set({
+      nodes: get().nodes.map((n) =>
+        n.id === groupId
+          ? {
+              ...n,
+              data: {
+                ...n.data,
+                nodeIds: updatedMemberIds,
+              },
+            }
+          : n
+      ),
+    })
+  },
+
+  autoFitGroup: (groupId) => {
+    const groupNode = get().nodes.find((n) => n.id === groupId)
+    if (!groupNode) return
+
+    const memberIds = ((groupNode.data as any)?.nodeIds || []) as string[]
+    const members = get().nodes.filter((n) => memberIds.includes(n.id))
+    if (members.length === 0) return
+
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    for (const m of members) {
+      const mw = (m.style as any)?.width || 420
+      const mh = (m.style as any)?.height || 360
+      if (m.position.x < minX) minX = m.position.x
+      if (m.position.y < minY) minY = m.position.y
+      if (m.position.x + mw > maxX) maxX = m.position.x + mw
+      if (m.position.y + mh > maxY) maxY = m.position.y + mh
+    }
+
+    const padding = 40
+    const newX = minX - padding
+    const newY = minY - padding - 30
+    const newW = Math.max(maxX - minX + padding * 2, 480)
+    const newH = Math.max(maxY - minY + padding * 2 + 30, 360)
+
+    set({
+      nodes: get().nodes.map((n) =>
+        n.id === groupId
+          ? {
+              ...n,
+              position: { x: newX, y: newY },
+              style: { ...n.style, width: newW, height: newH, zIndex: -1 },
+              data: {
+                ...n.data,
+                width: newW,
+                height: newH,
+              },
+            }
+          : n
+      ),
     })
   },
 

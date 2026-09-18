@@ -1,4 +1,4 @@
-import { Handle, type NodeProps, Position } from '@xyflow/react'
+import { Handle, NodeResizer, type NodeProps, Position } from '@xyflow/react'
 import {
   Archive,
   Check,
@@ -156,7 +156,7 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
 
   return (
     <div
-      className={`group relative rounded-xl border transition-all duration-200 ${
+      className={`group relative rounded-xl border transition-all duration-200 flex flex-col ${
         selected ? 'ring-2 ring-indigo-500' : ''
       } ${
         theme === 'dark'
@@ -164,10 +164,21 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
           : 'bg-white border-slate-300 text-slate-900 shadow-[0_4px_20px_-2px_rgba(15,23,42,0.12),0_2px_6px_-1px_rgba(15,23,42,0.08)]'
       }`}
       style={{
-        width: 480,
+        width: '100%',
+        height: '100%',
+        minWidth: 400,
+        minHeight: 320,
         borderColor: selected ? accentColor : undefined,
       }}
     >
+      {/* NodeResizer for interactive resizing */}
+      <NodeResizer
+        minWidth={400}
+        minHeight={320}
+        isVisible={selected}
+        lineClassName="!border-indigo-500"
+        handleClassName="!w-2.5 !h-2.5 !bg-white !border-2 !border-indigo-500 !rounded-xs"
+      />
       {/* Handles: Top, Left, Right, Bottom with explicit IDs and dual directions */}
       <Handle
         id="top"
@@ -326,7 +337,7 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
       </div>
 
       {/* Tab Content Area */}
-      <div className="h-72 p-3 overflow-y-auto">
+      <div className="flex-1 min-h-[220px] p-3 overflow-y-auto">
         {activeTab === 'markdown' && (
           <div className="text-xs space-y-1">
             {renderMarkdown(nodeData.markdownContent || 'Nenhum documento gerado.')}

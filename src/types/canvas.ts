@@ -157,8 +157,19 @@ export interface SkillItem {
   category: string
 }
 
-export interface ProjectInfo {
+export interface WorkspaceFolder {
+  id: string
   name: string
   path: string
-  recentProjects: Array<{ name: string; path: string }>
+  isPrimary?: boolean
+}
+
+export interface ProjectInfo {
+  id: string
+  name: string
+  path: string
+  folders: WorkspaceFolder[]
+  activeFolderId?: string
+  createdAt?: string
+  recentProjects?: Array<{ name: string; path: string }>
 }

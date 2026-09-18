@@ -1,4 +1,4 @@
-import { Handle, type NodeProps, Position } from '@xyflow/react'
+import { Handle, NodeResizer, type NodeProps, Position } from '@xyflow/react'
 import {
   Archive,
   ChevronLeft,
@@ -9,14 +9,14 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react'
-import React, { useState } from 'react'
+import React from 'react'
 import { useCanvasStore } from '../../store/canvasStore'
-import type { ImageGroupNodeData } from '../../types/canvas'
+import type { AnnotationItem, ImageGroupNodeData } from '../../types/canvas'
 
 export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const nodeData = data as unknown as ImageGroupNodeData
   const { theme, openAnnotationModal, stashNode, deleteNode, updateNodeData } = useCanvasStore()
-  const [currentIndex, setCurrentIndex] = useState(nodeData.activeImageIndex || 0)
+  const currentIndex = nodeData.activeImageIndex || 0
 
   const accentColor = '#F43F5E'
   const images = nodeData.images || []
@@ -24,13 +24,15 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
   const handleNext = () => {
     if (currentIndex < images.length - 1) {
-      setCurrentIndex(currentIndex + 1)
+      const nextIdx = currentIndex + 1
+      updateNodeData(id, { activeImageIndex: nextIdx })
     }
   }
 
   const handlePrev = () => {
     if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1)
+      const prevIdx = currentIndex - 1
+      updateNodeData(id, { activeImageIndex: prevIdx })
     }
   }
 
@@ -39,15 +41,144 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       id: `img-${Date.now()}`,
       url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80',
       name: `captura-${images.length + 1}.png`,
+      annotations: [],
     }
     const updated = [...images, newImg]
-    updateNodeData(id, { images: updated })
-    setCurrentIndex(updated.length - 1)
+    updateNodeData(id, { images: updated, activeImageIndex: updated.length - 1 })
+  }
+
+  // Render SVG annotations overlay over the active image
+  const renderAnnotations = (annotations: AnnotationItem[] = []) => {
+    return (
+      <svg
+        className="absolute inset-0 w-full h-full pointer-events-none"
+        viewBox="0 0 800 480"
+        preserveAspectRatio="none"
+      >
+        <defs>
+          <marker
+            id={`arrow-head-group-${id}`}
+            markerWidth="8"
+            markerHeight="8"
+            refX="6"
+            refY="3"
+            orient="auto"
+            markerUnits="strokeWidth"
+          >
+            <path d="M0,0 L0,6 L7,3 z" fill="currentColor" />
+          </marker>
+        </defs>
+
+        {annotations.map((ann) => {
+          if (ann.tool === 'circle') {
+            const cx = (ann.x || 0) + (ann.width || 0) / 2
+            const cy = (ann.y || 0) + (ann.height || 0) / 2
+            const rx = Math.abs((ann.width || 0) / 2)
+            const ry = Math.abs((ann.height || 0) / 2)
+            return (
+              <ellipse
+                key={ann.id}
+                cx={cx}
+                cy={cy}
+                rx={rx}
+                ry={ry}
+                fill="none"
+                stroke={ann.color}
+                strokeWidth={ann.strokeWidth || 3}
+              />
+            )
+          }
+
+          if (ann.tool === 'rect') {
+            return (
+              <rect
+                key={ann.id}
+                x={ann.x}
+                y={ann.y}
+                width={ann.width}
+                height={ann.height}
+                fill="none"
+                stroke={ann.color}
+                strokeWidth={ann.strokeWidth || 3}
+                rx={4}
+              />
+            )
+          }
+
+          if (ann.tool === 'arrow') {
+            return (
+              <g key={ann.id} style={{ color: ann.color }}>
+                <line
+                  x1={ann.x}
+                  y1={ann.y}
+                  x2={ann.endX}
+                  y2={ann.endY}
+                  stroke={ann.color}
+                  strokeWidth={ann.strokeWidth || 3}
+                  markerEnd={`url(#arrow-head-group-${id})`}
+                />
+              </g>
+            )
+          }
+
+          if (ann.tool === 'brush' && ann.points) {
+            const pointsStr = ann.points
+              .reduce((acc: string[], val, idx) => {
+                if (idx % 2 === 0) {
+                  acc.push(`${val},${ann.points![idx + 1]}`)
+                }
+                return acc
+              }, [])
+              .join(' ')
+
+            return (
+              <polyline
+                key={ann.id}
+                points={pointsStr}
+                fill="none"
+                stroke={ann.color}
+                strokeWidth={ann.strokeWidth || 3}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )
+          }
+
+          if (ann.tool === 'text') {
+            return (
+              <g key={ann.id}>
+                <rect
+                  x={(ann.x || 0) - 6}
+                  y={(ann.y || 0) - 18}
+                  width={(ann.text?.length || 5) * 9 + 12}
+                  height={24}
+                  fill="#000000"
+                  fillOpacity="0.8"
+                  rx={4}
+                />
+                <text
+                  x={ann.x}
+                  y={ann.y}
+                  fill={ann.color}
+                  fontSize="14"
+                  fontWeight="bold"
+                  fontFamily="sans-serif"
+                >
+                  {ann.text}
+                </text>
+              </g>
+            )
+          }
+
+          return null
+        })}
+      </svg>
+    )
   }
 
   return (
     <div
-      className={`group relative rounded-xl border transition-all duration-200 ${
+      className={`group relative rounded-xl border transition-all duration-200 flex flex-col ${
         selected ? 'ring-2 ring-rose-500' : ''
       } ${
         theme === 'dark'
@@ -55,10 +186,21 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           : 'bg-white border-slate-300 text-slate-900 shadow-[0_4px_20px_-2px_rgba(15,23,42,0.12),0_2px_6px_-1px_rgba(15,23,42,0.08)]'
       }`}
       style={{
-        width: 360,
+        width: '100%',
+        height: '100%',
+        minWidth: 300,
+        minHeight: 220,
         borderColor: selected ? accentColor : undefined,
       }}
     >
+      {/* NodeResizer for interactive resizing */}
+      <NodeResizer
+        minWidth={300}
+        minHeight={220}
+        isVisible={selected}
+        lineClassName="!border-rose-500"
+        handleClassName="!w-2.5 !h-2.5 !bg-white !border-2 !border-rose-500 !rounded-xs"
+      />
       {/* Handles: Top, Left, Right, Bottom with explicit IDs and dual directions */}
       <Handle
         id="top"
@@ -162,17 +304,30 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       </div>
 
       {/* Main Image View */}
-      <div className="relative w-full h-56 bg-slate-950 flex items-center justify-center overflow-hidden">
+      <div className="relative w-full flex-1 min-h-[160px] bg-slate-950 flex items-center justify-center overflow-hidden p-1.5">
         {activeImage ? (
-          <img
-            src={activeImage.url}
-            alt={activeImage.name}
-            className="w-full h-full object-cover select-none pointer-events-none"
-          />
+          <div className="relative max-w-full max-h-full flex items-center justify-center">
+            <img
+              src={activeImage.url}
+              alt={activeImage.name}
+              className="max-w-full max-h-full w-auto h-auto object-contain select-none pointer-events-none block rounded-sm"
+            />
+
+            {/* SVG Annotation Layer directly hugging the active image */}
+            {renderAnnotations(activeImage.annotations)}
+          </div>
         ) : (
           <div className="flex flex-col items-center gap-1.5 text-slate-500 text-xs">
             <ImageIcon className="w-8 h-8 opacity-40" />
             <span>Nenhuma imagem no grupo</span>
+          </div>
+        )}
+
+        {/* Annotation count badge */}
+        {activeImage?.annotations && activeImage.annotations.length > 0 && (
+          <div className="absolute top-2 right-2 bg-slate-950/80 backdrop-blur-xs border border-slate-700/60 text-rose-400 px-2 py-0.5 rounded text-[10px] font-medium flex items-center gap-1 shadow-xs z-10 pointer-events-none">
+            <Layers className="w-3 h-3" />
+            <span>{activeImage.annotations.length} anotações</span>
           </div>
         )}
 
@@ -183,7 +338,7 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
               type="button"
               onClick={handlePrev}
               disabled={currentIndex === 0}
-              className="absolute left-2 p-1.5 rounded-full bg-slate-900/80 text-white disabled:opacity-20 hover:bg-slate-900 transition-colors"
+              className="absolute left-2 p-1.5 rounded-full bg-slate-900/80 text-white disabled:opacity-20 hover:bg-slate-900 transition-colors z-20"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -191,12 +346,12 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
               type="button"
               onClick={handleNext}
               disabled={currentIndex === images.length - 1}
-              className="absolute right-2 p-1.5 rounded-full bg-slate-900/80 text-white disabled:opacity-20 hover:bg-slate-900 transition-colors"
+              className="absolute right-2 p-1.5 rounded-full bg-slate-900/80 text-white disabled:opacity-20 hover:bg-slate-900 transition-colors z-20"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
-            <div className="absolute bottom-2 inset-x-0 flex justify-center">
-              <span className="bg-slate-950/80 px-2 py-0.5 rounded text-[10px] text-white">
+            <div className="absolute bottom-2 inset-x-0 flex justify-center z-20">
+              <span className="bg-slate-950/80 px-2 py-0.5 rounded text-[10px] text-white pointer-events-none">
                 {currentIndex + 1} de {images.length}
               </span>
             </div>

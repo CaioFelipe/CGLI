@@ -1,6 +1,6 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
-import { Handle, type NodeProps, Position } from '@xyflow/react'
+import { Handle, type NodeProps, Position, NodeResizer } from '@xyflow/react'
 import {
   Archive,
   ArrowRight,
@@ -267,7 +267,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
   return (
     <div
-      className={`group relative rounded-xl border transition-all duration-200 ${
+      className={`group relative rounded-xl border transition-all duration-200 flex flex-col ${
         selected ? 'ring-2' : ''
       } ${
         theme === 'dark'
@@ -275,10 +275,21 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           : 'bg-white border-slate-300 text-slate-900 shadow-[0_4px_20px_-2px_rgba(15,23,42,0.12),0_2px_6px_-1px_rgba(15,23,42,0.08)]'
       }`}
       style={{
-        width: 440,
+        width: '100%',
+        height: '100%',
+        minWidth: 380,
+        minHeight: 380,
         borderColor: selected ? accentColor : undefined,
       }}
     >
+      {/* NodeResizer for interactive resizing */}
+      <NodeResizer
+        minWidth={380}
+        minHeight={380}
+        isVisible={selected}
+        lineClassName="!border-indigo-500"
+        handleClassName="!w-2.5 !h-2.5 !bg-white !border-2 !border-indigo-500 !rounded-xs"
+      />
       {/* Handles: Top, Left, Right, Bottom with explicit IDs and dual directions */}
       <Handle
         id="top"
@@ -417,12 +428,12 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
       {/* Body: Terminal View */}
       {nodeData.viewMode === 'terminal' ? (
-        <div className="h-72 w-full p-2 bg-[#0D1117] rounded-b-xl font-mono text-xs overflow-hidden">
+        <div className="flex-1 min-h-[220px] w-full p-2 bg-[#0D1117] rounded-b-xl font-mono text-xs overflow-hidden">
           <div ref={terminalRef} className="w-full h-full terminal-container" />
         </div>
       ) : (
         /* Body: VS Code Extension Chat Style */
-        <div className="flex flex-col h-80">
+        <div className="flex flex-col flex-1 min-h-[240px]">
           {/* Thinking Accordion (Collapsible) */}
           {nodeData.thinking && (
             <div

@@ -1,4 +1,4 @@
-import { Handle, type NodeProps, Position } from '@xyflow/react'
+import { Handle, NodeResizer, type NodeProps, Position } from '@xyflow/react'
 import {
   Archive,
   Edit3,
@@ -21,7 +21,7 @@ export const ImageNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     return (
       <svg
         className="absolute inset-0 w-full h-full pointer-events-none"
-        viewBox="0 0 400 240"
+        viewBox="0 0 800 480"
         preserveAspectRatio="none"
       >
         <defs>
@@ -117,19 +117,19 @@ export const ImageNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             return (
               <g key={ann.id}>
                 <rect
-                  x={(ann.x || 0) - 4}
-                  y={(ann.y || 0) - 14}
-                  width={(ann.text?.length || 5) * 8 + 8}
-                  height={18}
+                  x={(ann.x || 0) - 6}
+                  y={(ann.y || 0) - 18}
+                  width={(ann.text?.length || 5) * 9 + 12}
+                  height={24}
                   fill="#000000"
-                  fillOpacity="0.75"
-                  rx={3}
+                  fillOpacity="0.8"
+                  rx={4}
                 />
                 <text
                   x={ann.x}
                   y={ann.y}
                   fill={ann.color}
-                  fontSize="12"
+                  fontSize="14"
                   fontWeight="bold"
                   fontFamily="sans-serif"
                 >
@@ -147,7 +147,7 @@ export const ImageNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
   return (
     <div
-      className={`group relative rounded-xl border transition-all duration-200 ${
+      className={`group relative rounded-xl border transition-all duration-200 flex flex-col ${
         selected ? 'ring-2 ring-rose-500' : ''
       } ${
         theme === 'dark'
@@ -155,10 +155,21 @@ export const ImageNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           : 'bg-white border-slate-300 text-slate-900 shadow-[0_4px_20px_-2px_rgba(15,23,42,0.12),0_2px_6px_-1px_rgba(15,23,42,0.08)]'
       }`}
       style={{
-        width: 340,
+        width: '100%',
+        height: '100%',
+        minWidth: 260,
+        minHeight: 200,
         borderColor: selected ? accentColor : undefined,
       }}
     >
+      {/* NodeResizer for interactive resizing */}
+      <NodeResizer
+        minWidth={260}
+        minHeight={200}
+        isVisible={selected}
+        lineClassName="!border-rose-500"
+        handleClassName="!w-2.5 !h-2.5 !bg-white !border-2 !border-rose-500 !rounded-xs"
+      />
       {/* Handles: Top, Left, Right, Bottom with explicit IDs and dual directions */}
       <Handle
         id="top"
@@ -251,13 +262,18 @@ export const ImageNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       </div>
 
       {/* Image Preview & Annotations Container */}
-      <div className="relative w-full h-52 bg-slate-950 flex items-center justify-center overflow-hidden">
+      <div className="relative w-full flex-1 min-h-[140px] bg-slate-950 flex items-center justify-center overflow-hidden p-1.5">
         {nodeData.url ? (
-          <img
-            src={nodeData.url}
-            alt={nodeData.name}
-            className="w-full h-full object-cover select-none pointer-events-none"
-          />
+          <div className="relative max-w-full max-h-full flex items-center justify-center">
+            <img
+              src={nodeData.url}
+              alt={nodeData.name}
+              className="max-w-full max-h-full w-auto h-auto object-contain select-none pointer-events-none block rounded-sm"
+            />
+
+            {/* SVG Annotation Layer directly hugging the image */}
+            {renderAnnotations(nodeData.annotations)}
+          </div>
         ) : (
           <div className="flex flex-col items-center gap-1.5 text-slate-500 text-xs">
             <ImageIcon className="w-8 h-8 opacity-40" />
@@ -265,12 +281,9 @@ export const ImageNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           </div>
         )}
 
-        {/* SVG Annotation Layer */}
-        {renderAnnotations(nodeData.annotations)}
-
         {/* Annotation count badge */}
         {nodeData.annotations && nodeData.annotations.length > 0 && (
-          <div className="absolute top-2 right-2 bg-slate-950/80 backdrop-blur-xs border border-slate-700/60 text-rose-400 px-2 py-0.5 rounded text-[10px] font-medium flex items-center gap-1 shadow-xs">
+          <div className="absolute top-2 right-2 bg-slate-950/80 backdrop-blur-xs border border-slate-700/60 text-rose-400 px-2 py-0.5 rounded text-[10px] font-medium flex items-center gap-1 shadow-xs z-10 pointer-events-none">
             <Layers className="w-3 h-3" />
             <span>{nodeData.annotations.length} anotações</span>
           </div>

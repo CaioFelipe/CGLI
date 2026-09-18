@@ -9,9 +9,9 @@ import {
   Type,
   X,
 } from 'lucide-react'
-import React, { useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useCanvasStore } from '../../store/canvasStore'
-import type { AnnotationItem, AnnotationTool, ImageNodeData } from '../../types/canvas'
+import type { AnnotationItem, AnnotationTool, ImageGroupNodeData, ImageNodeData } from '../../types/canvas'
 
 export const ImageAnnotationModal: React.FC = () => {
   const {
@@ -19,14 +19,24 @@ export const ImageAnnotationModal: React.FC = () => {
     annotatingNodeId,
     closeAnnotationModal,
     saveAnnotations,
+    updateNodeData,
     theme,
   } = useCanvasStore()
 
   const activeNode = nodes.find((n) => n.id === annotatingNodeId)
+  const isGroup = activeNode?.type === 'imageGroupNode'
+  const groupData = isGroup ? (activeNode?.data as unknown as ImageGroupNodeData) : undefined
+  const activeGroupImage = groupData?.images?.[groupData.activeImageIndex || 0]
+
   const nodeData = activeNode?.data as unknown as ImageNodeData | undefined
+  const imageUrl = isGroup ? activeGroupImage?.url : nodeData?.url
+  const imageName = isGroup ? activeGroupImage?.name : (nodeData?.title || nodeData?.name)
+  const currentAnnotations = isGroup
+    ? (activeGroupImage?.annotations || [])
+    : (nodeData?.annotations || [])
 
   const [annotations, setAnnotations] = useState<AnnotationItem[]>(
-    nodeData?.annotations ? [...nodeData.annotations] : []
+    currentAnnotations ? [...currentAnnotations] : []
   )
   const [activeTool, setActiveTool] = useState<AnnotationTool>('circle')
   const [activeColor, setActiveColor] = useState('#EF4444')
@@ -41,16 +51,44 @@ export const ImageAnnotationModal: React.FC = () => {
 
   const svgRef = useRef<SVGSVGElement>(null)
 
-  if (!annotatingNodeId || !nodeData) return null
+  const handleMouseUp = useCallback(() => {
+    if (isDrawing && currentDraft) {
+      // Validate item has size
+      if (
+        (currentDraft.tool === 'brush' && currentDraft.points && currentDraft.points.length > 2) ||
+        (currentDraft.tool === 'arrow' &&
+          (currentDraft.x !== currentDraft.endX || currentDraft.y !== currentDraft.endY)) ||
+        (currentDraft.tool === 'rect' && (currentDraft.width || 0) > 4) ||
+        (currentDraft.tool === 'circle' && (currentDraft.width || 0) > 4)
+      ) {
+        setAnnotations((prev) => [...prev, currentDraft])
+      }
+    }
+    setIsDrawing(false)
+    setStartPoint(null)
+    setCurrentDraft(null)
+  }, [isDrawing, currentDraft])
 
-  const getSvgCoordinates = (e: React.MouseEvent<SVGSVGElement>) => {
+  // Global mouseup listener to catch releases outside the SVG
+  useEffect(() => {
+    if (!isDrawing) return
+    const handleGlobalMouseUp = () => {
+      handleMouseUp()
+    }
+    window.addEventListener('mouseup', handleGlobalMouseUp)
+    return () => window.removeEventListener('mouseup', handleGlobalMouseUp)
+  }, [isDrawing, handleMouseUp])
+
+  if (!annotatingNodeId || (!nodeData && !isGroup)) return null
+
+  const getSvgCoordinates = (e: React.MouseEvent<SVGSVGElement> | MouseEvent) => {
     if (!svgRef.current) return { x: 0, y: 0 }
     const rect = svgRef.current.getBoundingClientRect()
     const scaleX = 800 / rect.width
     const scaleY = 480 / rect.height
     return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
+      x: Math.max(0, Math.min(800, (e.clientX - rect.left) * scaleX)),
+      y: Math.max(0, Math.min(480, (e.clientY - rect.top) * scaleY)),
     }
   }
 
@@ -121,24 +159,6 @@ export const ImageAnnotationModal: React.FC = () => {
     }
   }
 
-  const handleMouseUp = () => {
-    if (isDrawing && currentDraft) {
-      // Validate item has size
-      if (
-        (currentDraft.tool === 'brush' && currentDraft.points && currentDraft.points.length > 2) ||
-        (currentDraft.tool === 'arrow' &&
-          (currentDraft.x !== currentDraft.endX || currentDraft.y !== currentDraft.endY)) ||
-        (currentDraft.tool === 'rect' && (currentDraft.width || 0) > 4) ||
-        (currentDraft.tool === 'circle' && (currentDraft.width || 0) > 4)
-      ) {
-        setAnnotations((prev) => [...prev, currentDraft])
-      }
-    }
-    setIsDrawing(false)
-    setStartPoint(null)
-    setCurrentDraft(null)
-  }
-
   const handleConfirmText = () => {
     if (textPromptPos && textInputVal.trim()) {
       const newTextItem: AnnotationItem = {
@@ -165,7 +185,16 @@ export const ImageAnnotationModal: React.FC = () => {
   }
 
   const handleSave = () => {
-    saveAnnotations(annotatingNodeId, annotations)
+    if (isGroup && groupData && activeGroupImage) {
+      const activeIdx = groupData.activeImageIndex || 0
+      const updatedImages = (groupData.images || []).map((img, idx) =>
+        idx === activeIdx ? { ...img, annotations } : img
+      )
+      updateNodeData(annotatingNodeId, { images: updatedImages })
+      closeAnnotationModal()
+    } else {
+      saveAnnotations(annotatingNodeId, annotations)
+    }
   }
 
   const colorPalette = [
@@ -386,80 +415,84 @@ export const ImageAnnotationModal: React.FC = () => {
         </div>
 
         {/* Interactive Annotation Canvas */}
-        <div className="relative w-full h-[480px] bg-slate-950 flex items-center justify-center overflow-hidden select-none">
-          {nodeData.url && (
-            <img
-              src={nodeData.url}
-              alt={nodeData.name}
-              className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-            />
-          )}
-
-          {/* SVG Overlay */}
-          <svg
-            ref={svgRef}
-            className="absolute inset-0 w-full h-full cursor-crosshair"
-            viewBox="0 0 800 480"
-            preserveAspectRatio="none"
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-          >
-            <defs>
-              <marker
-                id="modal-arrow-head"
-                markerWidth="8"
-                markerHeight="8"
-                refX="6"
-                refY="3"
-                orient="auto"
-                markerUnits="strokeWidth"
-              >
-                <path d="M0,0 L0,6 L7,3 z" fill="currentColor" />
-              </marker>
-            </defs>
-
-            {annotations.map((ann) => renderItem(ann, false))}
-            {currentDraft && renderItem(currentDraft, true)}
-          </svg>
-
-          {/* Text Input Prompt overlay */}
-          {textPromptPos && (
-            <div
-              className="absolute z-20 bg-slate-900 border border-slate-700 rounded-lg p-2 shadow-xl flex items-center gap-2"
-              style={{
-                left: `${(textPromptPos.x / 800) * 100}%`,
-                top: `${(textPromptPos.y / 480) * 100}%`,
-                transform: 'translate(-10%, -50%)',
-              }}
-            >
-              <input
-                type="text"
-                autoFocus
-                value={textInputVal}
-                onChange={(e) => setTextInputVal(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleConfirmText()
-                  if (e.key === 'Escape') setTextPromptPos(null)
-                }}
-                placeholder="Digitar legenda..."
-                className="text-xs bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white focus:outline-hidden focus:border-rose-500"
+        <div className="relative w-full h-[480px] bg-slate-950 flex items-center justify-center overflow-hidden select-none p-4">
+          {imageUrl ? (
+            <div className="relative max-w-full max-h-full flex items-center justify-center">
+              <img
+                src={imageUrl}
+                alt={imageName || 'Imagem'}
+                className="max-w-full max-h-[448px] w-auto h-auto object-contain pointer-events-none block select-none rounded-sm"
               />
-              <button
-                type="button"
-                onClick={handleConfirmText}
-                className="px-2 py-1 rounded text-xs bg-rose-600 text-white font-medium hover:bg-rose-500"
+
+              {/* SVG Overlay covering the exact bounds of the image */}
+              <svg
+                ref={svgRef}
+                className="absolute inset-0 w-full h-full cursor-crosshair"
+                viewBox="0 0 800 480"
+                preserveAspectRatio="none"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
               >
-                OK
-              </button>
-              <button
-                type="button"
-                onClick={() => setTextPromptPos(null)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
+                <defs>
+                  <marker
+                    id="modal-arrow-head"
+                    markerWidth="8"
+                    markerHeight="8"
+                    refX="6"
+                    refY="3"
+                    orient="auto"
+                    markerUnits="strokeWidth"
+                  >
+                    <path d="M0,0 L0,6 L7,3 z" fill="currentColor" />
+                  </marker>
+                </defs>
+
+                {annotations.map((ann) => renderItem(ann, false))}
+                {currentDraft && renderItem(currentDraft, true)}
+              </svg>
+
+              {/* Text Input Prompt overlay */}
+              {textPromptPos && (
+                <div
+                  className="absolute z-20 bg-slate-900 border border-slate-700 rounded-lg p-2 shadow-xl flex items-center gap-2"
+                  style={{
+                    left: `${(textPromptPos.x / 800) * 100}%`,
+                    top: `${(textPromptPos.y / 480) * 100}%`,
+                    transform: 'translate(-10%, -50%)',
+                  }}
+                >
+                  <input
+                    type="text"
+                    autoFocus
+                    value={textInputVal}
+                    onChange={(e) => setTextInputVal(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleConfirmText()
+                      if (e.key === 'Escape') setTextPromptPos(null)
+                    }}
+                    placeholder="Digitar legenda..."
+                    className="text-xs bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white focus:outline-hidden focus:border-rose-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleConfirmText}
+                    className="px-2 py-1 rounded text-xs bg-rose-600 text-white font-medium hover:bg-rose-500"
+                  >
+                    OK
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTextPromptPos(null)}
+                    className="text-slate-400 hover:text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
+          ) : (
+            <div className="text-slate-500 text-sm">Nenhuma imagem carregada para anotação</div>
           )}
         </div>
 
