@@ -80,10 +80,10 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
           // Flush alert
           const alertColor =
             inAlert.type === 'IMPORTANT'
-              ? 'border-purple-500 bg-purple-500/10 text-purple-200'
+              ? 'border-purple-600 bg-purple-50 dark:bg-purple-950/30 text-purple-950 dark:text-purple-200'
               : inAlert.type === 'WARNING'
-              ? 'border-amber-500 bg-amber-500/10 text-amber-200'
-              : 'border-blue-500 bg-blue-500/10 text-blue-200'
+              ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30 text-amber-950 dark:text-amber-200'
+              : 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-950 dark:text-blue-200'
 
           elements.push(
             <div
@@ -93,7 +93,7 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
               <div className="font-semibold text-[11px] uppercase tracking-wider mb-0.5">
                 {inAlert.title}
               </div>
-              <div className="text-slate-300">{inAlert.lines.join(' ')}</div>
+              <div className="text-slate-800 dark:text-slate-300">{inAlert.lines.join(' ')}</div>
             </div>
           )
           inAlert = null
@@ -103,13 +103,13 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
       // Headings
       if (line.startsWith('### ')) {
         elements.push(
-          <h3 key={i} className="text-xs font-bold text-slate-100 mt-2 mb-1">
+          <h3 key={i} className="text-xs font-bold text-slate-900 dark:text-slate-100 mt-2 mb-1">
             {line.replace('### ', '')}
           </h3>
         )
       } else if (line.startsWith('#### ')) {
         elements.push(
-          <h4 key={i} className="text-[11px] font-semibold text-slate-300 mt-1.5 mb-1">
+          <h4 key={i} className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 mt-1.5 mb-1">
             {line.replace('#### ', '')}
           </h4>
         )
@@ -117,19 +117,19 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
         const checked = line.startsWith('- [x] ')
         const text = line.replace(/- \[[x ]\] /, '')
         elements.push(
-          <div key={i} className="flex items-center gap-2 text-xs text-slate-300 my-0.5">
+          <div key={i} className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 my-0.5">
             <input
               type="checkbox"
               readOnly
               checked={checked}
               className="rounded accent-indigo-600"
             />
-            <span className={checked ? 'line-through text-slate-400' : ''}>{text}</span>
+            <span className={checked ? 'line-through text-slate-400 dark:text-slate-500' : ''}>{text}</span>
           </div>
         )
       } else if (line.trim().length > 0) {
         elements.push(
-          <p key={i} className="text-xs text-slate-300 my-1 leading-relaxed">
+          <p key={i} className="text-xs text-slate-700 dark:text-slate-300 my-1 leading-relaxed">
             {line}
           </p>
         )
@@ -141,12 +141,12 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
       elements.push(
         <div
           key="alert-tail"
-          className="p-2.5 my-2 border-l-3 rounded-r-md text-xs border-indigo-500 bg-indigo-500/10 text-indigo-200"
+          className="p-2.5 my-2 border-l-3 rounded-r-md text-xs border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-950 dark:text-indigo-200"
         >
           <div className="font-semibold text-[11px] uppercase tracking-wider mb-0.5">
             {inAlert.title}
           </div>
-          <div className="text-slate-300">{inAlert.lines.join(' ')}</div>
+          <div className="text-slate-800 dark:text-slate-300">{inAlert.lines.join(' ')}</div>
         </div>
       )
     }
@@ -156,12 +156,12 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
 
   return (
     <div
-      className={`group relative rounded-xl border transition-all duration-200 shadow-md ${
+      className={`group relative rounded-xl border transition-all duration-200 ${
         selected ? 'ring-2 ring-indigo-500' : ''
       } ${
         theme === 'dark'
-          ? 'bg-[#0D1117] border-[#30363D] text-[#F0F6FC] shadow-xl shadow-black/50'
-          : 'bg-white border-slate-200 text-slate-900 shadow-lg shadow-slate-200/50'
+          ? 'bg-[#0D1117] border-[#30363D] text-[#F0F6FC] shadow-[0_8px_30px_rgb(0,0,0,0.6)]'
+          : 'bg-white border-slate-300 text-slate-900 shadow-[0_4px_20px_-2px_rgba(15,23,42,0.12),0_2px_6px_-1px_rgba(15,23,42,0.08)]'
       }`}
       style={{
         width: 480,
@@ -220,9 +220,10 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
 
       {/* Header */}
       <div
-        className="flex items-center justify-between px-3.5 py-2.5 border-b rounded-t-xl"
+        className={`flex items-center justify-between px-3.5 py-2.5 border-b rounded-t-xl ${
+          theme === 'dark' ? 'bg-[#161B22]/80 border-[#21262D]' : 'bg-slate-50/90 border-slate-200'
+        }`}
         style={{
-          borderBottomColor: theme === 'dark' ? '#21262D' : '#F1F5F9',
           borderTop: `3px solid ${accentColor}`,
         }}
       >
@@ -269,11 +270,9 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
 
       {/* Tab Navigation */}
       <div
-        className="flex items-center justify-between px-3 py-1.5 border-b text-xs"
-        style={{
-          borderColor: theme === 'dark' ? '#1F2937' : '#F1F5F9',
-          backgroundColor: theme === 'dark' ? '#0F172A' : '#FAFAFA',
-        }}
+        className={`flex items-center justify-between px-3 py-1.5 border-b text-xs ${
+          theme === 'dark' ? 'bg-[#090D13] border-[#21262D]' : 'bg-slate-50 border-slate-200'
+        }`}
       >
         <div className="flex items-center gap-1">
           <button
@@ -384,11 +383,9 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
 
       {/* Footer Actions */}
       <div
-        className="px-3 py-2 border-t rounded-b-xl flex items-center justify-between"
-        style={{
-          borderColor: theme === 'dark' ? '#1F2937' : '#F1F5F9',
-          backgroundColor: theme === 'dark' ? '#0F172A' : '#FAFAFA',
-        }}
+        className={`px-3 py-2 border-t rounded-b-xl flex items-center justify-between ${
+          theme === 'dark' ? 'bg-[#090D13] border-[#21262D]' : 'bg-slate-50 border-slate-200'
+        }`}
       >
         <div className="text-[10px] text-slate-400">
           {nodeData.status === 'approved' ? (

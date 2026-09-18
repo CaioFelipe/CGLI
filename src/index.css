@@ -2,16 +2,19 @@
 @import "@xyflow/react/dist/style.css";
 @import "@xterm/xterm/css/xterm.css";
 
+/* Tailwind CSS v4 class-based dark mode variant */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   :root {
-    --canvas-bg: #F8FAFC;
-    --canvas-dot: #CBD5E1;
+    --canvas-bg: #EEF2F6;
+    --canvas-dot: #94A3B8;
     --card-bg: #FFFFFF;
-    --card-border: #E2E8F0;
-    --card-hover: #F1F5F9;
+    --card-border: #CBD5E1;
+    --card-hover: #F8FAFC;
     --text-primary: #0F172A;
-    --text-secondary: #475569;
-    --text-muted: #94A3B8;
+    --text-secondary: #334155;
+    --text-muted: #64748B;
     
     --accent-claude: #EA580C;
     --accent-claude-subtle: #FFF7ED;
@@ -25,7 +28,7 @@
 
   .dark {
     --canvas-bg: #06090E;
-    --canvas-dot: #1A2332;
+    --canvas-dot: #1E293B;
     --card-bg: #0D1117;
     --card-border: #30363D;
     --card-hover: #161B22;

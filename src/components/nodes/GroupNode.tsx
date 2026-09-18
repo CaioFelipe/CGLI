@@ -30,7 +30,7 @@ export const GroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       } ${
         theme === 'dark'
           ? 'bg-[#080C14]/60 border-indigo-500/50 shadow-2xl shadow-indigo-950/20'
-          : 'bg-indigo-50/40 border-indigo-400/60 shadow-lg shadow-indigo-100/50'
+          : 'bg-indigo-50/70 border-indigo-300 shadow-md shadow-indigo-100/60'
       }`}
       style={{
         width: nodeData.width || 560,
@@ -70,7 +70,7 @@ export const GroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         className={`flex items-center justify-between px-4 py-2.5 rounded-t-xl border-b backdrop-blur-sm ${
           theme === 'dark'
             ? 'bg-[#0D1117]/90 border-indigo-500/30 text-slate-100'
-            : 'bg-white/90 border-indigo-200 text-slate-900'
+            : 'bg-white border-indigo-200 text-slate-900 shadow-xs'
         }`}
       >
         <div className="flex items-center gap-2.5">

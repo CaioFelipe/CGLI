@@ -47,12 +47,12 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
   return (
     <div
-      className={`group relative rounded-xl border transition-all duration-200 shadow-md ${
+      className={`group relative rounded-xl border transition-all duration-200 ${
         selected ? 'ring-2 ring-rose-500' : ''
       } ${
         theme === 'dark'
-          ? 'bg-[#0D1117] border-[#30363D] text-[#F0F6FC] shadow-xl shadow-black/50'
-          : 'bg-white border-slate-200 text-slate-900 shadow-lg shadow-slate-200/50'
+          ? 'bg-[#0D1117] border-[#30363D] text-[#F0F6FC] shadow-[0_8px_30px_rgb(0,0,0,0.6)]'
+          : 'bg-white border-slate-300 text-slate-900 shadow-[0_4px_20px_-2px_rgba(15,23,42,0.12),0_2px_6px_-1px_rgba(15,23,42,0.08)]'
       }`}
       style={{
         width: 360,
@@ -111,9 +111,10 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
       {/* Header */}
       <div
-        className="flex items-center justify-between px-3.5 py-2.5 border-b rounded-t-xl"
+        className={`flex items-center justify-between px-3.5 py-2.5 border-b rounded-t-xl ${
+          theme === 'dark' ? 'bg-[#161B22]/80 border-[#21262D]' : 'bg-slate-50/90 border-slate-200'
+        }`}
         style={{
-          borderBottomColor: theme === 'dark' ? '#21262D' : '#F1F5F9',
           borderTop: `3px solid ${accentColor}`,
         }}
       >
@@ -205,11 +206,9 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
       {/* Footer Actions */}
       <div
-        className="px-3 py-2 border-t rounded-b-xl flex items-center justify-between"
-        style={{
-          borderColor: theme === 'dark' ? '#1F2937' : '#F1F5F9',
-          backgroundColor: theme === 'dark' ? '#0F172A' : '#FAFAFA',
-        }}
+        className={`px-3 py-2 border-t rounded-b-xl flex items-center justify-between ${
+          theme === 'dark' ? 'bg-[#090D13] border-[#21262D]' : 'bg-slate-50 border-slate-200'
+        }`}
       >
         <span className="text-[10px] text-slate-400 truncate max-w-[150px]">
           {activeImage?.name || 'imagem.png'}

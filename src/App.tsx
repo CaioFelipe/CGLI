@@ -54,6 +54,17 @@ const CanvasInner: React.FC = () => {
   const { screenToFlowPosition, fitView } = useReactFlow()
   const mousePositionRef = useRef<{ x: number; y: number }>({ x: 300, y: 300 })
 
+  // Synchronize document.documentElement dark class with canvasStore theme
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+      }
+    }
+  }, [theme])
+
   // Track cursor position on the screen to spawn pasted images at the cursor
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -195,7 +206,7 @@ const CanvasInner: React.FC = () => {
             variant={BackgroundVariant.Dots}
             gap={20}
             size={1.5}
-            color={theme === 'dark' ? '#1E293B' : '#CBD5E1'}
+            color={theme === 'dark' ? '#1E293B' : '#94A3B8'}
           />
 
           <Controls
@@ -203,7 +214,7 @@ const CanvasInner: React.FC = () => {
             className={`!border !rounded-xl !shadow-lg ${
               theme === 'dark'
                 ? '!bg-slate-900 !border-slate-800 [&_button]:!fill-slate-300 [&_button]:!border-slate-800 hover:[&_button]:!bg-slate-800'
-                : '!bg-white !border-slate-200 [&_button]:!fill-slate-600 [&_button]:!border-slate-100 hover:[&_button]:!bg-slate-100'
+                : '!bg-white !border-slate-300 [&_button]:!fill-slate-700 [&_button]:!border-slate-200 hover:[&_button]:!bg-slate-100'
             }`}
           />
 
@@ -223,7 +234,7 @@ const CanvasInner: React.FC = () => {
             className={`!rounded-xl !border !shadow-md overflow-hidden ${
               theme === 'dark'
                 ? '!bg-[#0D1117] !border-slate-800'
-                : '!bg-slate-50 !border-slate-200'
+                : '!bg-white !border-slate-300'
             }`}
           />
         </ReactFlow>

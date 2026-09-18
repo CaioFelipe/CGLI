@@ -150,229 +150,48 @@ const initialSkills: SkillItem[] = [
 
 const initialNodes: Node[] = [
   {
-    id: 'node-image-1',
-    type: 'imageNode',
-    position: { x: 50, y: 120 },
-    data: {
-      title: 'Referência Visual (Mockup)',
-      name: 'dashboard-spec.png',
-      url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80',
-      annotations: [
-        {
-          id: 'ann-1',
-          tool: 'circle',
-          color: '#EF4444',
-          strokeWidth: 3,
-          x: 180,
-          y: 80,
-          width: 90,
-          height: 90,
-        },
-        {
-          id: 'ann-2',
-          tool: 'text',
-          color: '#EF4444',
-          strokeWidth: 2,
-          x: 180,
-          y: 45,
-          text: 'Alinhar métricas',
-        },
-        {
-          id: 'ann-3',
-          tool: 'arrow',
-          color: '#3B82F6',
-          strokeWidth: 3,
-          x: 120,
-          y: 190,
-          endX: 210,
-          endY: 190,
-        },
-      ],
-    },
-  },
-  {
     id: 'node-claude-1',
     type: 'agentNode',
-    position: { x: 420, y: 80 },
+    position: { x: 160, y: 140 },
     data: {
       title: 'Claude Code',
       agentType: 'claude',
       role: 'planner',
       status: 'idle',
       viewMode: 'extension',
-      thinking: {
-        duration: '1.8s',
-        thoughts: [
-          'Analisando requisitos do canvas Studio Clean e paleta semântica.',
-          'Verificando conexão com o nó de anotações visuais.',
-          'Elaborando proposta de arquitetura com componentes desacoplados.',
-        ],
-        isExpanded: false,
-      },
-      messages: [
-        {
-          id: 'msg-1',
-          sender: 'user',
-          text: 'Planeje os componentes do painel principal conforme as anotações visuais da imagem.',
-          timestamp: '14:20',
-        },
-        {
-          id: 'msg-2',
-          sender: 'agent',
-          text: 'Revisei as anotações visuais. Preparei a estrutura com grid flexível e renderização de cards de aprovação.',
-          codeBlocks: [
-            {
-              language: 'tsx',
-              code: 'export const DashboardGrid = () => {\n  return (\n    <div className="grid grid-cols-3 gap-4">\n      <MetricsCard title="Sessões Ativas" value="1,420" />\n      <MetricsCard title="Throughput" value="99.4%" />\n    </div>\n  );\n};',
-            },
-          ],
-          timestamp: '14:21',
-        },
-      ],
-      approvals: [
-        {
-          id: 'appr-1',
-          type: 'command',
-          title: 'Executar verificação de tipagem',
-          command: 'npm run build',
-          status: 'pending',
-        },
-      ],
+      thinking: null,
+      messages: [],
+      approvals: [],
       attachedImages: [],
       terminalLogs: [
-        '> claude-code session initialized',
-        '> connected to project: blissful-franklin',
-        '> ready for prompt',
+        '> Claude Code inicializado.',
+        '> Digite uma instrução ou conecte uma imagem ao nó.',
       ],
-    },
-  },
-  {
-    id: 'node-artifact-1',
-    type: 'artifactNode',
-    position: { x: 920, y: 100 },
-    data: {
-      title: 'Especificação & Plano de Execução',
-      activeTab: 'markdown',
-      markdownContent: `### Plano de Entrega: Studio Clean
-
-> [!IMPORTANT]
-> A interface prioriza usabilidade direta sem interferência de metadados.
-
-#### Etapas Previstas
-- [x] Configuração dos Design Tokens
-- [x] Integração do React Flow e xterm.js
-- [ ] Validação dos nós no pipeline
-
-\`\`\`typescript
-interface CanvasPipeline {
-  source: string;
-  target: string;
-  validated: boolean;
-}
-\`\`\`
-`,
-      htmlPreview: `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: sans-serif; padding: 20px; background: #0F172A; color: #F8FAFC; }
-    .card { background: #1E293B; border-radius: 8px; padding: 16px; border: 1px solid #334155; }
-    .badge { background: #6366F1; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
-    h2 { margin-top: 0; color: #818CF8; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <span class="badge">Preview Ativo</span>
-    <h2>Painel Interativo de Métricas</h2>
-    <p>Visualização isolada renderizada com suporte total a componentes dinâmicos.</p>
-  </div>
-</body>
-</html>`,
-      diffContent: {
-        filename: 'src/components/Dashboard.tsx',
-        lines: [
-          { type: 'normal', content: ' import React from "react";' },
-          { type: 'remove', content: '-const oldStatus = "draft";' },
-          { type: 'add', content: '+const status = "production_ready";' },
-          { type: 'add', content: '+export const isEnabled = true;' },
-          { type: 'normal', content: ' export default Dashboard;' },
-        ],
-      },
-      status: 'draft',
     },
   },
   {
     id: 'node-agy-1',
     type: 'agentNode',
-    position: { x: 1380, y: 120 },
+    position: { x: 660, y: 140 },
     data: {
       title: 'Antigravity (AGY)',
       agentType: 'agy',
       role: 'executor',
       status: 'idle',
       viewMode: 'extension',
-      thinking: {
-        duration: '0.9s',
-        thoughts: [
-          'Aguardando aprovação do artefato pelo planejador para iniciar compilação.',
-          'Ambiente de execução pronto em background.',
-        ],
-        isExpanded: false,
-      },
-      messages: [
-        {
-          id: 'msg-agy-1',
-          sender: 'agent',
-          text: 'Pronto para executar a compilação e validação do pipeline assim que o plano for aprovado.',
-          timestamp: '14:22',
-        },
-      ],
-      approvals: [
-        {
-          id: 'appr-agy-1',
-          type: 'file_change',
-          title: 'Aplicar patch em vite.config.ts',
-          diff: '@@ -3,2 +3,4 @@\n+import tailwindcss from "@tailwindcss/vite";\n-export default defineConfig({});\n+export default defineConfig({ plugins: [tailwindcss()] });',
-          status: 'pending',
-        },
-      ],
+      thinking: null,
+      messages: [],
+      approvals: [],
       attachedImages: [],
       terminalLogs: [
-        'agy v2.4.0 daemon started',
-        'listening for canvas dispatch events...',
-        'workspace: c:/Users/aluno/Documents/antigravity/blissful-franklin',
+        '> Antigravity CLI pronto.',
+        '> Aguardando despacho de tarefas.',
       ],
     },
   },
 ]
 
-const initialEdges: Edge[] = [
-  {
-    id: 'e-image-claude',
-    source: 'node-image-1',
-    target: 'node-claude-1',
-    type: 'removable',
-    animated: true,
-    style: { stroke: '#F43F5E', strokeWidth: 2 },
-  },
-  {
-    id: 'e-claude-artifact',
-    source: 'node-claude-1',
-    target: 'node-artifact-1',
-    type: 'removable',
-    animated: true,
-    style: { stroke: '#EA580C', strokeWidth: 2 },
-  },
-  {
-    id: 'e-artifact-agy',
-    source: 'node-artifact-1',
-    target: 'node-agy-1',
-    type: 'removable',
-    animated: true,
-    style: { stroke: '#6366F1', strokeWidth: 2 },
-  },
-]
+const initialEdges: Edge[] = []
 
 export const useCanvasStore = create<CanvasState>((set, get) => ({
   theme: 'dark',
@@ -656,12 +475,36 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
     const agentType = (node.data as any).agentType || 'claude'
 
+    // Collect images attached directly AND connected via canvas edges to this node
+    const connectedEdges = get().edges.filter((e) => e.target === nodeId || e.source === nodeId)
+    const connectedImageUrls: string[] = []
+    for (const edge of connectedEdges) {
+      const otherNodeId = edge.target === nodeId ? edge.source : edge.target
+      const otherNode = get().nodes.find((n) => n.id === otherNodeId)
+      if (otherNode?.type === 'imageNode') {
+        const d = otherNode.data as any
+        if (d?.url) connectedImageUrls.push(d.url)
+      } else if (otherNode?.type === 'imageGroupNode') {
+        const d = otherNode.data as any
+        if (d?.images) {
+          d.images.forEach((img: any) => {
+            if (img?.url) connectedImageUrls.push(img.url)
+          })
+        }
+      }
+    }
+
+    const allImages = [
+      ...(images || []),
+      ...connectedImageUrls.filter((u) => !(images || []).includes(u)),
+    ]
+
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
       sender: 'user',
       text,
       timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      images,
+      images: allImages.length > 0 ? allImages : undefined,
     }
 
     const currentMessages = ((node.data as any).messages || []) as ChatMessage[]
@@ -675,8 +518,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         duration: 'Executando CLI real...',
         thoughts: [
           `Enviando instrução para o binário ${agentType} instalado no sistema...`,
-          images && images.length > 0
-            ? `${images.length} imagem(ns) incluída(s) no contexto.`
+          allImages.length > 0
+            ? `${allImages.length} imagem(ns) conectada(s) pelo canvas incluída(s) no contexto.`
             : 'Contexto do workspace anexado.',
         ],
         isExpanded: true,
@@ -687,8 +530,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
     try {
       let fullPrompt = text
-      if (images && images.length > 0) {
-        fullPrompt = `[Contexto: ${images.length} imagens/anotações conectadas]: ${text}`
+      if (allImages.length > 0) {
+        fullPrompt = `[Contexto: ${allImages.length} imagens conectadas pelo canvas]: ${text}`
       }
 
       const response = await fetch('/api/agent/run', {
@@ -697,6 +540,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         body: JSON.stringify({
           agentType,
           prompt: fullPrompt,
+          images: allImages,
         }),
       })
 
@@ -1185,3 +1029,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     })
   },
 }))
+
+if (typeof window !== 'undefined') {
+  ;(window as any).__canvasStore = useCanvasStore
+}

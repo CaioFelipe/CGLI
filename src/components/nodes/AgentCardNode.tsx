@@ -158,12 +158,12 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
   return (
     <div
-      className={`group relative rounded-xl border transition-all duration-200 shadow-md ${
+      className={`group relative rounded-xl border transition-all duration-200 ${
         selected ? 'ring-2' : ''
       } ${
         theme === 'dark'
-          ? 'bg-[#111827] border-slate-800 text-slate-100 shadow-black/40'
-          : 'bg-white border-slate-200 text-slate-900 shadow-slate-200/50'
+          ? 'bg-[#0D1117] border-[#30363D] text-[#F0F6FC] shadow-[0_8px_30px_rgb(0,0,0,0.6)]'
+          : 'bg-white border-slate-300 text-slate-900 shadow-[0_4px_20px_-2px_rgba(15,23,42,0.12),0_2px_6px_-1px_rgba(15,23,42,0.08)]'
       }`}
       style={{
         width: 440,
@@ -222,9 +222,10 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
       {/* Header */}
       <div
-        className="flex items-center justify-between px-3.5 py-2.5 border-b rounded-t-xl"
+        className={`flex items-center justify-between px-3.5 py-2.5 border-b rounded-t-xl ${
+          theme === 'dark' ? 'bg-[#161B22]/80 border-[#21262D]' : 'bg-slate-50/90 border-slate-200'
+        }`}
         style={{
-          borderBottomColor: theme === 'dark' ? '#21262D' : '#F1F5F9',
           borderTop: `3px solid ${accentColor}`,
         }}
       >
@@ -317,7 +318,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           {nodeData.thinking && (
             <div
               className={`border-b text-xs transition-colors ${
-                theme === 'dark' ? 'border-slate-800/80 bg-slate-900/40' : 'border-slate-100 bg-slate-50/60'
+                theme === 'dark' ? 'border-[#21262D] bg-[#161B22]/60' : 'border-slate-200 bg-slate-50'
               }`}
             >
               <button
@@ -339,7 +340,9 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
               </button>
 
               {isThinkingExpanded && (
-                <div className="px-3 pb-2 pt-1 space-y-1 text-[11px] text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800">
+                <div className={`px-3 pb-2 pt-1 space-y-1 text-[11px] border-t ${
+                  theme === 'dark' ? 'border-[#21262D] text-slate-300' : 'border-slate-200 text-slate-700'
+                }`}>
                   {nodeData.thinking.thoughts.map((thought, idx) => (
                     <div key={idx} className="flex items-start gap-1.5">
                       <span className="text-amber-500/80 leading-relaxed">•</span>
@@ -353,88 +356,107 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
           {/* Messages & Conversation Scroll Area */}
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
-            {nodeData.messages.map((msg: ChatMessage) => {
-              const isUser = msg.sender === 'user'
-              return (
-                <div
-                  key={msg.id}
-                  className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
-                >
-                  <div className="flex items-center gap-1.5 mb-1 px-1">
-                    <span className="text-[10px] font-medium text-slate-400">
-                      {isUser ? 'Você' : nodeData.title}
-                    </span>
-                    <span className="text-[9px] text-slate-400">{msg.timestamp}</span>
-                  </div>
-
-                  {/* Attached images in message */}
-                  {msg.images && msg.images.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-1.5">
-                      {msg.images.map((imgUrl, i) => (
-                        <img
-                          key={i}
-                          src={imgUrl}
-                          alt="Anexo"
-                          className="w-16 h-12 object-cover rounded border border-slate-200 dark:border-slate-700"
-                        />
-                      ))}
-                    </div>
-                  )}
-
+            {nodeData.messages.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center p-4 text-slate-400 dark:text-slate-500">
+                <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  {nodeData.title} Pronto
+                </span>
+                <span className="text-[11px] mt-1 max-w-[260px] leading-relaxed">
+                  Conecte uma imagem ao nó ou digite uma instrução abaixo para iniciar.
+                </span>
+              </div>
+            ) : (
+              nodeData.messages.map((msg: ChatMessage) => {
+                const isUser = msg.sender === 'user'
+                return (
                   <div
-                    className={`rounded-lg px-3 py-2 text-xs max-w-[90%] leading-relaxed ${
-                      isUser
-                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-normal'
-                        : 'bg-slate-50 dark:bg-slate-900/90 text-slate-800 dark:text-slate-200 border border-slate-200/80 dark:border-slate-800'
-                    }`}
+                    key={msg.id}
+                    className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                    <div className="flex items-center gap-1.5 mb-1 px-1">
+                      <span className="text-[10px] font-medium text-slate-400">
+                        {isUser ? 'Você' : nodeData.title}
+                      </span>
+                      <span className="text-[9px] text-slate-400">{msg.timestamp}</span>
+                    </div>
 
-                    {/* Code Blocks */}
-                    {msg.codeBlocks?.map((cb, idx) => {
-                      const blockKey = `${msg.id}-${idx}`
-                      return (
-                        <div
-                          key={idx}
-                          className="mt-2 rounded-md overflow-hidden border border-slate-200 dark:border-slate-800 bg-[#0B0F17] text-slate-200 font-mono text-[11px]"
-                        >
-                          <div className="flex items-center justify-between px-2.5 py-1 bg-slate-900/80 border-b border-slate-800 text-[10px] text-slate-400">
-                            <span>{cb.language}</span>
-                            <button
-                              type="button"
-                              onClick={() => copyCodeToClipboard(cb.code, blockKey)}
-                              className="flex items-center gap-1 hover:text-slate-100 transition-colors"
-                            >
-                              {copiedBlock === blockKey ? (
-                                <>
-                                  <Check className="w-3 h-3 text-emerald-400" />
-                                  <span className="text-emerald-400">Copiado</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  <span>Copiar</span>
-                                </>
-                              )}
-                            </button>
+                    {/* Attached images in message */}
+                    {msg.images && msg.images.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-1.5">
+                        {msg.images.map((imgUrl, i) => (
+                          <img
+                            key={i}
+                            src={imgUrl}
+                            alt="Anexo"
+                            className="w-16 h-12 object-cover rounded border border-slate-300 dark:border-slate-700"
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    <div
+                      className={`rounded-lg px-3 py-2 text-xs max-w-[90%] leading-relaxed ${
+                        isUser
+                          ? theme === 'dark'
+                            ? 'bg-[#21262D] text-[#F0F6FC] border border-[#30363D]'
+                            : 'bg-slate-100 text-slate-900 border border-slate-300'
+                          : theme === 'dark'
+                            ? 'bg-[#161B22] text-slate-200 border border-[#30363D]'
+                            : 'bg-white text-slate-800 border border-slate-300 shadow-xs'
+                      }`}
+                    >
+                      <p className="whitespace-pre-wrap">{msg.text}</p>
+
+                      {/* Code Blocks */}
+                      {msg.codeBlocks?.map((cb, idx) => {
+                        const blockKey = `${msg.id}-${idx}`
+                        return (
+                          <div
+                            key={idx}
+                            className="mt-2 rounded-md overflow-hidden border border-slate-700/80 bg-[#0B0F17] text-slate-200 font-mono text-[11px]"
+                          >
+                            <div className="flex items-center justify-between px-2.5 py-1 bg-slate-900/90 border-b border-slate-800 text-[10px] text-slate-400">
+                              <span>{cb.language}</span>
+                              <button
+                                type="button"
+                                onClick={() => copyCodeToClipboard(cb.code, blockKey)}
+                                className="flex items-center gap-1 hover:text-slate-100 transition-colors"
+                              >
+                                {copiedBlock === blockKey ? (
+                                  <>
+                                    <Check className="w-3 h-3 text-emerald-400" />
+                                    <span className="text-emerald-400">Copiado</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3 h-3" />
+                                    <span>Copiar</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                            <pre className="p-2.5 overflow-x-auto text-[11px] leading-relaxed text-slate-300">
+                              <code>{cb.code}</code>
+                            </pre>
                           </div>
-                          <pre className="p-2.5 overflow-x-auto text-[11px] leading-relaxed text-slate-300">
-                            <code>{cb.code}</code>
-                          </pre>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })
+            )}
 
             {/* Action Approvals (Diffs or Commands) */}
             {nodeData.approvals &&
               nodeData.approvals.map((appr: ActionApproval) => (
                 <div
                   key={appr.id}
-                  className="rounded-lg border p-2.5 text-xs bg-slate-50/90 dark:bg-slate-900/70 border-amber-500/30 shadow-xs"
+                  className={`rounded-lg border p-2.5 text-xs shadow-xs ${
+                    theme === 'dark'
+                      ? 'bg-[#161B22] border-amber-500/40 text-slate-200'
+                      : 'bg-amber-50/90 border-amber-300 text-slate-900'
+                  }`}
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="font-semibold text-[11px] flex items-center gap-1.5 text-slate-800 dark:text-slate-200">
@@ -447,7 +469,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                           ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
                           : appr.status === 'rejected'
                           ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
-                          : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
                       }`}
                     >
                       {appr.status === 'approved'
@@ -459,13 +481,13 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                   </div>
 
                   {appr.command && (
-                    <div className="font-mono text-[11px] bg-slate-950 text-slate-200 px-2 py-1 rounded mb-2 overflow-x-auto">
+                    <div className="font-mono text-[11px] bg-slate-950 text-slate-200 px-2 py-1 rounded mb-2 overflow-x-auto border border-slate-800">
                       $ {appr.command}
                     </div>
                   )}
 
                   {appr.diff && (
-                    <div className="font-mono text-[10px] bg-slate-950 text-slate-300 p-2 rounded mb-2 overflow-x-auto leading-relaxed">
+                    <div className="font-mono text-[10px] bg-slate-950 text-slate-300 p-2 rounded mb-2 overflow-x-auto leading-relaxed border border-slate-800">
                       {appr.diff.split('\n').map((line, i) => (
                         <div
                           key={i}
@@ -510,14 +532,20 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
           {/* Attached Image Badges */}
           {nodeData.attachedImages && nodeData.attachedImages.length > 0 && (
-            <div className="px-3 py-1.5 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center gap-2 overflow-x-auto">
+            <div className={`px-3 py-1.5 border-t flex items-center gap-2 overflow-x-auto ${
+              theme === 'dark' ? 'border-[#21262D] bg-[#161B22]/50' : 'border-slate-200 bg-slate-50'
+            }`}>
               <span className="text-[10px] text-slate-400 flex items-center gap-1">
                 <Paperclip className="w-3 h-3" /> Anexos:
               </span>
               {nodeData.attachedImages.map((img) => (
                 <div
                   key={img.id}
-                  className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded px-1.5 py-0.5 text-[10px] border border-slate-200 dark:border-slate-700"
+                  className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] border ${
+                    theme === 'dark'
+                      ? 'bg-[#21262D] border-[#30363D] text-slate-200'
+                      : 'bg-white border-slate-300 text-slate-800 shadow-xs'
+                  }`}
                 >
                   <ImageIcon className="w-2.5 h-2.5 text-slate-400" />
                   <span className="truncate max-w-[90px]">{img.name}</span>
@@ -535,11 +563,9 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
           {/* Input & Slash Command Shortcuts */}
           <div
-            className="p-2.5 border-t rounded-b-xl"
-            style={{
-              borderColor: theme === 'dark' ? '#21262D' : '#E2E8F0',
-              backgroundColor: theme === 'dark' ? '#090D13' : '#F8FAFC',
-            }}
+            className={`p-2.5 border-t rounded-b-xl ${
+              theme === 'dark' ? 'bg-[#090D13] border-[#21262D]' : 'bg-slate-50 border-slate-200'
+            }`}
           >
             {/* Quick Slash Commands */}
             <div className="flex items-center gap-1 mb-2 overflow-x-auto text-[10px]">
@@ -548,7 +574,11 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                   key={cmd}
                   type="button"
                   onClick={() => addSlashCommand(cmd)}
-                  className="px-2 py-0.5 rounded bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors font-mono font-medium"
+                  className={`px-2 py-0.5 rounded transition-colors font-mono font-medium ${
+                    theme === 'dark'
+                      ? 'bg-[#21262D] text-slate-300 hover:bg-[#30363D]'
+                      : 'bg-slate-200/90 text-slate-700 hover:bg-slate-300 border border-slate-300/60'
+                  }`}
                 >
                   {cmd}
                 </button>
@@ -563,7 +593,11 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 placeholder="Instruir agente... (Ctrl+V para prints)"
-                className="w-full text-xs rounded-lg px-3 py-2 pr-9 bg-white dark:bg-[#161B22] border border-slate-300 dark:border-[#30363D] focus:outline-hidden focus:border-indigo-500 text-slate-900 dark:text-[#F0F6FC] placeholder-slate-400 dark:placeholder-slate-500 transition-colors"
+                className={`w-full text-xs rounded-lg px-3 py-2 pr-9 border transition-colors focus:outline-hidden ${
+                  theme === 'dark'
+                    ? 'bg-[#161B22] border-[#30363D] text-[#F0F6FC] placeholder-slate-500 focus:border-indigo-500'
+                    : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-indigo-500 shadow-xs'
+                }`}
               />
               <button
                 type="button"
