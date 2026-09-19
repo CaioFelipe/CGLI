@@ -1,3 +1,4 @@
+mod bridge;
 mod media;
 mod pty;
 mod workspace;
@@ -13,12 +14,18 @@ pub fn run() {
                 .level(log::LevelFilter::Info)
                 .build(),
         )
+        .setup(|app| {
+            bridge::start_bridge_server(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             // PTY commands
             pty::spawn_pty,
             pty::write_pty,
             pty::resize_pty,
             pty::kill_pty,
+            // Bridge commands
+            bridge::get_cgli_bridge_port,
             // Workspace & Skills commands
             workspace::save_workspace,
             workspace::load_workspace,

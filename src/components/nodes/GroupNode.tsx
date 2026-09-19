@@ -14,6 +14,8 @@ import {
   FileCode2,
   Image as ImageIcon,
   FolderKanban,
+  Eye,
+  GitCompare,
 } from 'lucide-react'
 import React, { useState } from 'react'
 import { useCanvasStore } from '../../store/canvasStore'
@@ -58,6 +60,8 @@ export const GroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       )
     }
     if (type === 'artifactNode') return <FileCode2 className="w-3 h-3 text-indigo-400" />
+    if (type === 'previewNode') return <Eye className="w-3 h-3 text-cyan-400" />
+    if (type === 'diffNode') return <GitCompare className="w-3 h-3 text-emerald-400" />
     if (type === 'imageNode') return <ImageIcon className="w-3 h-3 text-rose-400" />
     if (type === 'imageGroupNode') return <FolderKanban className="w-3 h-3 text-pink-400" />
     return <Layers className="w-3 h-3 text-slate-400" />

@@ -9,11 +9,14 @@ import {
   applyNodeChanges,
 } from '@xyflow/react'
 import { create } from 'zustand'
+import { ptyService } from '../services/ptyService'
 import type {
   ActionApproval,
   AnnotationItem,
+  AttachedArtifactBadge,
   ChatMessage,
   CliConfig,
+  DiffLine,
   ProjectInfo,
   SkillItem,
   StashItem,
@@ -44,6 +47,7 @@ interface CanvasState {
   setActiveFolder: (projectId: string, folderId: string) => void
   deleteProject: (projectId: string) => void
   setProject: (project: Partial<ProjectInfo>) => void
+  getActiveWorkspacePath: () => string
 
   // Canvas Nodes & Edges
   nodes: Node[]
@@ -92,9 +96,17 @@ interface CanvasState {
   toggleAgentViewMode: (nodeId: string) => void
   handleApproval: (nodeId: string, approvalId: string, action: 'approved' | 'rejected') => void
   approveArtifact: (nodeId: string) => void
-  attachImageToAgent: (nodeId: string, image: { id: string; url: string; name: string }) => void
+  attachImageToAgent: (nodeId: string, image: { id: string; url: string; name: string; nodeId?: string }) => void
   removeAttachedImage: (nodeId: string, imageId: string) => void
+  attachArtifactToAgent: (agentId: string, artifact: AttachedArtifactBadge) => void
+  removeAttachedArtifact: (agentId: string, artifactId: string) => void
+  toggleAgentDiffNode: (agentId: string) => void
+  addImageToNode: (nodeId: string, image: { url: string; name?: string }) => void
   spawnSubagent: (parentId: string, childType: 'claude' | 'agy') => void
+  createArtifactFromAgent: (agentId: string, title: string, content: string) => void
+  createPreviewFromAgent: (agentId: string, title: string, html: string) => void
+  createDiffFromAgent: (agentId: string, title: string, filename: string, lines?: DiffLine[]) => void
+  spawnSubagentFromAction: (parentId: string, childType: string, role?: string, task?: string) => void
   deleteEdge: (edgeId: string) => void
   addNodeToGroup: (groupId: string, nodeId: string) => void
   removeNodeFromGroup: (groupId: string, nodeId: string) => void
@@ -114,11 +126,6 @@ const initialClis: CliConfig[] = [
     color: '#EA580C',
     active: true,
     role: 'planner',
-    connectedAccount: {
-      email: 'developer@workspace.dev',
-      status: 'connected',
-      tokenOrKey: '••••••••••••••••38f9',
-    },
     defaultArgs: '--dangerously-skip-permissions',
   },
   {
@@ -128,14 +135,40 @@ const initialClis: CliConfig[] = [
     color: '#0284C7',
     active: true,
     role: 'executor',
-    connectedAccount: {
-      email: 'aluno@gemini.local',
-      status: 'connected',
-      tokenOrKey: '••••••••••••••••7a12',
-    },
-    defaultArgs: '--stream --auto-approve',
+    defaultArgs: '--dangerously-skip-permissions',
   },
 ]
+
+const getInitialClis = (): CliConfig[] => {
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('cgli_clis')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Sanitize any legacy mock accounts or invalid CLI arguments
+          return parsed.map((cli: any) => {
+            if (cli.id === 'agy' && cli.defaultArgs?.includes('--stream')) {
+              cli.defaultArgs = '--dangerously-skip-permissions'
+            }
+            if (
+              cli.connectedAccount &&
+              (cli.connectedAccount.email?.includes('developer@workspace.dev') ||
+                cli.connectedAccount.email?.includes('aluno@gemini.local') ||
+                cli.connectedAccount.tokenOrKey?.includes('••••'))
+            ) {
+              return { ...cli, connectedAccount: undefined }
+            }
+            return cli
+          })
+        }
+      }
+    } catch (e) {
+      console.error('Error loading clis from localStorage:', e)
+    }
+  }
+  return initialClis
+}
 
 const initialSkills: SkillItem[] = [
   {
@@ -168,50 +201,128 @@ const initialSkills: SkillItem[] = [
   },
 ]
 
-const initialNodes: Node[] = [
-  {
-    id: 'node-claude-1',
-    type: 'agentNode',
-    position: { x: 160, y: 140 },
-    data: {
-      title: 'Claude Code',
-      agentType: 'claude',
-      role: 'planner',
-      status: 'idle',
-      viewMode: 'extension',
-      thinking: null,
-      messages: [],
-      approvals: [],
-      attachedImages: [],
-      terminalLogs: [
-        '> Claude Code inicializado.',
-        '> Digite uma instrução ou conecte uma imagem ao nó.',
-      ],
-    },
-  },
-  {
-    id: 'node-agy-1',
-    type: 'agentNode',
-    position: { x: 660, y: 140 },
-    data: {
-      title: 'Antigravity (AGY)',
-      agentType: 'agy',
-      role: 'executor',
-      status: 'idle',
-      viewMode: 'extension',
-      thinking: null,
-      messages: [],
-      approvals: [],
-      attachedImages: [],
-      terminalLogs: [
-        '> Antigravity CLI pronto.',
-        '> Aguardando despacho de tarefas.',
-      ],
-    },
-  },
-]
+const getInitialSkills = (): SkillItem[] => {
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('cgli_skills')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed
+        }
+      }
+    } catch (e) {
+      console.error('Error loading skills from localStorage:', e)
+    }
+  }
+  return initialSkills
+}
 
-const initialEdges: Edge[] = []
+const getInitialCanvasState = (projectId: string): { nodes: Node[]; edges: Edge[] } => {
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem(`cgli_canvas_${projectId}`)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
+          // Sanitize any legacy mock demo nodes or legacy diff mock content
+          const cleanNodes = parsed.nodes
+            .filter(
+              (n: any) => n.id !== 'node-claude-1' && n.id !== 'node-agy-1' && n.id !== 'node-archived-demo'
+            )
+            .map((n: any) => {
+              if (n.type === 'diffNode') {
+                const hasMockDiff = n.data?.lines?.some((l: any) =>
+                  String(l?.content || '').includes('Implementação anterior') ||
+                  String(l?.content || '').includes('validatedFeature')
+                )
+                if (hasMockDiff) {
+                  return {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      lines: [],
+                      filename: 'Nenhum arquivo modificado',
+                      title: 'Diff de Alterações',
+                      stats: { additions: 0, deletions: 0 },
+                    },
+                  }
+                }
+              }
+              if (n.type === 'agentNode') {
+                return {
+                  ...n,
+                  data: {
+                    ...n.data,
+                    viewMode: 'terminal',
+                    sessionId: n.data?.sessionId || `pty-${n.id}`,
+                    isPtyActive: true,
+                  },
+                }
+              }
+              return n
+            })
+          const cleanEdges = parsed.edges.filter(
+            (e: any) =>
+              cleanNodes.some((n: any) => n.id === e.source) && cleanNodes.some((n: any) => n.id === e.target)
+          )
+          return { nodes: cleanNodes, edges: cleanEdges }
+        }
+      }
+    } catch (e) {
+      console.error('Error loading canvas from localStorage:', e)
+    }
+  }
+  return { nodes: [], edges: [] }
+}
+
+const getInitialStashItems = (): StashItem[] => {
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('cgli_stash_items')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed)) {
+          // Remove any legacy mock demo stash item and mock diff items
+          return parsed
+            .filter(
+              (item: any) =>
+                item.id !== 'stash-item-demo' &&
+                item.nodeId !== 'node-archived-demo' &&
+                !String(item.previewSnippet || '').includes('validatedFeature') &&
+                !String(item.previewSnippet || '').includes('Implementação anterior')
+            )
+            .map((item: any) => {
+              if (item.type === 'diff') {
+                const nodeData = item.nodeData as any
+                const hasMock = nodeData?.lines?.some((l: any) =>
+                  String(l?.content || '').includes('Implementação anterior') ||
+                  String(l?.content || '').includes('validatedFeature')
+                )
+                if (hasMock) {
+                  return {
+                    ...item,
+                    previewSnippet: 'Nenhum arquivo modificado',
+                    nodeData: {
+                      ...nodeData,
+                      lines: [],
+                      filename: 'Nenhum arquivo modificado',
+                      title: 'Diff de Alterações',
+                      stats: { additions: 0, deletions: 0 },
+                    },
+                  }
+                }
+              }
+              return item
+            })
+        }
+      }
+    } catch (e) {
+      console.error('Error loading stash from localStorage:', e)
+    }
+  }
+  return []
+}
 
 const defaultProjects: ProjectInfo[] = [
   {
@@ -230,8 +341,6 @@ const defaultProjects: ProjectInfo[] = [
     createdAt: new Date().toISOString(),
     recentProjects: [
       { name: 'blissful-franklin', path: 'c:/Users/aluno/Documents/antigravity/blissful-franklin' },
-      { name: 'cgli-core', path: 'c:/Users/aluno/Documents/antigravity/cgli-core' },
-      { name: 'studio-clean-demo', path: 'c:/Users/aluno/Documents/antigravity/demo' },
     ],
   },
 ]
@@ -243,9 +352,18 @@ const getInitialProjectState = (): { projects: ProjectInfo[]; currentId: string;
       if (saved) {
         const parsed = JSON.parse(saved)
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const lastActive = localStorage.getItem('cgli_current_project_id') || parsed[0].id
-          const current = parsed.find((p: any) => p.id === lastActive) || parsed[0]
-          return { projects: parsed, currentId: current.id, project: current }
+          // Sanitize legacy mock projects from recent list
+          const sanitizedProjects = parsed.map((p: any) => ({
+            ...p,
+            recentProjects: Array.isArray(p.recentProjects)
+              ? p.recentProjects.filter(
+                  (r: any) => r.name !== 'cgli-core' && r.name !== 'studio-clean-demo'
+                )
+              : [{ name: p.name, path: p.path }],
+          }))
+          const lastActive = localStorage.getItem('cgli_current_project_id') || sanitizedProjects[0].id
+          const current = sanitizedProjects.find((p: any) => p.id === lastActive) || sanitizedProjects[0]
+          return { projects: sanitizedProjects, currentId: current.id, project: current }
         }
       }
     } catch (e) {
@@ -260,6 +378,10 @@ const getInitialProjectState = (): { projects: ProjectInfo[]; currentId: string;
 }
 
 const initialProjState = getInitialProjectState()
+const initialCanvas = getInitialCanvasState(initialProjState.currentId)
+const initialStash = getInitialStashItems()
+const initialClisList = getInitialClis()
+const initialSkillsList = getInitialSkills()
 
 export const getNodeDimensions = (node: Node): { width: number; height: number } => {
   const measuredW = Number(node.measured?.width)
@@ -290,7 +412,11 @@ export const getNodeDimensions = (node: Node): { width: number; height: number }
     case 'agentNode':
       return { width: 380, height: 380 }
     case 'artifactNode':
+      return { width: 400, height: 320 }
+    case 'previewNode':
       return { width: 440, height: 360 }
+    case 'diffNode':
+      return { width: 440, height: 320 }
     case 'imageNode':
       return { width: 340, height: 280 }
     case 'imageGroupNode':
@@ -334,6 +460,147 @@ export const calculateGroupBounds = (
   const height = Math.round(Math.max(maxY - minY + padTop + padBottom, 280))
 
   return { x, y, width, height }
+}
+
+export const detachImagesForNode = (
+  imageNodeId: string,
+  imageNodeData: any,
+  edges: Edge[],
+  getNodes: () => Node[],
+  updateNodeData: (nodeId: string, data: any) => void
+) => {
+  const imageIdsToRemove = new Set<string>()
+  const urlsToRemove = new Set<string>()
+
+  imageIdsToRemove.add(imageNodeId)
+
+  if (imageNodeData) {
+    if (imageNodeData.images && Array.isArray(imageNodeData.images)) {
+      imageNodeData.images.forEach((img: any) => {
+        if (img.id) imageIdsToRemove.add(img.id)
+        if (img.url) urlsToRemove.add(img.url)
+      })
+    }
+    if (imageNodeData.url) urlsToRemove.add(imageNodeData.url)
+  }
+
+  // Find all edges connected to this image node
+  const connectedEdges = edges.filter(
+    (e) => e.source === imageNodeId || e.target === imageNodeId
+  )
+
+  const nodes = getNodes()
+  connectedEdges.forEach((edge) => {
+    const otherNodeId = edge.source === imageNodeId ? edge.target : edge.source
+    const otherNode = nodes.find((n) => n.id === otherNodeId)
+    if (otherNode && otherNode.type === 'agentNode') {
+      const currentAttached = ((otherNode.data as any).attachedImages || []) as Array<{
+        id: string
+        url: string
+        name: string
+        nodeId?: string
+      }>
+      const updatedAttached = currentAttached.filter(
+        (img) =>
+          img.nodeId !== imageNodeId &&
+          !imageIdsToRemove.has(img.id) &&
+          !urlsToRemove.has(img.url)
+      )
+      updateNodeData(otherNode.id, { attachedImages: updatedAttached })
+    }
+  })
+}
+
+export const detachImagesIfNoRemainingEdge = (
+  edge: Edge,
+  remainingEdges: Edge[],
+  getNodes: () => Node[],
+  updateNodeData: (nodeId: string, data: any) => void
+) => {
+  const nodes = getNodes()
+  const sourceNode = nodes.find((n) => n.id === edge.source)
+  const targetNode = nodes.find((n) => n.id === edge.target)
+
+  const agentNode =
+    (sourceNode?.type === 'agentNode' ? sourceNode : targetNode?.type === 'agentNode' ? targetNode : null) ||
+    nodes.find((n) => (n.id === edge.source || n.id === edge.target) && n.type === 'agentNode')
+
+  if (!agentNode) return
+
+  const imgNodeId = edge.source === agentNode.id ? edge.target : edge.source
+  const imgNode = nodes.find((n) => n.id === imgNodeId)
+
+  // Check if there are any remaining edges connecting these two
+  const stillConnected = remainingEdges.some(
+    (e) =>
+      (e.source === imgNodeId && e.target === agentNode.id) ||
+      (e.source === agentNode.id && e.target === imgNodeId)
+  )
+
+  if (!stillConnected) {
+    const imageIdsToRemove = new Set<string>()
+    const urlsToRemove = new Set<string>()
+    imageIdsToRemove.add(imgNodeId)
+
+    if (imgNode) {
+      const imgData = imgNode.data as any
+      if (imgData.images && Array.isArray(imgData.images)) {
+        imgData.images.forEach((img: any) => {
+          if (img.id) imageIdsToRemove.add(img.id)
+          if (img.url) urlsToRemove.add(img.url)
+        })
+      }
+      if (imgData.url) urlsToRemove.add(imgData.url)
+    }
+
+    const currentAttached = ((agentNode.data as any).attachedImages || []) as Array<{
+      id: string
+      url: string
+      name: string
+      nodeId?: string
+    }>
+    const updatedAttached = currentAttached.filter(
+      (img) =>
+        img.nodeId !== imgNodeId &&
+        !imageIdsToRemove.has(img.id) &&
+        !urlsToRemove.has(img.url)
+    )
+    updateNodeData(agentNode.id, { attachedImages: updatedAttached })
+  }
+}
+
+export const detachArtifactsIfNoRemainingEdge = (
+  edge: Edge,
+  remainingEdges: Edge[],
+  getNodes: () => Node[],
+  updateNodeData: (nodeId: string, data: any) => void
+) => {
+  const nodes = getNodes()
+  const sourceNode = nodes.find((n) => n.id === edge.source)
+  const targetNode = nodes.find((n) => n.id === edge.target)
+
+  const agentNode =
+    (sourceNode?.type === 'agentNode' ? sourceNode : targetNode?.type === 'agentNode' ? targetNode : null) ||
+    nodes.find((n) => (n.id === edge.source || n.id === edge.target) && n.type === 'agentNode')
+
+  if (!agentNode) return
+
+  const artNodeId = edge.source === agentNode.id ? edge.target : edge.source
+  const artNode = nodes.find((n) => n.id === artNodeId)
+
+  if (!artNode || (artNode.type !== 'artifactNode' && artNode.type !== 'previewNode')) return
+
+  const stillConnected = remainingEdges.some(
+    (e) =>
+      (e.source === artNodeId && e.target === agentNode.id) ||
+      (e.source === agentNode.id && e.target === artNodeId)
+  )
+
+  if (!stillConnected) {
+    const currentAttached = ((agentNode.data as any).attachedArtifacts || []) as AttachedArtifactBadge[]
+    const updatedAttached = currentAttached.filter((art) => art.sourceNodeId !== artNodeId)
+    updateNodeData(agentNode.id, { attachedArtifacts: updatedAttached })
+  }
 }
 
 export const useCanvasStore = create<CanvasState>((set, get) => ({
@@ -398,31 +665,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     if (typeof window !== 'undefined') {
       localStorage.setItem('cgli_projects_v2', JSON.stringify(updatedProjects))
       localStorage.setItem('cgli_current_project_id', projId)
-    }
-
-    const freshClaudeNode: Node = {
-      id: `node-claude-${Date.now()}`,
-      type: 'agentNode',
-      position: { x: 260, y: 160 },
-      data: {
-        title: 'Claude Code',
-        agentType: 'claude',
-        role: 'planner',
-        status: 'idle',
-        viewMode: 'extension',
-        thinking: null,
-        messages: [],
-        approvals: [],
-        attachedImages: [],
-        terminalLogs: [`> Sessão Claude Code inicializada em [${newProj.name}]`],
-      },
+      localStorage.setItem(`cgli_canvas_${projId}`, JSON.stringify({ nodes: [], edges: [] }))
     }
 
     set({
       projects: updatedProjects,
       currentProjectId: projId,
       project: newProj,
-      nodes: [freshClaudeNode],
+      nodes: [],
       edges: [],
       isNewProjectOpen: false,
       annotatingNodeId: null,
@@ -443,29 +693,16 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           edges: get().edges,
         })
       )
+      localStorage.setItem('cgli_current_project_id', projectId)
     }
 
-    let targetNodes = initialNodes
-    let targetEdges = initialEdges
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('cgli_current_project_id', projectId)
-      const saved = localStorage.getItem(`cgli_canvas_${projectId}`)
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved)
-          if (parsed.nodes) targetNodes = parsed.nodes
-          if (parsed.edges) targetEdges = parsed.edges
-        } catch (e) {
-          console.error('Error restoring project canvas:', e)
-        }
-      }
-    }
+    const targetCanvas = getInitialCanvasState(projectId)
 
     set({
       currentProjectId: projectId,
       project: target,
-      nodes: targetNodes,
-      edges: targetEdges,
+      nodes: targetCanvas.nodes,
+      edges: targetCanvas.edges,
       annotatingNodeId: null,
     })
   },
@@ -575,21 +812,65 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((state) => ({ project: { ...state.project, ...partial } }))
   },
 
-  nodes: initialNodes,
-  edges: initialEdges,
+  getActiveWorkspacePath: () => {
+    const project = get().project
+    if (project.activeFolderId && project.folders) {
+      const activeFolder = project.folders.find((f) => f.id === project.activeFolderId)
+      if (activeFolder?.path) return activeFolder.path
+    }
+    if (project.folders && project.folders.length > 0) {
+      return project.folders[0].path
+    }
+    return project.path || '.'
+  },
+
+  nodes: initialCanvas.nodes,
+  edges: initialCanvas.edges,
   onNodesChange: (changes) => {
     let currentNodes = get().nodes
     const groupDeltaMap: Record<string, { deltaX: number; deltaY: number }> = {}
+    const agentChildDeltaMap: Record<string, { deltaX: number; deltaY: number }> = {}
     const affectedGroupIds = new Set<string>()
 
     for (const change of changes) {
-      if (change.type === 'position' && change.position) {
+      if (change.type === 'remove') {
+        const nodeToRemove = currentNodes.find((n) => n.id === change.id)
+        if (nodeToRemove && (nodeToRemove.type === 'imageNode' || nodeToRemove.type === 'imageGroupNode')) {
+          detachImagesForNode(
+            nodeToRemove.id,
+            nodeToRemove.data,
+            get().edges,
+            () => currentNodes,
+            (nId, data) => {
+              currentNodes = currentNodes.map((n) =>
+                n.id === nId ? { ...n, data: { ...n.data, ...data } } : n
+              )
+              get().updateNodeData(nId, data)
+            }
+          )
+        }
+      } else if (change.type === 'position' && change.position) {
         const node = currentNodes.find((n) => n.id === change.id)
         if (node && node.type === 'groupNode') {
           const deltaX = change.position.x - node.position.x
           const deltaY = change.position.y - node.position.y
           if (deltaX !== 0 || deltaY !== 0) {
             groupDeltaMap[node.id] = { deltaX, deltaY }
+          }
+        } else if (node && node.type === 'agentNode') {
+          const deltaX = change.position.x - node.position.x
+          const deltaY = change.position.y - node.position.y
+          if (deltaX !== 0 || deltaY !== 0) {
+            agentChildDeltaMap[node.id] = { deltaX, deltaY }
+          }
+          // Also check groups containing this agent
+          for (const g of currentNodes) {
+            if (g.type === 'groupNode') {
+              const memberIds = ((g.data as any)?.nodeIds || []) as string[]
+              if (memberIds.includes(node.id)) {
+                affectedGroupIds.add(g.id)
+              }
+            }
           }
         } else if (node && node.type !== 'groupNode') {
           for (const g of currentNodes) {
@@ -657,6 +938,24 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       })
     }
 
+    // Move child nodes (artifact, preview, diff) solidarily with their parent agent
+    if (Object.keys(agentChildDeltaMap).length > 0) {
+      currentNodes = currentNodes.map((n) => {
+        const parentAgentId = (n.data as any)?.parentAgentId
+        if (parentAgentId && agentChildDeltaMap[parentAgentId]) {
+          const delta = agentChildDeltaMap[parentAgentId]
+          return {
+            ...n,
+            position: {
+              x: n.position.x + delta.deltaX,
+              y: n.position.y + delta.deltaY,
+            },
+          }
+        }
+        return n
+      })
+    }
+
     let updatedNodes = applyNodeChanges(changes, currentNodes)
 
     if (affectedGroupIds.size > 0) {
@@ -693,19 +992,50 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({ nodes: updatedNodes })
   },
   onEdgesChange: (changes) => {
+    const currentEdges = get().edges
+    const nodes = get().nodes
+    const filteredChanges: EdgeChange[] = []
+
+    for (const change of changes) {
+      if (change.type === 'remove') {
+        const edgeToRemove = currentEdges.find((e) => e.id === change.id)
+        if (edgeToRemove) {
+          const isLocked = Boolean((edgeToRemove.data as any)?.isLocked)
+          const parentExists = nodes.some(
+            (n) => n.id === edgeToRemove.source || n.id === edgeToRemove.target
+          )
+          if (isLocked && parentExists) {
+            // Cannot remove locked parent-child edge while parent exists!
+            continue
+          }
+          const remaining = currentEdges.filter((e) => e.id !== change.id)
+          detachImagesIfNoRemainingEdge(edgeToRemove, remaining, () => get().nodes, get().updateNodeData)
+          detachArtifactsIfNoRemainingEdge(edgeToRemove, remaining, () => get().nodes, get().updateNodeData)
+        }
+      }
+      filteredChanges.push(change)
+    }
     set({
-      edges: applyEdgeChanges(changes, get().edges),
+      edges: applyEdgeChanges(filteredChanges, currentEdges),
     })
   },
   onConnect: (connection) => {
     const sourceNode = get().nodes.find((n) => n.id === connection.source)
     const targetNode = get().nodes.find((n) => n.id === connection.target)
 
+    // User requirement:
+    // "O de diff não pode ser separado de seu pai, deve sumir quando o pai for excluido e não pode ser linkado a outro agente."
+    if (sourceNode?.type === 'diffNode' || targetNode?.type === 'diffNode') {
+      return
+    }
+
     let strokeColor = '#6366F1'
     if (sourceNode?.type === 'imageNode' || sourceNode?.type === 'imageGroupNode') {
       strokeColor = '#F43F5E'
     } else if (sourceNode?.type === 'agentNode') {
       strokeColor = (sourceNode.data as any).agentType === 'claude' ? '#EA580C' : '#0284C7'
+    } else if (sourceNode?.type === 'previewNode') {
+      strokeColor = '#06B6D4'
     }
 
     set({
@@ -720,25 +1050,55 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       ),
     })
 
-    // If connecting an image or image group to an agent, automatically attach it
-    if (sourceNode && targetNode && targetNode.type === 'agentNode') {
-      if (sourceNode.type === 'imageNode') {
-        const imgData = sourceNode.data as any
-        get().attachImageToAgent(targetNode.id, {
-          id: sourceNode.id,
+    // If connecting an image or image group to an agent (in either direction), automatically attach it
+    const isSourceImg = sourceNode?.type === 'imageNode' || sourceNode?.type === 'imageGroupNode'
+    const isTargetAgent = targetNode?.type === 'agentNode'
+    const isTargetImg = targetNode?.type === 'imageNode' || targetNode?.type === 'imageGroupNode'
+    const isSourceAgent = sourceNode?.type === 'agentNode'
+
+    const imgNode = isSourceImg && isTargetAgent ? sourceNode : isTargetImg && isSourceAgent ? targetNode : null
+    const agentNode = isSourceImg && isTargetAgent ? targetNode : isTargetImg && isSourceAgent ? sourceNode : null
+
+    if (imgNode && agentNode) {
+      const imgData = imgNode.data as any
+      if (imgData.images && Array.isArray(imgData.images) && imgData.images.length > 0) {
+        imgData.images.forEach((img: any) => {
+          if (img.url) {
+            get().attachImageToAgent(agentNode!.id, {
+              id: img.id,
+              url: img.url,
+              name: img.name || 'imagem.png',
+              nodeId: imgNode.id,
+            })
+          }
+        })
+      } else if (imgData.url) {
+        get().attachImageToAgent(agentNode.id, {
+          id: imgNode.id,
           url: imgData.url,
           name: imgData.name || imgData.title || 'captura-de-tela.png',
-        })
-      } else if (sourceNode.type === 'imageGroupNode') {
-        const groupData = sourceNode.data as any
-        ;(groupData.images || []).forEach((img: any) => {
-          get().attachImageToAgent(targetNode.id, {
-            id: img.id,
-            url: img.url,
-            name: img.name || 'grupo-imagem.png',
-          })
+          nodeId: imgNode.id,
         })
       }
+    }
+
+    // User requirement:
+    // "O de artefato e o de preview pode ser linkado a outro agente e deve entrar como um anexo ou menção."
+    const isSourceArt = sourceNode?.type === 'artifactNode' || sourceNode?.type === 'previewNode'
+    const isTargetArt = targetNode?.type === 'artifactNode' || targetNode?.type === 'previewNode'
+
+    const artNode = isSourceArt && isTargetAgent ? sourceNode : isTargetArt && isSourceAgent ? targetNode : null
+    const artTargetAgent = isSourceArt && isTargetAgent ? targetNode : isTargetArt && isSourceAgent ? sourceNode : null
+
+    if (artNode && artTargetAgent) {
+      const artData = artNode.data as any
+      get().attachArtifactToAgent(artTargetAgent.id, {
+        id: `art-${artNode.id}`,
+        type: artNode.type === 'artifactNode' ? 'artifact' : 'preview',
+        title: artData.title || (artNode.type === 'artifactNode' ? 'Documento' : 'Web Preview'),
+        sourceNodeId: artNode.id,
+        contentSnippet: artNode.type === 'artifactNode' ? artData.markdownContent?.slice(0, 100) : 'Web Preview Sandbox',
+      })
     }
   },
   addNode: (node) => {
@@ -761,12 +1121,67 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     })
   },
   deleteNode: (id) => {
-    const remainingNodes = get().nodes.filter((node) => node.id !== id)
+    const nodeToDelete = get().nodes.find((n) => n.id === id)
+    const isParentAgent = nodeToDelete?.type === 'agentNode'
+
+    if (isParentAgent) {
+      const sessionId = (nodeToDelete.data as any)?.sessionId || `pty-${id}`
+      ptyService.killPty(sessionId)
+    }
+
+    if (nodeToDelete && (nodeToDelete.type === 'imageNode' || nodeToDelete.type === 'imageGroupNode')) {
+      detachImagesForNode(id, nodeToDelete.data, get().edges, () => get().nodes, get().updateNodeData)
+    }
+
+    // Set of node IDs that must be deleted
+    const nodesToDelete = new Set<string>([id])
+
+    // User requirement:
+    // "O de diff não pode ser separado de seu pai, deve sumir quando o pai for excluido e não pode ser linkado a outro agente."
+    if (isParentAgent) {
+      get().nodes.forEach((n) => {
+        if (n.type === 'diffNode' && (n.data as any)?.parentAgentId === id) {
+          nodesToDelete.add(n.id)
+        }
+      })
+    }
+
+    // Clean up any attachedArtifacts badges referencing any deleted node
+    get().nodes.forEach((n) => {
+      if (n.type === 'agentNode') {
+        const attached = ((n.data as any)?.attachedArtifacts || []) as AttachedArtifactBadge[]
+        const hasDeleted = attached.some((a) => nodesToDelete.has(a.sourceNodeId))
+        if (hasDeleted) {
+          get().updateNodeData(n.id, {
+            attachedArtifacts: attached.filter((a) => !nodesToDelete.has(a.sourceNodeId)),
+          })
+        }
+      }
+    })
+
+    // For artifact and preview nodes whose parent was deleted, release the parent lock
+    const remainingNodes = get().nodes
+      .filter((node) => !nodesToDelete.has(node.id))
+      .map((n) => {
+        if (isParentAgent && ((n.data as any)?.parentAgentId === id)) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              parentAgentId: undefined,
+              parentAgentTitle: undefined,
+            },
+          }
+        }
+        return n
+      })
+
     const updatedNodes = remainingNodes.map((n) => {
       if (n.type === 'groupNode') {
         const memberIds = ((n.data as any)?.nodeIds || []) as string[]
-        if (memberIds.includes(id)) {
-          const updatedMemberIds = memberIds.filter((mId) => mId !== id)
+        const hasDeletedMember = memberIds.some((mId) => nodesToDelete.has(mId))
+        if (hasDeletedMember) {
+          const updatedMemberIds = memberIds.filter((mId) => !nodesToDelete.has(mId))
           const remainingMembers = remainingNodes.filter((m) => updatedMemberIds.includes(m.id))
           const isReactive = (n.data as any)?.isReactive !== false
           if (isReactive && remainingMembers.length > 0) {
@@ -799,35 +1214,21 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
     set({
       nodes: updatedNodes,
-      edges: get().edges.filter((edge) => edge.source !== id && edge.target !== id),
+      edges: get().edges.filter((edge) => !nodesToDelete.has(edge.source) && !nodesToDelete.has(edge.target)),
     })
   },
 
-  stashItems: [
-    {
-      id: 'stash-item-demo',
-      nodeId: 'node-archived-demo',
-      name: 'Claude Code (Sessão Anterior)',
-      type: 'agent',
-      savedAt: '17/09/2026 13:45',
-      nodeData: {
-        title: 'Claude Code (Refactor)',
-        agentType: 'claude',
-        role: 'planner',
-        status: 'idle',
-        viewMode: 'extension',
-        messages: [{ id: 'm-old', sender: 'agent', text: 'Refatoração da store concluída.', timestamp: '13:40' }],
-      },
-      position: { x: 300, y: 300 },
-      previewSnippet: 'Refatoração da store concluída com sucesso.',
-    },
-  ],
+  stashItems: initialStash,
   isStashOpen: false,
   toggleStashOpen: () => set((state) => ({ isStashOpen: !state.isStashOpen })),
   setStashOpen: (open) => set({ isStashOpen: open }),
   stashNode: (id) => {
     const node = get().nodes.find((n) => n.id === id)
     if (!node) return
+
+    if (node.type === 'imageNode' || node.type === 'imageGroupNode') {
+      detachImagesForNode(id, node.data, get().edges, () => get().nodes, get().updateNodeData)
+    }
 
     if (node.type === 'groupNode') {
       get().stashGroup(id)
@@ -836,6 +1237,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
     let type: StashItem['type'] = 'agent'
     if (node.type === 'artifactNode') type = 'artifact'
+    else if (node.type === 'previewNode') type = 'preview'
+    else if (node.type === 'diffNode') type = 'diff'
     else if (node.type === 'imageNode') type = 'image'
     else if (node.type === 'imageGroupNode') type = 'imageGroup'
 
@@ -856,8 +1259,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       previewSnippet: typeof preview === 'string' ? preview.slice(0, 70) : 'Item arquivado',
     }
 
+    const updatedStash = [newItem, ...get().stashItems]
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('cgli_stash_items', JSON.stringify(updatedStash))
+      } catch (e) {
+        console.error('Error saving stash to localStorage:', e)
+      }
+    }
+
     set({
-      stashItems: [newItem, ...get().stashItems],
+      stashItems: updatedStash,
       nodes: get().nodes.filter((n) => n.id !== id),
       edges: get().edges.filter((e) => e.source !== id && e.target !== id),
     })
@@ -897,16 +1309,27 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         nodeIds: restoredMemberNodes.map((n) => n.id),
       }
 
+      const updatedStash = get().stashItems.filter((s) => s.id !== stashId)
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('cgli_stash_items', JSON.stringify(updatedStash))
+        } catch (e) {
+          console.error('Error saving stash to localStorage:', e)
+        }
+      }
+
       set({
         nodes: [...get().nodes, restoredGroupNode, ...restoredMemberNodes],
         edges: [...get().edges, ...(groupData.memberEdges || [])],
-        stashItems: get().stashItems.filter((s) => s.id !== stashId),
+        stashItems: updatedStash,
       })
       return
     }
 
     let nodeType = 'agentNode'
     if (item.type === 'artifact') nodeType = 'artifactNode'
+    else if (item.type === 'preview') nodeType = 'previewNode'
+    else if (item.type === 'diff') nodeType = 'diffNode'
     else if (item.type === 'image') nodeType = 'imageNode'
     else if (item.type === 'imageGroup') nodeType = 'imageGroupNode'
 
@@ -920,14 +1343,31 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       data: item.nodeData,
     }
 
+    const updatedStash = get().stashItems.filter((s) => s.id !== stashId)
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('cgli_stash_items', JSON.stringify(updatedStash))
+      } catch (e) {
+        console.error('Error saving stash to localStorage:', e)
+      }
+    }
+
     set({
       nodes: [...get().nodes, restoredNode],
-      stashItems: get().stashItems.filter((s) => s.id !== stashId),
+      stashItems: updatedStash,
     })
   },
   removeStashItem: (stashId) => {
+    const updatedStash = get().stashItems.filter((s) => s.id !== stashId)
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('cgli_stash_items', JSON.stringify(updatedStash))
+      } catch (e) {
+        console.error('Error saving stash to localStorage:', e)
+      }
+    }
     set({
-      stashItems: get().stashItems.filter((s) => s.id !== stashId),
+      stashItems: updatedStash,
     })
   },
 
@@ -941,30 +1381,71 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   openAnnotationModal: (nodeId) => set({ annotatingNodeId: nodeId }),
   closeAnnotationModal: () => set({ annotatingNodeId: null }),
   saveAnnotations: (nodeId, annotations) => {
-    get().updateNodeData(nodeId, { annotations })
+    const node = get().nodes.find((n) => n.id === nodeId)
+    if (node && (node.data as any).images && Array.isArray((node.data as any).images)) {
+      const imgData = node.data as any
+      const activeIdx = imgData.activeImageIndex || 0
+      const updatedImages = imgData.images.map((img: any, idx: number) =>
+        idx === activeIdx ? { ...img, annotations } : img
+      )
+      get().updateNodeData(nodeId, {
+        images: updatedImages,
+        annotations: activeIdx === 0 ? annotations : imgData.annotations,
+      })
+    } else {
+      get().updateNodeData(nodeId, { annotations })
+    }
     set({ annotatingNodeId: null })
   },
 
-  clis: initialClis,
+  clis: initialClisList,
   updateCli: (id, partial) => {
-    set({
-      clis: get().clis.map((cli) => (cli.id === id ? { ...cli, ...partial } : cli)),
-    })
+    const updated = get().clis.map((cli) => (cli.id === id ? { ...cli, ...partial } : cli))
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('cgli_clis', JSON.stringify(updated))
+      } catch (e) {
+        console.error('Error saving clis to localStorage:', e)
+      }
+    }
+    set({ clis: updated })
   },
   addCli: (cli) => {
-    set({ clis: [...get().clis, cli] })
+    const updated = [...get().clis, cli]
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('cgli_clis', JSON.stringify(updated))
+      } catch (e) {
+        console.error('Error saving clis to localStorage:', e)
+      }
+    }
+    set({ clis: updated })
   },
 
-  skills: initialSkills,
+  skills: initialSkillsList,
   toggleSkill: (id) => {
-    set({
-      skills: get().skills.map((skill) =>
-        skill.id === id ? { ...skill, enabled: !skill.enabled } : skill
-      ),
-    })
+    const updated = get().skills.map((skill) =>
+      skill.id === id ? { ...skill, enabled: !skill.enabled } : skill
+    )
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('cgli_skills', JSON.stringify(updated))
+      } catch (e) {
+        console.error('Error saving skills to localStorage:', e)
+      }
+    }
+    set({ skills: updated })
   },
   addSkill: (skill) => {
-    set({ skills: [...get().skills, skill] })
+    const updated = [...get().skills, skill]
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('cgli_skills', JSON.stringify(updated))
+      } catch (e) {
+        console.error('Error saving skills to localStorage:', e)
+      }
+    }
+    set({ skills: updated })
   },
 
   sendAgentMessage: async (nodeId, text, images) => {
@@ -1024,8 +1505,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       },
     })
 
-    const startTime = Date.now()
-
     try {
       const proj = get().project
       const activeFolder = proj.folders?.find((f) => f.id === proj.activeFolderId) || proj.folders?.[0]
@@ -1036,265 +1515,45 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         workspaceContext = `[Workspace Multi-Pastas (${proj.folders.length} pastas): ${proj.folders.map((f) => `${f.name}: "${f.path}"`).join(', ')}. Diretório ativo: "${cwd}"]\n`
       }
 
-      let fullPrompt = `${workspaceContext}${text}`
+      let artifactContext = ''
+      const attachedArtifacts = ((node.data as any).attachedArtifacts || []) as AttachedArtifactBadge[]
+      if (attachedArtifacts.length > 0) {
+        const nodes = get().nodes
+        const artDetails = attachedArtifacts.map((art) => {
+          const artNode = nodes.find((n) => n.id === art.sourceNodeId)
+          if (artNode?.type === 'artifactNode') {
+            return `[Documento Anexado "${art.title}"]: ${((artNode.data as any).markdownContent || '').slice(0, 1000)}`
+          }
+          if (artNode?.type === 'previewNode') {
+            return `[Web Preview Anexado "${art.title}"]`
+          }
+          return `[Anexo "${art.title}"]`
+        })
+        artifactContext = `\n[Contexto de Artefatos Anexados pelo Canvas]:\n${artDetails.join('\n')}\n`
+      }
+
+      let fullPrompt = `${workspaceContext}${artifactContext}${text}`
       if (allImages.length > 0) {
-        fullPrompt = `${workspaceContext}[Contexto: ${allImages.length} imagens conectadas pelo canvas]: ${text}`
+        fullPrompt = `${workspaceContext}${artifactContext}[Contexto: ${allImages.length} imagens conectadas pelo canvas]: ${text}`
       }
 
-      const response = await fetch('/api/agent/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agentType,
-          prompt: fullPrompt,
-          images: allImages,
-          cwd,
-        }),
+      const sessionId = (node.data as any).sessionId || `pty-${nodeId}`
+      await ptyService.writePty(sessionId, `${fullPrompt}\r`)
+
+      get().updateNodeData(nodeId, {
+        messages: updatedMessages,
+        status: 'running',
+        terminalLogs: [
+          ...((node.data as any).terminalLogs || []),
+          `> [${agentType.toUpperCase()}] ${text}`,
+        ],
       })
-
-      const result = await response.json()
-      const durationSec = `${((Date.now() - startTime) / 1000).toFixed(1)}s`
-
-      if (result.success && result.output) {
-        const responseMessage: ChatMessage = {
-          id: `msg-resp-${Date.now()}`,
-          sender: 'agent',
-          text: result.output,
-          timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        }
-
-        get().updateNodeData(nodeId, {
-          messages: [...updatedMessages, responseMessage],
-          status: 'idle',
-          thinking: {
-            duration: durationSec,
-            thoughts: [
-              `Resposta retornada pelo CLI ${agentType} em ${durationSec}.`,
-              'Execução concluída com código 0.',
-            ],
-            isExpanded: false,
-          },
-          terminalLogs: [
-            ...((node.data as any).terminalLogs || []),
-            `> [${agentType.toUpperCase()}] ${text.slice(0, 45)}...`,
-            `> Concluído com sucesso em ${durationSec}`,
-          ],
-        })
-
-        // Check if this is an analysis or plan request -> spawn ArtifactViewerNode!
-        const lower = text.toLowerCase()
-        const isPlanRequest =
-          lower.includes('plano') ||
-          lower.includes('analis') ||
-          lower.includes('especifica') ||
-          lower.includes('implementa')
-
-        if (isPlanRequest && agentType === 'claude') {
-          const existingArtifact = get().nodes.find((n) => n.type === 'artifactNode')
-          let targetArtifactId = existingArtifact?.id
-
-          if (!existingArtifact) {
-            targetArtifactId = `node-artifact-${Date.now()}`
-            const newArtifactNode: Node = {
-              id: targetArtifactId,
-              type: 'artifactNode',
-              position: { x: node.position.x + 500, y: node.position.y - 30 },
-              data: {
-                title: 'Plano de Implementação Gerado',
-                activeTab: 'markdown',
-                markdownContent: result.output,
-                htmlPreview:
-                  '<div style="padding:24px;font-family:sans-serif;color:#94a3b8;background:#0D1117;min-height:100vh"><h3>Aguardando geração pelo AGY...</h3></div>',
-                diffContent: {
-                  filename: 'src/components/DashboardFeature.tsx',
-                  lines: [{ type: 'add', content: '+// Componente planejado por Claude Code' }],
-                },
-                status: 'draft',
-              },
-            }
-
-            const edgeToArtifact: Edge = {
-              id: `e-${nodeId}-${targetArtifactId}`,
-              source: nodeId,
-              target: targetArtifactId,
-              type: 'removable',
-              animated: true,
-              style: { stroke: '#EA580C', strokeWidth: 2 },
-            }
-
-            set({
-              nodes: [...get().nodes, newArtifactNode],
-              edges: [...get().edges, edgeToArtifact],
-            })
-          } else {
-            get().updateNodeData(existingArtifact.id, {
-              markdownContent: result.output,
-              title: 'Plano de Implementação (Atualizado)',
-            })
-          }
-
-          // If prompt requests AGY or HTML preview or subagent invocation:
-          if (
-            lower.includes('agy') ||
-            lower.includes('preview') ||
-            lower.includes('invoc') ||
-            lower.includes('subagente')
-          ) {
-            setTimeout(async () => {
-              const agyId = `node-agy-${Date.now()}`
-              const agyNode: Node = {
-                id: agyId,
-                type: 'agentNode',
-                position: { x: node.position.x + 1020, y: node.position.y },
-                data: {
-                  title: 'Antigravity (AGY)',
-                  agentType: 'agy',
-                  role: 'executor',
-                  status: 'running',
-                  viewMode: 'extension',
-                  thinking: {
-                    duration: 'Gerando Preview HTML...',
-                    thoughts: [
-                      'Subagente invocado autonomamente por Claude Code.',
-                      'Executando CLI AGY real para gerar componente HTML/Tailwind...',
-                    ],
-                    isExpanded: true,
-                  },
-                  messages: [
-                    {
-                      id: `msg-${Date.now()}`,
-                      sender: 'agent',
-                      text: 'Recebi o plano de implementação de Claude. Gerando o preview HTML interativo agora com o CLI real...',
-                      timestamp: new Date().toLocaleTimeString('pt-BR', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      }),
-                    },
-                  ],
-                  approvals: [],
-                  attachedImages: [],
-                  terminalLogs: [
-                    '> Subagente AGY invocado por Claude Code',
-                    '> Executando geração do componente HTML via CLI...',
-                  ],
-                },
-              }
-
-              const edgeArtifactToAgy: Edge = {
-                id: `e-${targetArtifactId}-${agyId}`,
-                source: targetArtifactId!,
-                target: agyId,
-                type: 'removable',
-                animated: true,
-                style: { stroke: '#0284C7', strokeWidth: 2 },
-              }
-
-              set({
-                nodes: [...get().nodes, agyNode],
-                edges: [...get().edges, edgeArtifactToAgy],
-              })
-
-              // Run real AGY CLI to generate HTML
-              try {
-                const agyRes = await fetch('/api/agent/run', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    agentType: 'agy',
-                    prompt: `Gere apenas o codigo HTML completo com inline CSS para uma tela bonita de preview moderna (dashboard ou card de metricas). Responda apenas com a tag HTML, sem explicacoes.`,
-                  }),
-                })
-                const agyData = await agyRes.json()
-                let generatedHtml = agyData.output || ''
-
-                // Clean markdown code blocks if any
-                generatedHtml = generatedHtml
-                  .replace(/^```html\s*/i, '')
-                  .replace(/```\s*$/i, '')
-                  .trim()
-
-                if (!generatedHtml || !generatedHtml.includes('<')) {
-                  generatedHtml = `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: -apple-system, sans-serif; background: #07090E; color: #F0F6FC; padding: 24px; }
-    .card { background: #0D1117; border: 1px solid #30363D; border-radius: 12px; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
-    .badge { background: #0284C7; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; }
-    h2 { color: #38BDF8; margin-top: 12px; }
-    p { color: #8B949E; font-size: 13px; line-height: 1.6; }
-    .btn { background: #0284C7; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; margin-top: 12px; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <span class="badge">AGY Executor</span>
-    <h2>Componente Gerado com Sucesso</h2>
-    <p>Preview interativo gerado autonomamente a partir da análise de imagem de Claude Code.</p>
-    <button class="btn">Executar Ação</button>
-  </div>
-</body>
-</html>`
-                }
-
-                get().updateNodeData(targetArtifactId!, {
-                  htmlPreview: generatedHtml,
-                  activeTab: 'preview',
-                  status: 'approved',
-                })
-
-                get().updateNodeData(agyId, {
-                  status: 'idle',
-                  thinking: {
-                    duration: '1.4s',
-                    thoughts: [
-                      'Preview HTML gerado com sucesso pelo AGY.',
-                      'Aba de preview do artefato atualizada no canvas.',
-                    ],
-                    isExpanded: false,
-                  },
-                  messages: [
-                    ...((agyNode.data as any).messages || []),
-                    {
-                      id: `msg-resp-agy-${Date.now()}`,
-                      sender: 'agent',
-                      text: 'Preview HTML gerado com sucesso e incorporado diretamente na aba "Preview" do nó Visualizador de Artefatos!',
-                      timestamp: new Date().toLocaleTimeString('pt-BR', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      }),
-                    },
-                  ],
-                })
-              } catch (e: any) {
-                console.error('AGY CLI generation error:', e)
-              }
-            }, 1000)
-          }
-        }
-      } else {
-        const errMessage: ChatMessage = {
-          id: `msg-err-${Date.now()}`,
-          sender: 'agent',
-          text: `Retorno do CLI: ${result.output || result.error || 'Erro ao executar binário.'}`,
-          timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        }
-        get().updateNodeData(nodeId, {
-          messages: [...updatedMessages, errMessage],
-          status: 'error',
-          thinking: {
-            duration: 'Erro',
-            thoughts: [result.error || 'Falha na execução do processo.'],
-            isExpanded: true,
-          },
-        })
-      }
     } catch (err: any) {
       console.error('Agent execution error:', err)
       const errMessage: ChatMessage = {
         id: `msg-err-${Date.now()}`,
         sender: 'agent',
-        text: `Erro de conexão com o CLI local: ${err.message}`,
+        text: `Erro de conexão com a sessão PTY: ${err.message}`,
         timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       }
       get().updateNodeData(nodeId, {
@@ -1307,8 +1566,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   toggleAgentViewMode: (nodeId) => {
     const node = get().nodes.find((n) => n.id === nodeId)
     if (!node) return
-    const currentMode = (node.data as any).viewMode || 'extension'
-    const newMode = currentMode === 'extension' ? 'terminal' : 'extension'
+    const currentMode = (node.data as any).viewMode || 'terminal'
+    const newMode = currentMode === 'terminal' ? 'extension' : 'terminal'
     get().updateNodeData(nodeId, { viewMode: newMode })
   },
 
@@ -1325,23 +1584,39 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   approveArtifact: (nodeId) => {
     get().updateNodeData(nodeId, { status: 'approved' })
+    const artNode = get().nodes.find((n) => n.id === nodeId)
+    const parentAgentId = (artNode?.data as any)?.parentAgentId
 
-    // Find outgoing edges to trigger the next agent
-    const edges = get().edges.filter((e) => e.source === nodeId)
+    const candidateAgentIds: string[] = []
+    if (parentAgentId) candidateAgentIds.push(parentAgentId)
+
+    const edges = get().edges.filter((e) => e.source === nodeId || e.target === nodeId)
     for (const edge of edges) {
-      const targetNode = get().nodes.find((n) => n.id === edge.target)
-      if (targetNode && (targetNode.type === 'agentNode')) {
+      const otherId = edge.source === nodeId ? edge.target : edge.source
+      const other = get().nodes.find((n) => n.id === otherId)
+      if (other && other.type === 'agentNode' && !candidateAgentIds.includes(other.id)) {
+        candidateAgentIds.push(other.id)
+      }
+    }
+
+    const title = (artNode?.data as any)?.title || 'Artefato'
+    for (const agentId of candidateAgentIds) {
+      const targetNode = get().nodes.find((n) => n.id === agentId)
+      if (targetNode) {
+        const sessionId = (targetNode.data as any)?.sessionId || `pty-${agentId}`
+        ptyService.writePty(
+          sessionId,
+          `Plano [${title}] aprovado pelo usuário. Prossiga com a execução imediata.\r`
+        )
+
         get().updateNodeData(targetNode.id, {
           status: 'running',
           terminalLogs: [
             ...((targetNode.data as any).terminalLogs || []),
-            `> Notificação recebida do artefato [${nodeId}]: Aprovado`,
-            `> Iniciando execução da etapa configurada...`,
+            `> Notificação recebida do artefato [${title}]: Aprovado pelo usuário`,
+            `> Notificação injetada na sessão PTY`,
           ],
         })
-        setTimeout(() => {
-          get().updateNodeData(targetNode.id, { status: 'idle' })
-        }, 1500)
       }
     }
   },
@@ -1349,8 +1624,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   attachImageToAgent: (nodeId, image) => {
     const node = get().nodes.find((n) => n.id === nodeId)
     if (!node) return
-    const current = ((node.data as any).attachedImages || []) as Array<{ id: string; url: string; name: string }>
-    if (!current.some((img) => img.id === image.id)) {
+    const current = ((node.data as any).attachedImages || []) as Array<{ id: string; url: string; name: string; nodeId?: string }>
+    if (!current.some((img) => img.id === image.id || (image.nodeId && img.nodeId === image.nodeId && img.url === image.url))) {
       get().updateNodeData(nodeId, { attachedImages: [...current, image] })
     }
   },
@@ -1362,6 +1637,154 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     get().updateNodeData(nodeId, {
       attachedImages: current.filter((img) => img.id !== imageId),
     })
+  },
+
+  attachArtifactToAgent: (agentId, artifact) => {
+    const node = get().nodes.find((n) => n.id === agentId)
+    if (!node) return
+    const current = ((node.data as any).attachedArtifacts || []) as AttachedArtifactBadge[]
+    if (!current.some((art) => art.id === artifact.id || art.sourceNodeId === artifact.sourceNodeId)) {
+      get().updateNodeData(agentId, {
+        attachedArtifacts: [...current, artifact],
+      })
+    }
+  },
+
+  removeAttachedArtifact: (agentId, artifactId) => {
+    const node = get().nodes.find((n) => n.id === agentId)
+    if (!node) return
+    const current = ((node.data as any).attachedArtifacts || []) as AttachedArtifactBadge[]
+    get().updateNodeData(agentId, {
+      attachedArtifacts: current.filter((art) => art.id !== artifactId),
+    })
+  },
+
+  toggleAgentDiffNode: (agentId) => {
+    const agent = get().nodes.find((n) => n.id === agentId)
+    if (!agent) return
+
+    // Check if diffNode already exists for this parent agent
+    const existingDiff = get().nodes.find(
+      (n) => n.type === 'diffNode' && (n.data as any).parentAgentId === agentId
+    )
+
+    if (existingDiff) {
+      // Toggle off / close
+      get().deleteNode(existingDiff.id)
+      return
+    }
+
+    // Otherwise create dedicated DiffNode
+    const diffNodeId = `diff-${agentId}-${Date.now()}`
+    const agentData = agent.data as any
+    const approvals = (agentData.approvals || []) as ActionApproval[]
+    const apprWithDiff = approvals.find((a) => a.diff)
+
+    const filename = apprWithDiff?.title || ''
+    let diffLines: DiffLine[] = []
+
+    if (apprWithDiff?.diff) {
+      diffLines = apprWithDiff.diff.split('\n').map((line) => {
+        if (line.startsWith('+')) return { type: 'add' as const, content: line }
+        if (line.startsWith('-')) return { type: 'remove' as const, content: line }
+        return { type: 'normal' as const, content: line }
+      })
+    }
+
+    const additions = diffLines.filter((l) => l.type === 'add').length
+    const deletions = diffLines.filter((l) => l.type === 'remove').length
+
+    const newDiffNode: Node = {
+      id: diffNodeId,
+      type: 'diffNode',
+      position: { x: agent.position.x + 420, y: agent.position.y + 40 },
+      data: {
+        title: filename ? `Diff: ${filename.split('/').pop() || filename}` : 'Diff de Alterações',
+        filename: filename || 'Nenhum arquivo modificado',
+        lines: diffLines,
+        stats: { additions, deletions },
+        parentAgentId: agentId,
+        parentAgentTitle: agentData.title || 'Agente',
+      },
+    }
+
+    const lockedEdge: Edge = {
+      id: `e-${agentId}-${diffNodeId}`,
+      source: agentId,
+      target: diffNodeId,
+      type: 'removable',
+      animated: true,
+      data: { isLocked: true },
+      style: { stroke: '#10B981', strokeWidth: 2 },
+    }
+
+    set({
+      nodes: [...get().nodes, newDiffNode],
+      edges: [...get().edges, lockedEdge],
+    })
+  },
+
+  addImageToNode: (nodeId, image) => {
+    const node = get().nodes.find((n) => n.id === nodeId)
+    if (!node) return
+
+    if (node.type === 'imageNode') {
+      const imgData = node.data as any
+      const currentImages =
+        imgData.images && Array.isArray(imgData.images) && imgData.images.length > 0
+          ? imgData.images
+          : imgData.url
+          ? [
+              {
+                id: `${node.id}-img-1`,
+                url: imgData.url,
+                name: imgData.name || imgData.title || 'captura.png',
+                annotations: imgData.annotations || [],
+              },
+            ]
+          : []
+
+      const newItem = {
+        id: `img-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        url: image.url,
+        name: image.name || `captura-${currentImages.length + 1}.png`,
+        annotations: [],
+      }
+
+      const updatedImages = [...currentImages, newItem]
+      const nextIndex = updatedImages.length - 1
+
+      get().updateNodeData(nodeId, {
+        images: updatedImages,
+        activeImageIndex: nextIndex,
+        url: updatedImages[0]?.url,
+        name: updatedImages[0]?.name,
+      })
+
+      // If this image node is connected to any agents, sync the new image immediately
+      const connectedEdges = get().edges.filter(
+        (e) => e.source === nodeId || e.target === nodeId
+      )
+      connectedEdges.forEach((edge) => {
+        const otherNodeId = edge.source === nodeId ? edge.target : edge.source
+        const otherNode = get().nodes.find((n) => n.id === otherNodeId)
+        if (otherNode && otherNode.type === 'agentNode') {
+          get().attachImageToAgent(otherNode.id, {
+            id: newItem.id,
+            url: newItem.url,
+            name: newItem.name,
+            nodeId: nodeId,
+          })
+        }
+      })
+    } else if (node.type === 'agentNode') {
+      const badge = {
+        id: `img-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        url: image.url,
+        name: image.name || 'captura.png',
+      }
+      get().attachImageToAgent(nodeId, badge)
+    }
   },
 
   spawnSubagent: (parentId, childType) => {
@@ -1385,30 +1808,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         agentType: childType,
         role: isClaude ? 'planner' : 'executor',
         status: 'idle',
-        viewMode: 'extension',
-        thinking: {
-          duration: 'Pronto',
-          thoughts: [
-            `Subagente instanciado dinamicamente a partir do nó [${(parent.data as any).title || parentId}].`,
-            'Canal de comunicação entre agentes configurado via grafo.',
-          ],
-          isExpanded: false,
-        },
-        messages: [
-          {
-            id: `msg-sub-${Date.now()}`,
-            sender: 'agent',
-            text: `Subagente ${childType.toUpperCase()} inicializado e vinculado ao nó pai. Pronto para receber sub-tarefas especializadas.`,
-            timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          },
-        ],
+        viewMode: 'terminal',
+        thinking: null,
+        messages: [],
         approvals: [],
         attachedImages: [],
-        terminalLogs: [
-          `> [SPAWN] Subagente ${childType.toUpperCase()} criado pelo nó [${parentId}]`,
-          `> Conexão PTY multiplexada pronta`,
-          `> Sessão vinculada ao workspace ativo`,
-        ],
+        terminalLogs: [],
       },
     }
 
@@ -1439,10 +1844,248 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     })
   },
 
-  deleteEdge: (edgeId) => {
+  createArtifactFromAgent: (agentId, title, content) => {
+    const parent = get().nodes.find((n) => n.id === agentId)
+    const existingOutEdges = get().edges.filter((e) => e.source === agentId)
+    const posX = parent ? parent.position.x + 440 : 250
+    const posY = parent ? parent.position.y + (existingOutEdges.length * 60) - 20 : 200
+
+    const artifactId = `node-artifact-${Date.now()}`
+    const newArtifactNode: Node = {
+      id: artifactId,
+      type: 'artifactNode',
+      position: { x: posX, y: posY },
+      data: {
+        title: title || 'Documento de Artefato',
+        markdownContent: content || '',
+        status: 'draft',
+        parentAgentId: agentId,
+        parentAgentTitle: (parent?.data as any)?.title || 'Agente',
+      },
+    }
+
+    const edge: Edge = {
+      id: `e-${agentId}-${artifactId}`,
+      source: agentId,
+      target: artifactId,
+      type: 'removable',
+      animated: true,
+      data: { isLocked: true },
+      style: { stroke: '#6366F1', strokeWidth: 2 },
+    }
+
+    const currentLogs = ((parent?.data as any)?.terminalLogs || []) as string[]
+    const updatedLogs = [
+      ...currentLogs,
+      `> [CGLI] Nó de artefato [${newArtifactNode.data.title}] criado no canvas.`,
+    ]
+
     set({
-      edges: get().edges.filter((e) => e.id !== edgeId),
+      nodes: [
+        ...get().nodes.map((n) =>
+          n.id === agentId ? { ...n, data: { ...n.data, terminalLogs: updatedLogs } } : n
+        ),
+        newArtifactNode,
+      ],
+      edges: [...get().edges, edge],
     })
+  },
+
+  createPreviewFromAgent: (agentId, title, html) => {
+    const parent = get().nodes.find((n) => n.id === agentId)
+    const existingOutEdges = get().edges.filter((e) => e.source === agentId)
+    const posX = parent ? parent.position.x + 440 : 250
+    const posY = parent ? parent.position.y + (existingOutEdges.length * 70) + 60 : 250
+
+    const previewId = `node-preview-${Date.now()}`
+    const newPreviewNode: Node = {
+      id: previewId,
+      type: 'previewNode',
+      position: { x: posX, y: posY },
+      data: {
+        title: title || 'Preview Web',
+        htmlPreview: html || '',
+        status: 'ready',
+        parentAgentId: agentId,
+        parentAgentTitle: (parent?.data as any)?.title || 'Agente',
+      },
+    }
+
+    const edge: Edge = {
+      id: `e-${agentId}-${previewId}`,
+      source: agentId,
+      target: previewId,
+      type: 'removable',
+      animated: true,
+      data: { isLocked: true },
+      style: { stroke: '#06B6D4', strokeWidth: 2 },
+    }
+
+    const currentLogs = ((parent?.data as any)?.terminalLogs || []) as string[]
+    const updatedLogs = [
+      ...currentLogs,
+      `> [CGLI] Nó de preview [${newPreviewNode.data.title}] criado no canvas.`,
+    ]
+
+    set({
+      nodes: [
+        ...get().nodes.map((n) =>
+          n.id === agentId ? { ...n, data: { ...n.data, terminalLogs: updatedLogs } } : n
+        ),
+        newPreviewNode,
+      ],
+      edges: [...get().edges, edge],
+    })
+  },
+
+  createDiffFromAgent: (agentId, title, filename, lines) => {
+    const parent = get().nodes.find((n) => n.id === agentId)
+    const posX = parent ? parent.position.x + 420 : 250
+    const posY = parent ? parent.position.y + 160 : 280
+
+    const diffId = `diff-${agentId}-${Date.now()}`
+    const diffLines: DiffLine[] = lines && Array.isArray(lines) ? lines : []
+    const additions = diffLines.filter((l) => l.type === 'add').length
+    const deletions = diffLines.filter((l) => l.type === 'remove').length
+
+    const newDiffNode: Node = {
+      id: diffId,
+      type: 'diffNode',
+      position: { x: posX, y: posY },
+      data: {
+        title: title || (filename ? `Diff: ${filename.split('/').pop() || filename}` : 'Diff de Alterações'),
+        filename: filename || 'Nenhum arquivo modificado',
+        lines: diffLines,
+        stats: { additions, deletions },
+        parentAgentId: agentId,
+        parentAgentTitle: (parent?.data as any)?.title || 'Agente',
+      },
+    }
+
+    const lockedEdge: Edge = {
+      id: `e-${agentId}-${diffId}`,
+      source: agentId,
+      target: diffId,
+      type: 'removable',
+      animated: true,
+      data: { isLocked: true },
+      style: { stroke: '#10B981', strokeWidth: 2 },
+    }
+
+    const currentLogs = ((parent?.data as any)?.terminalLogs || []) as string[]
+    const updatedLogs = [
+      ...currentLogs,
+      `> [CGLI] Nó de diff [${newDiffNode.data.title}] criado no canvas.`,
+    ]
+
+    set({
+      nodes: [
+        ...get().nodes.map((n) =>
+          n.id === agentId ? { ...n, data: { ...n.data, terminalLogs: updatedLogs } } : n
+        ),
+        newDiffNode,
+      ],
+      edges: [...get().edges, lockedEdge],
+    })
+  },
+
+  spawnSubagentFromAction: (parentId, childType, role = 'executor', task) => {
+    const parent = get().nodes.find((n) => n.id === parentId)
+    const childId = `node-${childType}-sub-${Date.now()}`
+    const isClaude = childType.toLowerCase().includes('claude')
+    const color = isClaude ? '#EA580C' : '#0284C7'
+
+    const existingOutEdges = get().edges.filter((e) => e.source === parentId)
+    const posX = parent ? parent.position.x + 480 : 250
+    const posY = parent ? parent.position.y + existingOutEdges.length * 140 : 200
+
+    const workspacePath = get().getActiveWorkspacePath()
+    const initialMessages: ChatMessage[] = task
+      ? [
+          {
+            id: `msg-${Date.now()}`,
+            sender: 'user',
+            text: task,
+            timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          },
+        ]
+      : []
+
+    const newSubNode: Node = {
+      id: childId,
+      type: 'agentNode',
+      position: { x: posX, y: posY },
+      data: {
+        title: isClaude ? 'Subagente Claude Code' : 'Subagente Antigravity (AGY)',
+        agentType: childType,
+        role,
+        status: task ? 'running' : 'idle',
+        viewMode: 'terminal',
+        thinking: null,
+        messages: initialMessages,
+        approvals: [],
+        attachedImages: [],
+        terminalLogs: [
+          `> [CGLI] Subagente [${childId}] criado pelo nó [${parentId}]`,
+          `> Sessão PTY inicializada no workspace: ${workspacePath}`,
+        ],
+        workspacePath,
+        sessionId: `pty-${childId}`,
+      },
+    }
+
+    const newEdge: Edge = {
+      id: `e-${parentId}-${childId}`,
+      source: parentId,
+      target: childId,
+      animated: true,
+      style: { stroke: color, strokeWidth: 2, strokeDasharray: '4 4' },
+    }
+
+    const currentParentLogs = ((parent?.data as any)?.terminalLogs || []) as string[]
+    const updatedParentLogs = [
+      ...currentParentLogs,
+      `> [CGLI] Subagente [${newSubNode.data.title}] invocado com sucesso.`,
+    ]
+
+    set({
+      nodes: [
+        ...get().nodes.map((n) =>
+          n.id === parentId
+            ? { ...n, data: { ...n.data, terminalLogs: updatedParentLogs } }
+            : n
+        ),
+        newSubNode,
+      ],
+      edges: [...get().edges, newEdge],
+    })
+
+    // If task was provided, write to PTY after brief startup delay
+    if (task) {
+      setTimeout(() => {
+        ptyService.writePty(`pty-${childId}`, `${task}\r`)
+      }, 1200)
+    }
+  },
+
+  deleteEdge: (edgeId) => {
+    const currentEdges = get().edges
+    const edgeToRemove = currentEdges.find((e) => e.id === edgeId)
+    if (edgeToRemove) {
+      const isLocked = Boolean((edgeToRemove.data as any)?.isLocked)
+      const parentExists = get().nodes.some(
+        (n) => n.id === edgeToRemove.source || n.id === edgeToRemove.target
+      )
+      if (isLocked && parentExists) {
+        return
+      }
+      const remaining = currentEdges.filter((e) => e.id !== edgeId)
+      detachImagesIfNoRemainingEdge(edgeToRemove, remaining, () => get().nodes, get().updateNodeData)
+      detachArtifactsIfNoRemainingEdge(edgeToRemove, remaining, () => get().nodes, get().updateNodeData)
+      set({
+        edges: remaining,
+      })
+    }
   },
 
   addNodeToGroup: (groupId, nodeId) => {
@@ -1680,8 +2323,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         .join(', ')})`,
     }
 
+    const updatedStash = [newItem, ...get().stashItems]
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('cgli_stash_items', JSON.stringify(updatedStash))
+      } catch (e) {
+        console.error('Error saving stash to localStorage:', e)
+      }
+    }
+
     set({
-      stashItems: [newItem, ...get().stashItems],
+      stashItems: updatedStash,
       nodes: get().nodes.filter((n) => !allNodeIdsToStash.includes(n.id)),
       edges: get().edges.filter(
         (e) => !allNodeIdsToStash.includes(e.source) && !allNodeIdsToStash.includes(e.target)
@@ -1692,4 +2344,90 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
 if (typeof window !== 'undefined') {
   ;(window as any).__canvasStore = useCanvasStore
+
+  let saveCanvasTimer: any = null
+  useCanvasStore.subscribe((state) => {
+    try {
+      localStorage.setItem('cgli_stash_items', JSON.stringify(state.stashItems))
+      localStorage.setItem('cgli_clis', JSON.stringify(state.clis))
+      localStorage.setItem('cgli_skills', JSON.stringify(state.skills))
+      localStorage.setItem('cgli_theme', state.theme)
+
+      clearTimeout(saveCanvasTimer)
+      saveCanvasTimer = setTimeout(() => {
+        try {
+          localStorage.setItem(
+            `cgli_canvas_${state.currentProjectId}`,
+            JSON.stringify({ nodes: state.nodes, edges: state.edges })
+          )
+        } catch (e) {
+          console.error('Error auto-saving canvas to localStorage:', e)
+        }
+      }, 150)
+    } catch (e) {
+      console.error('Error in canvas store subscriber:', e)
+    }
+  })
+
+  window.addEventListener('beforeunload', () => {
+    try {
+      const state = useCanvasStore.getState()
+      localStorage.setItem(
+        `cgli_canvas_${state.currentProjectId}`,
+        JSON.stringify({ nodes: state.nodes, edges: state.edges })
+      )
+      localStorage.setItem('cgli_stash_items', JSON.stringify(state.stashItems))
+      localStorage.setItem('cgli_clis', JSON.stringify(state.clis))
+      localStorage.setItem('cgli_skills', JSON.stringify(state.skills))
+      localStorage.setItem('cgli_theme', state.theme)
+    } catch (e) {
+      console.error('Error flushing canvas to localStorage before unload:', e)
+    }
+  })
+
+  // Listen for actions dispatched from CLI agents via CGLI Bridge
+  ptyService.onBridgeAction((action) => {
+    const state = useCanvasStore.getState()
+    const parentId =
+      action.parent_node_id ||
+      state.nodes.find((n) => n.type === 'agentNode')?.id
+
+    if (!parentId) return
+
+    if (action.action_type === 'spawn_subagent') {
+      state.spawnSubagentFromAction(
+        parentId,
+        action.child_type || 'agy',
+        action.role || 'executor',
+        action.task
+      )
+    } else if (action.action_type === 'create_artifact') {
+      state.createArtifactFromAgent(
+        parentId,
+        action.title || 'Documento de Artefato',
+        action.content || ''
+      )
+    } else if (action.action_type === 'create_preview') {
+      state.createPreviewFromAgent(
+        parentId,
+        action.title || 'Preview Web',
+        action.html || ''
+      )
+    } else if (action.action_type === 'create_diff') {
+      let lines: DiffLine[] | undefined
+      if (action.content) {
+        lines = action.content.split('\n').map((l) => {
+          if (l.startsWith('+')) return { type: 'add' as const, content: l }
+          if (l.startsWith('-')) return { type: 'remove' as const, content: l }
+          return { type: 'normal' as const, content: l }
+        })
+      }
+      state.createDiffFromAgent(
+        parentId,
+        action.title || 'Alterações de Código',
+        action.filename || 'diff.patch',
+        lines
+      )
+    }
+  })
 }

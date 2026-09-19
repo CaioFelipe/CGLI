@@ -1,15 +1,26 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 
-function cliRunnerPlugin(): Plugin {
+interface PtySessionState {
+  child: ChildProcess
+  listeners: Set<(data: string) => void>
+  exitListeners: Set<() => void>
+  buffer: string[]
+}
+
+const activeSessions = new Map<string, PtySessionState>()
+const bridgeActionListeners = new Set<(action: any) => void>()
+
+function ptyServerPlugin(): Plugin {
   return {
-    name: 'cli-runner-plugin',
+    name: 'pty-server-plugin',
     configureServer(server) {
-      server.middlewares.use('/api/agent/run', (req, res) => {
+      // 1. Spawn PTY session
+      server.middlewares.use('/api/pty/spawn', (req, res) => {
         if (req.method !== 'POST') {
           res.statusCode = 405
           res.end(JSON.stringify({ error: 'Method not allowed' }))
@@ -17,99 +28,215 @@ function cliRunnerPlugin(): Plugin {
         }
 
         let body = ''
-        req.on('data', (chunk) => {
-          body += chunk
-        })
-
+        req.on('data', (chunk) => (body += chunk))
         req.on('end', () => {
           try {
-            const data = JSON.parse(body || '{}')
-            const { agentType, prompt, images, cwd } = data
+            const { sessionId, command, args = [], cwd, env = {} } = JSON.parse(body || '{}')
             const workDir = cwd || process.cwd()
 
-            let finalPrompt = String(prompt || '')
-            if (images && Array.isArray(images) && images.length > 0) {
-              const firstImg = images[0]
-              if (typeof firstImg === 'string' && firstImg.startsWith('data:image/')) {
-                try {
-                  const base64Content = firstImg.split(';base64,').pop()
-                  if (base64Content) {
-                    const tempImgPath = path.resolve(workDir, '.canvas_context_image.png')
-                    fs.writeFileSync(tempImgPath, Buffer.from(base64Content, 'base64'))
-                    finalPrompt = `[Nota: Imagem de contexto conectada salva em .canvas_context_image.png] ${finalPrompt}`
-                  }
-                } catch (e) {
-                  console.error('Erro ao salvar imagem temporária:', e)
+            // If session exists, terminate first
+            if (activeSessions.has(sessionId)) {
+              const old = activeSessions.get(sessionId)
+              old?.child.kill()
+              activeSessions.delete(sessionId)
+            }
+
+            const isWindows = process.platform === 'win32'
+            let cmdToRun = command || 'claude'
+            let finalArgs = [...args]
+
+            if (isWindows) {
+              if (cmdToRun === 'claude') {
+                const appdata = process.env.APPDATA || ''
+                const claudeExe = path.join(appdata, 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe')
+                const claudeCmd = path.join(appdata, 'npm', 'claude.cmd')
+                if (fs.existsSync(claudeExe)) {
+                  cmdToRun = claudeExe
+                } else if (fs.existsSync(claudeCmd)) {
+                  cmdToRun = claudeCmd
+                }
+              } else if (cmdToRun === 'agy') {
+                const localapp = process.env.LOCALAPPDATA || ''
+                const agyExe = path.join(localapp, 'agy', 'bin', 'agy.exe')
+                if (fs.existsSync(agyExe)) {
+                  cmdToRun = agyExe
                 }
               }
             }
 
-            const isWindows = process.platform === 'win32'
-            let childProcess
+            // Setup .cgli scripts if in workspace
+            const binDir = path.join(workDir, '.cgli', 'bin')
+            try {
+              fs.mkdirSync(binDir, { recursive: true })
+            } catch (_) {}
 
-            if (agentType === 'agy') {
-              const agyBin = isWindows
-                ? 'C:\\Users\\aluno\\AppData\\Local\\agy\\bin\\agy.exe'
-                : 'agy'
-              childProcess = spawn(agyBin, ['-p', finalPrompt], {
-                cwd: workDir,
-                shell: false,
-                env: { ...process.env, CI: '1' },
-              })
-              childProcess.stdin?.end()
-            } else {
-              // Claude Code - pipe prompt through stdin to avoid cmd.exe argument escaping issues
-              const claudeBin = isWindows ? 'claude.cmd' : 'claude'
-              childProcess = spawn(claudeBin, ['-p'], {
-                cwd: workDir,
-                shell: isWindows,
-                env: { ...process.env, CI: '1' },
-              })
-              childProcess.stdin?.write(finalPrompt)
-              childProcess.stdin?.end()
+            const child = spawn(cmdToRun, finalArgs, {
+              cwd: workDir,
+              shell: isWindows,
+              env: {
+                ...process.env,
+                ...env,
+                PATH: isWindows ? `${binDir};${process.env.PATH}` : `${binDir}:${process.env.PATH}`,
+                CGLI_WORKSPACE_PATH: workDir,
+                CGLI_NODE_ID: sessionId,
+                CGLI_BRIDGE_PORT: '41732',
+              },
+            })
+
+            const sessionState: PtySessionState = {
+              child,
+              listeners: new Set(),
+              exitListeners: new Set(),
+              buffer: [],
             }
 
-            const child = childProcess
+            const broadcast = (chunk: string) => {
+              // Parse stream markers
+              const markerRegex = /<<<CGLI:([A-Z_]+)\s+({.*?})>>>/g
+              let match
+              while ((match = markerRegex.exec(chunk)) !== null) {
+                try {
+                  const actionType = match[1].toLowerCase()
+                  const payload = JSON.parse(match[2])
+                  const actionObj = { action_type: actionType, parent_node_id: sessionId, ...payload }
+                  bridgeActionListeners.forEach((fn) => fn(actionObj))
+                } catch (_) {}
+              }
 
-            let stdout = ''
-            let stderr = ''
+              sessionState.buffer.push(chunk)
+              if (sessionState.buffer.length > 200) sessionState.buffer.shift()
+              sessionState.listeners.forEach((fn) => fn(chunk))
+            }
 
-            child.stdout?.on('data', (d) => {
-              stdout += d.toString()
-            })
+            child.stdout?.on('data', (d) => broadcast(d.toString()))
+            child.stderr?.on('data', (d) => broadcast(d.toString()))
 
-            child.stderr?.on('data', (d) => {
-              stderr += d.toString()
-            })
-
-            child.on('close', (code) => {
-              // Clean any warning text like "Warning: no stdin data received in 3s..."
-              const cleanedStdout = stdout
-                .replace(/^Warning: no stdin data received in \d+s[^\n]*\n?/gm, '')
-                .trim()
-
-              res.setHeader('Content-Type', 'application/json')
-              res.statusCode = 200
-              res.end(
-                JSON.stringify({
-                  success: code === 0 || cleanedStdout.length > 0,
-                  output: cleanedStdout || stderr || 'Execução concluída.',
-                  code,
-                  stderr,
-                })
-              )
+            child.on('close', () => {
+              sessionState.exitListeners.forEach((fn) => fn())
+              activeSessions.delete(sessionId)
             })
 
             child.on('error', (err) => {
-              res.setHeader('Content-Type', 'application/json')
-              res.statusCode = 500
-              res.end(JSON.stringify({ success: false, error: err.message }))
+              broadcast(`\r\n\x1b[31m[Erro ao executar processo]: ${err.message}\x1b[0m\r\n`)
             })
-          } catch (err: any) {
+
+            activeSessions.set(sessionId, sessionState)
+
             res.setHeader('Content-Type', 'application/json')
-            res.statusCode = 400
-            res.end(JSON.stringify({ success: false, error: err.message }))
+            res.statusCode = 200
+            res.end(JSON.stringify({ success: true, sessionId }))
+          } catch (e: any) {
+            res.statusCode = 500
+            res.end(JSON.stringify({ success: false, error: e.message }))
           }
+        })
+      })
+
+      // 2. Stream PTY output (Server-Sent Events)
+      server.middlewares.use('/api/pty/stream', (req, res) => {
+        const url = new URL(req.url || '', `http://${req.headers.host}`)
+        const sessionId = url.searchParams.get('sessionId') || ''
+        const session = activeSessions.get(sessionId)
+
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        })
+
+        res.write('retry: 1000\n\n')
+
+        // Flush existing output buffer
+        if (session) {
+          for (const chunk of session.buffer) {
+            res.write(`data: ${JSON.stringify(chunk)}\n\n`)
+          }
+        }
+
+        const listener = (chunk: string) => {
+          res.write(`data: ${JSON.stringify(chunk)}\n\n`)
+        }
+
+        const exitListener = () => {
+          res.write(`event: exit\ndata: {}\n\n`)
+        }
+
+        if (session) {
+          session.listeners.add(listener)
+          session.exitListeners.add(exitListener)
+        }
+
+        req.on('close', () => {
+          if (session) {
+            session.listeners.delete(listener)
+            session.exitListeners.delete(exitListener)
+          }
+        })
+      })
+
+      // 3. Write to PTY stdin
+      server.middlewares.use('/api/pty/write', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          res.end()
+          return
+        }
+
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', () => {
+          try {
+            const { sessionId, data } = JSON.parse(body || '{}')
+            const session = activeSessions.get(sessionId)
+            if (session?.child.stdin?.writable) {
+              session.child.stdin.write(data)
+            }
+            res.statusCode = 200
+            res.end(JSON.stringify({ success: true }))
+          } catch (e: any) {
+            res.statusCode = 500
+            res.end(JSON.stringify({ success: false, error: e.message }))
+          }
+        })
+      })
+
+      // 4. Kill PTY
+      server.middlewares.use('/api/pty/kill', (req, res) => {
+        let body = ''
+        req.on('data', (chunk) => (body += chunk))
+        req.on('end', () => {
+          try {
+            const { sessionId } = JSON.parse(body || '{}')
+            const session = activeSessions.get(sessionId)
+            if (session) {
+              session.child.kill()
+              activeSessions.delete(sessionId)
+            }
+            res.statusCode = 200
+            res.end(JSON.stringify({ success: true }))
+          } catch (_) {
+            res.statusCode = 200
+            res.end(JSON.stringify({ success: true }))
+          }
+        })
+      })
+
+      // 5. Bridge Actions SSE stream
+      server.middlewares.use('/api/bridge/events', (req, res) => {
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        })
+        res.write('retry: 2000\n\n')
+
+        const actionListener = (action: any) => {
+          res.write(`data: ${JSON.stringify(action)}\n\n`)
+        }
+
+        bridgeActionListeners.add(actionListener)
+        req.on('close', () => {
+          bridgeActionListeners.delete(actionListener)
         })
       })
     },
@@ -118,5 +245,5 @@ function cliRunnerPlugin(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss(), cliRunnerPlugin()],
+  plugins: [react(), tailwindcss(), ptyServerPlugin()],
 })

@@ -35,23 +35,39 @@ pub fn resolve_command(command: &str) -> String {
 
     #[cfg(windows)]
     {
+        // Direct known path shortcuts for common AI CLI tools
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            let claude_exe = Path::new(&appdata).join("npm").join("node_modules").join("@anthropic-ai").join("claude-code").join("bin").join("claude.exe");
+            if (trimmed == "claude" || trimmed == "claude.exe" || trimmed == "claude-code" || trimmed.contains("claude")) && claude_exe.is_file() {
+                return claude_exe.to_string_lossy().to_string();
+            }
+            let claude_cmd = Path::new(&appdata).join("npm").join("claude.cmd");
+            if (trimmed == "claude" || trimmed == "claude.cmd" || trimmed == "claude-code" || trimmed.contains("claude")) && claude_cmd.is_file() {
+                return claude_cmd.to_string_lossy().to_string();
+            }
+        }
+        if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+            let agy_exe = Path::new(&localappdata).join("agy").join("bin").join("agy.exe");
+            if (trimmed == "agy" || trimmed == "agy.exe" || trimmed.contains("agy")) && agy_exe.is_file() {
+                return agy_exe.to_string_lossy().to_string();
+            }
+        }
+
         if let Ok(path_var) = std::env::var("PATH") {
-            let pathext = std::env::var("PATHEXT")
-                .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD;.ps1".to_string());
-            let extensions: Vec<&str> = pathext.split(';').collect();
+            let extensions = [".exe", ".cmd", ".bat", ".com"];
 
             for dir in std::env::split_paths(&path_var) {
-                let direct = dir.join(trimmed);
-                if direct.is_file() {
-                    return direct.to_string_lossy().to_string();
+                // If trimmed already has an extension, check direct file
+                if trimmed.contains('.') {
+                    let direct = dir.join(trimmed);
+                    if direct.is_file() {
+                        return direct.to_string_lossy().to_string();
+                    }
                 }
+
+                // Check with standard executable extensions
                 for ext in &extensions {
-                    let ext_clean = ext.trim();
-                    let with_ext = if !ext_clean.starts_with('.') {
-                        dir.join(format!("{}.{}", trimmed, ext_clean))
-                    } else {
-                        dir.join(format!("{}{}", trimmed, ext_clean))
-                    };
+                    let with_ext = dir.join(format!("{}{}", trimmed, ext));
                     if with_ext.is_file() {
                         return with_ext.to_string_lossy().to_string();
                     }
@@ -89,6 +105,7 @@ impl SessionManager {
         command: String,
         args: Vec<String>,
         cwd: Option<String>,
+        env: Option<HashMap<String, String>>,
     ) -> Result<String, String> {
         let pty_system = native_pty_system();
         let pair = pty_system
@@ -130,6 +147,34 @@ impl SessionManager {
                     let _ = std::fs::create_dir_all(p);
                 }
                 cmd.cwd(p);
+
+                // Setup .cgli scripts and environment in workspace
+                let port = crate::bridge::get_bridge_port();
+                crate::bridge::ensure_cgli_environment(p, port);
+
+                // Add .cgli/bin to PATH for the child process
+                let bin_dir = p.join(".cgli").join("bin");
+                if let Ok(current_path) = std::env::var("PATH") {
+                    #[cfg(windows)]
+                    let new_path = format!("{};{}", bin_dir.display(), current_path);
+                    #[cfg(not(windows))]
+                    let new_path = format!("{}:{}", bin_dir.display(), current_path);
+                    cmd.env("PATH", new_path);
+                }
+
+                cmd.env("CGLI_WORKSPACE_PATH", p.display().to_string());
+                cmd.env("CGLI_NODE_ID", session_id.replace("pty-", ""));
+            }
+        }
+
+        let port = crate::bridge::get_bridge_port();
+        if port > 0 {
+            cmd.env("CGLI_BRIDGE_PORT", port.to_string());
+        }
+
+        if let Some(env_vars) = env {
+            for (k, v) in env_vars {
+                cmd.env(k, v);
             }
         }
 
@@ -179,6 +224,27 @@ impl SessionManager {
                     }
                     Ok(n) => {
                         let data = String::from_utf8_lossy(&buf[..n]).to_string();
+
+                        // Detect stream markers like <<<CGLI:ACTION JSON>>>
+                        if data.contains("<<<CGLI:") {
+                            if let Some(start) = data.find("<<<CGLI:") {
+                                if let Some(end) = data[start..].find(">>>") {
+                                    let marker_content = &data[start + 8..start + end];
+                                    let mut parts = marker_content.trim().splitn(2, |c: char| c.is_whitespace());
+                                    let action_name = parts.next().unwrap_or("").to_lowercase();
+                                    let json_str = parts.next().unwrap_or("{}");
+
+                                    if let Ok(mut action) = serde_json::from_str::<crate::bridge::BridgeAction>(json_str) {
+                                        action.action_type = action_name;
+                                        if action.parent_node_id.is_none() {
+                                            action.parent_node_id = Some(session_id_clone.replace("pty-", ""));
+                                        }
+                                        let _ = app_handle_clone.emit("cgli-bridge-action", &action);
+                                    }
+                                }
+                            }
+                        }
+
                         if let Err(err) = app_handle_clone.emit(&event_name, data) {
                             log::warn!("Failed to emit PTY output for '{}': {}", session_id_clone, err);
                             break;
@@ -197,12 +263,19 @@ impl SessionManager {
     }
 
     pub fn write(&self, session_id: &str, data: &str) -> Result<(), String> {
-        let writer = {
-            let sessions = self.sessions.lock().map_err(|e| e.to_string())?;
-            let session = sessions
-                .get(session_id)
-                .ok_or_else(|| format!("PTY session '{}' not found", session_id))?;
-            session.writer.clone()
+        let mut attempts = 0;
+        let writer = loop {
+            {
+                let sessions = self.sessions.lock().map_err(|e| e.to_string())?;
+                if let Some(session) = sessions.get(session_id) {
+                    break session.writer.clone();
+                }
+            }
+            attempts += 1;
+            if attempts > 25 {
+                return Err(format!("PTY session '{}' not found after retry", session_id));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
         };
 
         let mut writer_guard = writer.lock().map_err(|e| e.to_string())?;

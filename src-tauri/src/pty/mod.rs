@@ -13,8 +13,9 @@ pub async fn spawn_pty(
     command: String,
     args: Vec<String>,
     cwd: Option<String>,
+    env: Option<std::collections::HashMap<String, String>>,
 ) -> Result<String, String> {
-    state.spawn(&app, session_id, command, args, cwd)
+    state.spawn(&app, session_id, command, args, cwd, env)
 }
 
 #[tauri::command]

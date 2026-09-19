@@ -29,10 +29,25 @@ export const ImageAnnotationModal: React.FC = () => {
   const activeGroupImage = groupData?.images?.[groupData.activeImageIndex || 0]
 
   const nodeData = activeNode?.data as unknown as ImageNodeData | undefined
-  const imageUrl = isGroup ? activeGroupImage?.url : nodeData?.url
-  const imageName = isGroup ? activeGroupImage?.name : (nodeData?.title || nodeData?.name)
+  const hasMultiImages = Boolean(nodeData?.images && nodeData.images.length > 0)
+  const activeMultiImage = hasMultiImages
+    ? nodeData?.images?.[nodeData.activeImageIndex || 0]
+    : undefined
+
+  const imageUrl = isGroup
+    ? activeGroupImage?.url
+    : hasMultiImages
+    ? activeMultiImage?.url
+    : nodeData?.url
+  const imageName = isGroup
+    ? activeGroupImage?.name
+    : hasMultiImages
+    ? activeMultiImage?.name
+    : (nodeData?.title || nodeData?.name)
   const currentAnnotations = isGroup
     ? (activeGroupImage?.annotations || [])
+    : hasMultiImages
+    ? (activeMultiImage?.annotations || [])
     : (nodeData?.annotations || [])
 
   const [annotations, setAnnotations] = useState<AnnotationItem[]>(

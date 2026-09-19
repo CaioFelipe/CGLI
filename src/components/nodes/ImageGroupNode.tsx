@@ -9,7 +9,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react'
-import React from 'react'
+import React, { useRef } from 'react'
 import { useCanvasStore } from '../../store/canvasStore'
 import type { AnnotationItem, ImageGroupNodeData } from '../../types/canvas'
 
@@ -18,6 +18,7 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const { theme, openAnnotationModal, stashNode, deleteNode, updateNodeData } = useCanvasStore()
   const currentIndex = nodeData.activeImageIndex || 0
 
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const accentColor = '#F43F5E'
   const images = nodeData.images || []
   const activeImage = images[currentIndex]
@@ -37,14 +38,38 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   }
 
   const handleAddImage = () => {
-    const newImg = {
-      id: `img-${Date.now()}`,
-      url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80',
-      name: `captura-${images.length + 1}.png`,
-      annotations: [],
-    }
-    const updated = [...images, newImg]
-    updateNodeData(id, { images: updated, activeImageIndex: updated.length - 1 })
+    fileInputRef.current?.click()
+  }
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return
+    const fileArray = Array.from(e.target.files).filter((f) => f.type.startsWith('image/'))
+    if (fileArray.length === 0) return
+
+    let readCount = 0
+    const newItems: any[] = []
+
+    fileArray.forEach((file) => {
+      const reader = new FileReader()
+      reader.onload = (uploadEvent) => {
+        const result = uploadEvent.target?.result as string
+        if (result) {
+          newItems.push({
+            id: `img-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            url: result,
+            name: file.name,
+            annotations: [],
+          })
+        }
+        readCount++
+        if (readCount === fileArray.length) {
+          const updated = [...images, ...newItems]
+          updateNodeData(id, { images: updated, activeImageIndex: updated.length - 1 })
+        }
+      }
+      reader.readAsDataURL(file)
+    })
+    e.target.value = ''
   }
 
   // Render SVG annotations overlay over the active image
@@ -193,6 +218,14 @@ export const ImageGroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         borderColor: selected ? accentColor : undefined,
       }}
     >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleFileInputChange}
+      />
       {/* NodeResizer for interactive resizing */}
       <NodeResizer
         minWidth={300}

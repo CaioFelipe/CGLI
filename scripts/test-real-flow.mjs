@@ -6,11 +6,11 @@ async function testRealFlow() {
 
   // 1. Simulação do Nó de Imagem conectado ao Claude Code
   const imageContext = {
-    id: 'node-image-mockup',
-    name: 'dashboard-metricas-mockup.png',
+    id: 'node-image-reference',
+    name: 'component-layout.png',
     annotations: [
-      { tool: 'circle', color: '#EF4444', label: 'Card de Taxa de Conversão' },
-      { tool: 'arrow', color: '#3B82F6', label: 'Botão de Ação Primária' },
+      { tool: 'circle', color: '#EF4444', label: 'Área do Cabeçalho' },
+      { tool: 'arrow', color: '#3B82F6', label: 'Botão de Ação' },
     ],
   };
 
@@ -20,7 +20,7 @@ async function testRealFlow() {
 
   // 2. Execução Real de Claude Code
   console.log('🧠 2. Enviando instrução para o CLI REAL de Claude Code...');
-  const claudePrompt = `Analise este contexto de imagem de mockup (${imageContext.name}) com anotações de design e crie um plano de implementação conciso (máximo 4 etapas) para o componente de métricas.`;
+  const claudePrompt = `Analise este contexto de imagem (${imageContext.name}) com anotações e crie um plano de implementação conciso (máximo 4 etapas) para o componente.`;
 
   const claudeStartTime = Date.now();
   const claudeRes = await fetch(API_URL, {
@@ -51,7 +51,7 @@ async function testRealFlow() {
   console.log('⚡ 4. Claude Code invocou autonomamente o subagente AGY!');
   console.log('   Enviando instrução para o CLI REAL do AGY gerar o Preview HTML...');
 
-  const agyPrompt = `Gere apenas o código HTML com estilos inline modernos para um card de dashboard com indicador de conversão e métricas, baseado no plano. Responda apenas com o código HTML.`;
+  const agyPrompt = `Gere apenas o código HTML completo com estilos inline modernos para o componente, baseado no plano. Responda apenas com o código HTML.`;
 
   const agyStartTime = Date.now();
   const agyRes = await fetch(API_URL, {

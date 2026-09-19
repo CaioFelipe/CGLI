@@ -2,13 +2,11 @@ import {
   Archive,
   Check,
   ChevronDown,
-  FileCode,
   FolderArchive,
   FolderGit2,
   FolderPlus,
   FolderSearch,
   Image as ImageIcon,
-  Layers,
   Moon,
   Plus,
   Settings,
@@ -18,6 +16,7 @@ import {
 } from 'lucide-react'
 import React, { useState } from 'react'
 import { useCanvasStore } from '../../store/canvasStore'
+import type { CliConfig } from '../../types/canvas'
 
 interface TopbarProps {
   onFitView?: () => void
@@ -39,67 +38,51 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
     openSettings,
     addNode,
     nodes,
+    clis,
+    getActiveWorkspacePath,
   } = useCanvasStore()
 
   const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false)
   const [isAddNodeOpen, setIsAddNodeOpen] = useState(false)
 
+  const handleAddAgent = (cliOrType: CliConfig | 'claude' | 'agy' | string) => {
+    let cli: CliConfig | undefined
+    if (typeof cliOrType === 'string') {
+      cli = clis.find((c) => c.id === cliOrType || c.binary === cliOrType)
+    } else {
+      cli = cliOrType
+    }
 
-  const handleAddAgent = (type: 'claude' | 'agy') => {
-    const isClaude = type === 'claude'
+    const type = cli ? cli.id : typeof cliOrType === 'string' ? cliOrType : 'claude'
+    const title = cli?.name || (type === 'claude' ? 'Claude Code' : 'Antigravity (AGY)')
+    const role = cli?.role || (type === 'claude' ? 'planner' : 'executor')
+    const workspacePath = getActiveWorkspacePath()
+    const nodeId = `node-${type}-${Date.now()}`
+
     const newNode = {
-      id: `node-${type}-${Date.now()}`,
+      id: nodeId,
       type: 'agentNode',
       position: { x: 200 + nodes.length * 30, y: 150 + nodes.length * 20 },
       data: {
-        title: isClaude ? 'Claude Code' : 'Antigravity (AGY)',
+        title,
         agentType: type,
-        role: isClaude ? 'planner' : 'executor',
+        cliId: cli?.id,
+        role,
         status: 'idle',
-        viewMode: 'extension',
+        viewMode: 'terminal',
         thinking: null,
-        messages: [
-          {
-            id: `msg-${Date.now()}`,
-            sender: 'agent',
-            text: isClaude
-              ? 'Pronto para planejar e estruturar tarefas do projeto.'
-              : 'Pronto para executar comandos e testes em segundo plano.',
-            timestamp: new Date().toLocaleTimeString('pt-BR', {
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
-          },
-        ],
+        messages: [],
         approvals: [],
         attachedImages: [],
-        terminalLogs: [`> ${type} session created`],
+        terminalLogs: [],
+        workspacePath,
+        sessionId: `pty-${nodeId}`,
       },
     }
     addNode(newNode)
     setIsAddNodeOpen(false)
   }
 
-  const handleAddArtifact = () => {
-    const newNode = {
-      id: `node-artifact-${Date.now()}`,
-      type: 'artifactNode',
-      position: { x: 300 + nodes.length * 25, y: 180 + nodes.length * 20 },
-      data: {
-        title: 'Novo Artefato',
-        activeTab: 'markdown',
-        markdownContent: `### Documento de Especificação\n\n> [!NOTE]\n> Descreva o escopo e diretrizes desta entrega aqui.\n\n- [ ] Tarefa inicial\n`,
-        htmlPreview: '<div style="font-family:sans-serif;padding:20px;color:#94a3b8"><h3>Preview Vazio</h3></div>',
-        diffContent: {
-          filename: 'src/index.ts',
-          lines: [{ type: 'normal', content: '// Arquivo inicial' }],
-        },
-        status: 'draft',
-      },
-    }
-    addNode(newNode)
-    setIsAddNodeOpen(false)
-  }
 
   const handleAddImage = () => {
     const newNode = {
@@ -107,36 +90,12 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
       type: 'imageNode',
       position: { x: 100 + nodes.length * 25, y: 220 + nodes.length * 20 },
       data: {
-        title: 'Nova Captura',
-        name: 'design-reference.png',
-        url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80',
-        annotations: [],
-      },
-    }
-    addNode(newNode)
-    setIsAddNodeOpen(false)
-  }
-
-  const handleAddImageGroup = () => {
-    const newNode = {
-      id: `node-img-group-${Date.now()}`,
-      type: 'imageGroupNode',
-      position: { x: 120 + nodes.length * 25, y: 200 + nodes.length * 20 },
-      data: {
-        title: 'Grupo de Referências',
+        title: 'Nova Imagem',
+        name: '',
+        url: '',
+        images: [],
         activeImageIndex: 0,
-        images: [
-          {
-            id: `img-g1-${Date.now()}`,
-            name: 'spec-layout.png',
-            url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80',
-          },
-          {
-            id: `img-g2-${Date.now()}`,
-            name: 'dashboard-preview.png',
-            url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80',
-          },
-        ],
+        annotations: [],
       },
     }
     addNode(newNode)
@@ -342,30 +301,41 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
                   : 'bg-white border-slate-200 text-slate-900'
               }`}
             >
-              <button
-                type="button"
-                onClick={() => handleAddAgent('claude')}
-                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2"
-              >
-                <div className="w-2 h-2 rounded-full bg-amber-500" />
-                <span>Agente Claude Code</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAddAgent('agy')}
-                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2"
-              >
-                <div className="w-2 h-2 rounded-full bg-sky-500" />
-                <span>Agente Antigravity</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleAddArtifact}
-                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2"
-              >
-                <FileCode className="w-3.5 h-3.5 text-indigo-500" />
-                <span>Visualizador de Artefato</span>
-              </button>
+              {clis && clis.length > 0 ? (
+                clis.map((cli) => (
+                  <button
+                    key={cli.id}
+                    type="button"
+                    onClick={() => handleAddAgent(cli)}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
+                  >
+                    <div
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: cli.color || '#6366F1' }}
+                    />
+                    <span className="truncate">{cli.name}</span>
+                  </button>
+                ))
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleAddAgent('claude')}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span>Agente Claude Code</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddAgent('agy')}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-sky-500" />
+                    <span>Agente Antigravity</span>
+                  </button>
+                </>
+              )}
               <button
                 type="button"
                 onClick={handleAddImage}
@@ -373,14 +343,6 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
               >
                 <ImageIcon className="w-3.5 h-3.5 text-rose-500" />
                 <span>Imagem / Captura</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleAddImageGroup}
-                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2"
-              >
-                <Layers className="w-3.5 h-3.5 text-rose-400" />
-                <span>Grupo de Imagens</span>
               </button>
               <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
               <button

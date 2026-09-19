@@ -1,34 +1,22 @@
 import { Handle, NodeResizer, type NodeProps, Position } from '@xyflow/react'
 import {
-  Archive,
   Check,
-  Code,
-  Eye,
-  FileCode2,
   FileText,
   Play,
-  RotateCw,
   Sparkles,
   Trash2,
 } from 'lucide-react'
-import React, { useState } from 'react'
+import React from 'react'
 import { useCanvasStore } from '../../store/canvasStore'
 import type { ArtifactNodeData } from '../../types/canvas'
 
-export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) => {
+export const ArtifactNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const nodeData = data as unknown as ArtifactNodeData
-  const { theme, updateNodeData, approveArtifact, stashNode, deleteNode } = useCanvasStore()
-  const [iframeKey, setIframeKey] = useState(0)
+  const { theme, approveArtifact, deleteNode } = useCanvasStore()
 
   const accentColor = '#6366F1'
-  const activeTab = nodeData.activeTab || 'markdown'
-
-  const handleTabChange = (tab: 'markdown' | 'preview' | 'diff') => {
-    updateNodeData(id, { activeTab: tab })
-  }
 
   const renderMarkdown = (content: string) => {
-    // Parse GitHub alerts and markdown structure cleanly
     const lines = content.split('\n')
     const elements: React.ReactNode[] = []
     let inAlert: { type: string; title: string; lines: string[] } | null = null
@@ -77,7 +65,6 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
           inAlert.lines.push(line.replace(/^>\s?/, ''))
           continue
         } else {
-          // Flush alert
           const alertColor =
             inAlert.type === 'IMPORTANT'
               ? 'border-purple-600 bg-purple-50 dark:bg-purple-950/30 text-purple-950 dark:text-purple-200'
@@ -136,7 +123,6 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
       }
     }
 
-    // Flush any trailing alert
     if (inAlert) {
       elements.push(
         <div
@@ -166,25 +152,25 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
       style={{
         width: '100%',
         height: '100%',
-        minWidth: 400,
-        minHeight: 320,
+        minWidth: 380,
+        minHeight: 280,
         borderColor: selected ? accentColor : undefined,
       }}
     >
-      {/* NodeResizer for interactive resizing */}
       <NodeResizer
-        minWidth={400}
-        minHeight={320}
+        minWidth={380}
+        minHeight={280}
         isVisible={selected}
         lineClassName="!border-indigo-500"
         handleClassName="!w-2.5 !h-2.5 !bg-white !border-2 !border-indigo-500 !rounded-xs"
       />
-      {/* Handles: Top, Left, Right, Bottom with explicit IDs and dual directions */}
+
+      {/* Handles: Top, Left, Right, Bottom with dual directions for linking */}
       <Handle
         id="top"
         type="target"
         position={Position.Top}
-        className="!bg-slate-400 dark:!bg-slate-400"
+        className="!bg-indigo-400 dark:!bg-indigo-400"
       />
       <Handle
         id="top-source"
@@ -196,7 +182,7 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
         id="left"
         type="target"
         position={Position.Left}
-        className="!bg-slate-400 dark:!bg-slate-400"
+        className="!bg-indigo-400 dark:!bg-indigo-400"
       />
       <Handle
         id="left-source"
@@ -208,7 +194,7 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
         id="right"
         type="source"
         position={Position.Right}
-        className="!bg-slate-400 dark:!bg-slate-400"
+        className="!bg-indigo-400 dark:!bg-indigo-400"
       />
       <Handle
         id="right-target"
@@ -220,7 +206,7 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
         id="bottom"
         type="source"
         position={Position.Bottom}
-        className="!bg-slate-400 dark:!bg-slate-400"
+        className="!bg-indigo-400 dark:!bg-indigo-400"
       />
       <Handle
         id="bottom-target"
@@ -240,11 +226,11 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
       >
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs bg-indigo-500/15 text-indigo-500">
-            <Sparkles className="w-3.5 h-3.5" />
+            <FileText className="w-3.5 h-3.5" />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-xs tracking-tight">{nodeData.title}</span>
+              <span className="font-semibold text-xs tracking-tight">{nodeData.title || 'Documento de Artefato'}</span>
               <span
                 className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                   nodeData.status === 'approved'
@@ -255,19 +241,17 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
                 {nodeData.status === 'approved' ? 'Aprovado' : 'Revisão'}
               </span>
             </div>
+            {nodeData.parentAgentTitle && (
+              <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                <Sparkles className="w-2.5 h-2.5 text-indigo-400" />
+                <span>Gerado por {nodeData.parentAgentTitle}</span>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Header Controls */}
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => stashNode(id)}
-            title="Guardar no Stash"
-            className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
-          >
-            <Archive className="w-3.5 h-3.5" />
-          </button>
           <button
             type="button"
             onClick={() => deleteNode(id)}
@@ -279,117 +263,11 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div
-        className={`flex items-center justify-between px-3 py-1.5 border-b text-xs ${
-          theme === 'dark' ? 'bg-[#090D13] border-[#21262D]' : 'bg-slate-50 border-slate-200'
-        }`}
-      >
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => handleTabChange('markdown')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-              activeTab === 'markdown'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            <FileText className="w-3 h-3" />
-            Documento
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTabChange('preview')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-              activeTab === 'preview'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            <Eye className="w-3 h-3" />
-            Web Preview
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTabChange('diff')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-              activeTab === 'diff'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-            }`}
-          >
-            <Code className="w-3 h-3" />
-            Diff de Código
-          </button>
+      {/* Content Area */}
+      <div className="flex-1 min-h-[180px] p-3.5 overflow-y-auto">
+        <div className="text-xs space-y-1">
+          {renderMarkdown(nodeData.markdownContent || 'Nenhum documento gerado.')}
         </div>
-
-        {activeTab === 'preview' && (
-          <button
-            type="button"
-            onClick={() => setIframeKey((k) => k + 1)}
-            title="Recarregar Preview"
-            className="p-1 rounded text-slate-400 hover:text-slate-200 transition-colors"
-          >
-            <RotateCw className="w-3 h-3" />
-          </button>
-        )}
-      </div>
-
-      {/* Tab Content Area */}
-      <div className="flex-1 min-h-[220px] p-3 overflow-y-auto">
-        {activeTab === 'markdown' && (
-          <div className="text-xs space-y-1">
-            {renderMarkdown(nodeData.markdownContent || 'Nenhum documento gerado.')}
-          </div>
-        )}
-
-        {activeTab === 'preview' && (
-          <div className="w-full h-full rounded-lg border border-slate-700 overflow-hidden bg-slate-950">
-            <iframe
-              key={iframeKey}
-              title="Preview Sandbox"
-              sandbox="allow-scripts allow-same-origin"
-              srcDoc={nodeData.htmlPreview || '<h3>Sem conteúdo de preview</h3>'}
-              className="w-full h-full border-0"
-            />
-          </div>
-        )}
-
-        {activeTab === 'diff' && (
-          <div className="font-mono text-[11px] rounded-lg border border-slate-800 bg-[#0B0F17] overflow-hidden">
-            <div className="px-3 py-1.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
-              <span className="flex items-center gap-1">
-                <FileCode2 className="w-3 h-3 text-indigo-400" />
-                {nodeData.diffContent?.filename || 'arquivo.diff'}
-              </span>
-              <span>Unified Diff</span>
-            </div>
-            <div className="p-2 space-y-0.5 overflow-x-auto">
-              {nodeData.diffContent?.lines?.map((line, idx) => {
-                const isAdd = line.type === 'add'
-                const isRemove = line.type === 'remove'
-                return (
-                  <div
-                    key={idx}
-                    className={`flex items-center gap-2 px-1.5 py-0.5 rounded-xs ${
-                      isAdd
-                        ? 'bg-emerald-950/40 text-emerald-400'
-                        : isRemove
-                        ? 'bg-rose-950/40 text-rose-400'
-                        : 'text-slate-400'
-                    }`}
-                  >
-                    <span className="w-4 text-center select-none text-[9px] opacity-60">
-                      {isAdd ? '+' : isRemove ? '-' : ' '}
-                    </span>
-                    <span className="whitespace-pre">{line.content}</span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Footer Actions */}
@@ -401,7 +279,7 @@ export const ArtifactViewerNode: React.FC<NodeProps> = ({ id, data, selected }) 
         <div className="text-[10px] text-slate-400">
           {nodeData.status === 'approved' ? (
             <span className="flex items-center gap-1 text-emerald-500 font-medium">
-              <Check className="w-3 h-3" /> Plano aprovado e despachado
+              <Check className="w-3 h-3" /> Aprovado e despachado
             </span>
           ) : (
             'Aprovar para avançar execução aos nós conectados'

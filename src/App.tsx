@@ -14,9 +14,7 @@ import {
   Layers,
   Bot,
   Sparkles,
-  FileCode2,
   Image as ImageIcon,
-  FolderKanban,
 } from 'lucide-react'
 import { Topbar } from './components/layout/Topbar'
 import { ImageAnnotationModal } from './components/modais/ImageAnnotationModal'
@@ -24,7 +22,9 @@ import { SettingsModal } from './components/modais/SettingsModal'
 import { NewProjectModal } from './components/modais/NewProjectModal'
 import { ManageWorkspaceModal } from './components/modais/ManageWorkspaceModal'
 import { AgentCardNode } from './components/nodes/AgentCardNode'
-import { ArtifactViewerNode } from './components/nodes/ArtifactViewerNode'
+import { ArtifactNode } from './components/nodes/ArtifactNode'
+import { PreviewNode } from './components/nodes/PreviewNode'
+import { DiffNode } from './components/nodes/DiffNode'
 import { GroupNode } from './components/nodes/GroupNode'
 import { ImageGroupNode } from './components/nodes/ImageGroupNode'
 import { ImageNode } from './components/nodes/ImageNode'
@@ -35,7 +35,9 @@ import { useCanvasStore } from './store/canvasStore'
 // Register custom node types
 const nodeTypes: NodeTypes = {
   agentNode: AgentCardNode,
-  artifactNode: ArtifactViewerNode,
+  artifactNode: ArtifactNode,
+  previewNode: PreviewNode,
+  diffNode: DiffNode,
   imageNode: ImageNode,
   imageGroupNode: ImageGroupNode,
   groupNode: GroupNode,
@@ -153,45 +155,12 @@ const CanvasInner: React.FC = () => {
         agentType: type,
         role: isClaude ? 'planner' : 'executor',
         status: 'idle',
-        viewMode: 'extension',
+        viewMode: 'terminal',
         thinking: null,
-        messages: [
-          {
-            id: `msg-${Date.now()}`,
-            sender: 'agent',
-            text: isClaude
-              ? 'Pronto para planejar e estruturar tarefas do projeto.'
-              : 'Pronto para executar comandos e testes em segundo plano.',
-            timestamp: new Date().toLocaleTimeString('pt-BR', {
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
-          },
-        ],
+        messages: [],
         approvals: [],
         attachedImages: [],
-        terminalLogs: [`> ${type} session created`],
-      },
-    }
-    addNode(newNode)
-    setContextMenu(null)
-  }, [addNode])
-
-  const spawnArtifact = useCallback((pos: { x: number; y: number }) => {
-    const newNode: Node = {
-      id: `node-artifact-${Date.now()}`,
-      type: 'artifactNode',
-      position: { x: pos.x - 220, y: pos.y - 180 },
-      data: {
-        title: 'Novo Artefato',
-        activeTab: 'markdown',
-        markdownContent: `### Documento de Especificação\n\n> [!NOTE]\n> Descreva o escopo e diretrizes desta entrega aqui.\n\n- [ ] Tarefa inicial\n`,
-        htmlPreview: '<div style="font-family:sans-serif;padding:20px;color:#94a3b8"><h3>Preview Vazio</h3></div>',
-        diffContent: {
-          filename: 'src/index.ts',
-          lines: [{ type: 'normal', content: '// Arquivo inicial' }],
-        },
-        status: 'draft',
+        terminalLogs: [],
       },
     }
     addNode(newNode)
@@ -204,36 +173,12 @@ const CanvasInner: React.FC = () => {
       type: 'imageNode',
       position: { x: pos.x - 170, y: pos.y - 120 },
       data: {
-        title: 'Nova Captura',
-        name: 'design-reference.png',
-        url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80',
-        annotations: [],
-      },
-    }
-    addNode(newNode)
-    setContextMenu(null)
-  }, [addNode])
-
-  const spawnImageGroup = useCallback((pos: { x: number; y: number }) => {
-    const newNode: Node = {
-      id: `node-img-group-${Date.now()}`,
-      type: 'imageGroupNode',
-      position: { x: pos.x - 190, y: pos.y - 160 },
-      data: {
-        title: 'Grupo de Referências',
+        title: 'Nova Imagem',
+        name: '',
+        url: '',
+        images: [],
         activeImageIndex: 0,
-        images: [
-          {
-            id: `img-g1-${Date.now()}`,
-            name: 'spec-layout.png',
-            url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80',
-          },
-          {
-            id: `img-g2-${Date.now()}`,
-            name: 'dashboard-preview.png',
-            url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=600&q=80',
-          },
-        ],
+        annotations: [],
       },
     }
     addNode(newNode)
@@ -307,10 +252,23 @@ const CanvasInner: React.FC = () => {
         if (items[i].type.startsWith('image/')) {
           const file = items[i].getAsFile()
           if (file) {
+            e.preventDefault()
             const reader = new FileReader()
             reader.onload = (uploadEvent) => {
               const result = uploadEvent.target?.result as string
               if (result) {
+                const store = useCanvasStore.getState()
+                const selectedNode = store.nodes.find((n) => n.selected)
+
+                if (selectedNode) {
+                  // Add directly to the selected node
+                  store.addImageToNode(selectedNode.id, {
+                    url: result,
+                    name: file.name || `captura-${Date.now()}.png`,
+                  })
+                  return
+                }
+
                 const flowPos = screenToFlowPosition(mousePositionRef.current)
                 const newImgNode: Node = {
                   id: `node-image-paste-${Date.now()}`,
@@ -323,10 +281,19 @@ const CanvasInner: React.FC = () => {
                     title: 'Captura Colada',
                     name: file.name || `captura-${Date.now()}.png`,
                     url: result,
+                    images: [
+                      {
+                        id: `img-${Date.now()}`,
+                        url: result,
+                        name: file.name || `captura-${Date.now()}.png`,
+                        annotations: [],
+                      },
+                    ],
+                    activeImageIndex: 0,
                     annotations: [],
                   },
                 }
-                addNode(newImgNode)
+                store.addNode(newImgNode)
               }
             }
             reader.readAsDataURL(file)
@@ -338,7 +305,7 @@ const CanvasInner: React.FC = () => {
 
     window.addEventListener('paste', handleGlobalPaste)
     return () => window.removeEventListener('paste', handleGlobalPaste)
-  }, [addNode, screenToFlowPosition])
+  }, [screenToFlowPosition])
 
   // Drag and drop image files directly onto canvas
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -410,6 +377,15 @@ const CanvasInner: React.FC = () => {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          isValidConnection={(connection) => {
+            const sourceNode = nodes.find((n) => n.id === connection.source)
+            const targetNode = nodes.find((n) => n.id === connection.target)
+            // Diff nodes cannot be connected to any other agent
+            if (sourceNode?.type === 'diffNode' || targetNode?.type === 'diffNode') {
+              return false
+            }
+            return true
+          }}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           onPaneContextMenu={handlePaneContextMenu}
@@ -450,6 +426,8 @@ const CanvasInner: React.FC = () => {
                 return (n.data as any)?.agentType === 'claude' ? '#EA580C' : '#0284C7'
               }
               if (n.type === 'artifactNode') return '#6366F1'
+              if (n.type === 'previewNode') return '#06B6D4'
+              if (n.type === 'diffNode') return '#10B981'
               if (n.type === 'imageNode' || n.type === 'imageGroupNode') return '#F43F5E'
               if (n.type === 'groupNode') return 'rgba(99, 102, 241, 0.3)'
               return '#64748B'
@@ -522,24 +500,6 @@ const CanvasInner: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => spawnArtifact({ x: contextMenu.flowX, y: contextMenu.flowY })}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left transition-colors ${
-                theme === 'dark'
-                  ? 'hover:bg-[#21262D] text-slate-200'
-                  : 'hover:bg-slate-100 text-slate-800'
-              }`}
-            >
-              <div className="w-6 h-6 rounded-md bg-indigo-500/15 flex items-center justify-center text-indigo-500 shrink-0">
-                <FileCode2 className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex flex-col flex-1 min-w-0">
-                <span className="font-semibold text-xs leading-tight">Artefato</span>
-                <span className="text-[10px] text-slate-400 leading-tight">Plano, Preview & Diff</span>
-              </div>
-            </button>
-
-            <button
-              type="button"
               onClick={() => spawnImage({ x: contextMenu.flowX, y: contextMenu.flowY })}
               className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left transition-colors ${
                 theme === 'dark'
@@ -553,24 +513,6 @@ const CanvasInner: React.FC = () => {
               <div className="flex flex-col flex-1 min-w-0">
                 <span className="font-semibold text-xs leading-tight">Imagem</span>
                 <span className="text-[10px] text-slate-400 leading-tight">Print & Editor Canvas</span>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => spawnImageGroup({ x: contextMenu.flowX, y: contextMenu.flowY })}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left transition-colors ${
-                theme === 'dark'
-                  ? 'hover:bg-[#21262D] text-slate-200'
-                  : 'hover:bg-slate-100 text-slate-800'
-              }`}
-            >
-              <div className="w-6 h-6 rounded-md bg-pink-500/15 flex items-center justify-center text-pink-500 shrink-0">
-                <FolderKanban className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex flex-col flex-1 min-w-0">
-                <span className="font-semibold text-xs leading-tight">Grupo de Imagens</span>
-                <span className="text-[10px] text-slate-400 leading-tight">Carrossel de referências</span>
               </div>
             </button>
 

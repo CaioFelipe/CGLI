@@ -1,8 +1,10 @@
 import {
   Archive,
   Clock,
+  Eye,
   FileCode,
   FolderArchive,
+  GitCompare,
   Image as ImageIcon,
   RotateCcw,
   Sparkles,
@@ -32,6 +34,10 @@ export const StashDrawer: React.FC = () => {
         return <Terminal className="w-3.5 h-3.5 text-amber-500" />
       case 'artifact':
         return <FileCode className="w-3.5 h-3.5 text-indigo-500" />
+      case 'preview':
+        return <Eye className="w-3.5 h-3.5 text-cyan-500" />
+      case 'diff':
+        return <GitCompare className="w-3.5 h-3.5 text-emerald-500" />
       case 'image':
       case 'imageGroup':
         return <ImageIcon className="w-3.5 h-3.5 text-rose-500" />
@@ -48,6 +54,10 @@ export const StashDrawer: React.FC = () => {
         return 'bg-amber-500/10 text-amber-500 border-amber-500/20'
       case 'artifact':
         return 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20'
+      case 'preview':
+        return 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20'
+      case 'diff':
+        return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
       case 'image':
       case 'imageGroup':
         return 'bg-rose-500/10 text-rose-500 border-rose-500/20'

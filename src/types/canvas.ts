@@ -1,6 +1,6 @@
 export type ThemeMode = 'light' | 'dark'
 
-export type AgentType = 'claude' | 'agy'
+export type AgentType = 'claude' | 'agy' | string
 
 export type AgentRole = 'planner' | 'executor'
 
@@ -42,6 +42,15 @@ export interface AttachedImageBadge {
   id: string
   url: string
   name: string
+  nodeId?: string
+}
+
+export interface AttachedArtifactBadge {
+  id: string
+  type: 'artifact' | 'preview'
+  title: string
+  sourceNodeId: string
+  contentSnippet?: string
 }
 
 export interface AgentNodeData {
@@ -54,7 +63,14 @@ export interface AgentNodeData {
   messages: ChatMessage[]
   approvals: ActionApproval[]
   attachedImages: AttachedImageBadge[]
+  attachedArtifacts?: AttachedArtifactBadge[]
   terminalLogs: string[]
+  sessionId?: string
+  workspacePath?: string
+  isPtyActive?: boolean
+  cliId?: string
+  customBinary?: string
+  defaultArgs?: string
 }
 
 export interface DiffLine {
@@ -66,14 +82,36 @@ export interface DiffLine {
 
 export interface ArtifactNodeData {
   title: string
-  activeTab: 'markdown' | 'preview' | 'diff'
   markdownContent: string
-  htmlPreview: string
-  diffContent: {
+  status: 'draft' | 'approved' | 'rejected'
+  parentAgentId?: string
+  parentAgentTitle?: string
+  activeTab?: 'markdown' | 'preview' | 'diff'
+  htmlPreview?: string
+  diffContent?: {
     filename: string
     lines: DiffLine[]
   }
-  status: 'draft' | 'approved' | 'rejected'
+}
+
+export interface PreviewNodeData {
+  title: string
+  htmlPreview: string
+  status?: 'draft' | 'ready'
+  parentAgentId?: string
+  parentAgentTitle?: string
+}
+
+export interface DiffNodeData {
+  title: string
+  filename: string
+  lines: DiffLine[]
+  stats?: {
+    additions: number
+    deletions: number
+  }
+  parentAgentId: string
+  parentAgentTitle?: string
 }
 
 export type AnnotationTool = 'circle' | 'arrow' | 'rect' | 'brush' | 'text'
@@ -93,13 +131,24 @@ export interface AnnotationItem {
   text?: string
 }
 
-export interface ImageNodeData {
-  title: string
+export interface ImageItem {
+  id: string
   url: string
   name: string
+  annotations?: AnnotationItem[]
   width?: number
   height?: number
-  annotations: AnnotationItem[]
+}
+
+export interface ImageNodeData {
+  title: string
+  url?: string
+  name?: string
+  width?: number
+  height?: number
+  annotations?: AnnotationItem[]
+  images?: ImageItem[]
+  activeImageIndex?: number
 }
 
 export interface ImageGroupItem {
@@ -129,7 +178,7 @@ export interface StashItem {
   id: string
   nodeId: string
   name: string
-  type: 'agent' | 'artifact' | 'image' | 'imageGroup' | 'group'
+  type: 'agent' | 'artifact' | 'preview' | 'diff' | 'image' | 'imageGroup' | 'group'
   savedAt: string
   nodeData: any
   position: { x: number; y: number }
