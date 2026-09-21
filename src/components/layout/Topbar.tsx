@@ -69,7 +69,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
         cliId: cli?.id,
         role,
         status: 'idle',
-        viewMode: 'terminal',
+        viewMode: 'extension',
         thinking: null,
         messages: [],
         approvals: [],

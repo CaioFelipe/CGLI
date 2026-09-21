@@ -25,3 +25,4 @@ src-tauri/target
 *.sw?
 .canvas_context_image.png
 screenshot_*.png
+.agents/

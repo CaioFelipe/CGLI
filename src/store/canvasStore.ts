@@ -151,6 +151,9 @@ const getInitialClis = (): CliConfig[] => {
             if (cli.id === 'agy' && cli.defaultArgs?.includes('--stream')) {
               cli.defaultArgs = '--dangerously-skip-permissions'
             }
+            if (cli.id === 'claude-code' && !cli.defaultArgs?.includes('--dangerously-skip-permissions')) {
+              cli.defaultArgs = '--dangerously-skip-permissions'
+            }
             if (
               cli.connectedAccount &&
               (cli.connectedAccount.email?.includes('developer@workspace.dev') ||
@@ -259,7 +262,7 @@ const getInitialCanvasState = (projectId: string): { nodes: Node[]; edges: Edge[
                   data: {
                     ...n.data,
                     status: 'idle',
-                    viewMode: 'terminal',
+                    viewMode: n.data?.viewMode || 'extension',
                     sessionId: n.data?.sessionId || `pty-${n.id}`,
                     isPtyActive: true,
                   },
@@ -1807,7 +1810,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         agentType: childType,
         role: isClaude ? 'planner' : 'executor',
         status: 'idle',
-        viewMode: 'terminal',
+        viewMode: 'extension',
         thinking: null,
         messages: [],
         approvals: [],
@@ -2021,7 +2024,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         agentType: childType,
         role,
         status: task ? 'running' : 'idle',
-        viewMode: 'terminal',
+        viewMode: 'extension',
         thinking: null,
         messages: initialMessages,
         approvals: [],

@@ -155,7 +155,7 @@ const CanvasInner: React.FC = () => {
         agentType: type,
         role: isClaude ? 'planner' : 'executor',
         status: 'idle',
-        viewMode: 'terminal',
+        viewMode: 'extension',
         thinking: null,
         messages: [],
         approvals: [],
