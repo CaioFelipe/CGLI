@@ -7,6 +7,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 pub static BRIDGE_PORT: AtomicU16 = AtomicU16::new(0);
+pub static WORKSPACE_INFO: std::sync::Mutex<Option<serde_json::Value>> = std::sync::Mutex::new(None);
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BridgeAction {
@@ -146,13 +147,33 @@ pub fn start_bridge_server(app_handle: AppHandle) {
                                 ("400 Bad Request", serde_json::json!({ "error": "Invalid JSON body" }).to_string())
                             }
                         }
+                        ("POST", "/api/update-workspace-info") => {
+                            if let Ok(info) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                                if let Ok(mut lock) = WORKSPACE_INFO.lock() {
+                                    *lock = Some(info);
+                                }
+                                ("200 OK", serde_json::json!({ "success": true }).to_string())
+                            } else {
+                                ("400 Bad Request", serde_json::json!({ "error": "Invalid JSON" }).to_string())
+                            }
+                        }
                         ("GET", "/api/workspace-info") => {
-                            ("200 OK", serde_json::json!({
+                            let mut base = serde_json::json!({
                                 "success": true,
                                 "bridge_port": port,
                                 "status": "online",
                                 "description": "CGLI Agent Studio Bridge"
-                            }).to_string())
+                            });
+                            if let Ok(lock) = WORKSPACE_INFO.lock() {
+                                if let Some(ref info) = *lock {
+                                    if let Some(obj) = info.as_object() {
+                                        for (k, v) in obj {
+                                            base[k] = v.clone();
+                                        }
+                                    }
+                                }
+                            }
+                            ("200 OK", base.to_string())
                         }
                         _ => ("404 Not Found", serde_json::json!({ "error": "Endpoint not found" }).to_string()),
                     };
@@ -172,194 +193,248 @@ pub fn start_bridge_server(app_handle: AppHandle) {
     });
 }
 
+fn write_if_changed(path: &Path, content: &str) {
+    if let Ok(existing) = fs::read_to_string(path) {
+        if existing == content {
+            return;
+        }
+    }
+    let _ = fs::write(path, content);
+}
+
 pub fn ensure_cgli_environment(workspace_path: &Path, port: u16) {
     let cgli_dir = workspace_path.join(".cgli");
     let bin_dir = cgli_dir.join("bin");
 
     let _ = fs::create_dir_all(&bin_dir);
 
-    // Create cgli.cmd for Windows
+    // Create cgli.cjs (universal Node.js CLI runner)
+    let cgli_js_path = bin_dir.join("cgli.cjs");
+    let cgli_js_content = format!(
+r#"#!/usr/bin/env node
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const {{ execSync }} = require('child_process');
+
+const port = process.env.CGLI_BRIDGE_PORT || {port};
+const nodeId = process.env.CGLI_NODE_ID || '';
+const workspacePath = process.env.CGLI_WORKSPACE_PATH || process.cwd();
+
+const args = process.argv.slice(2);
+const command = args[0];
+
+function parseArgs(argsList) {{
+  const flags = {{}};
+  for (let i = 0; i < argsList.length; i++) {{
+    if (argsList[i].startsWith('--')) {{
+      const key = argsList[i].slice(2);
+      const val = argsList[i + 1] && !argsList[i + 1].startsWith('--') ? argsList[++i] : true;
+      flags[key] = val;
+    }}
+  }}
+  return flags;
+}}
+
+function post(endpoint, data) {{
+  return new Promise((resolve, reject) => {{
+    const payload = JSON.stringify(data);
+    const req = http.request({{
+      hostname: '127.0.0.1',
+      port: Number(port),
+      path: endpoint,
+      method: 'POST',
+      headers: {{
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload)
+      }}
+    }}, (res) => {{
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {{
+        try {{
+          resolve(JSON.parse(body));
+        }} catch (_) {{
+          resolve({{ raw: body }});
+        }}
+      }});
+    }});
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  }});
+}}
+
+function get(endpoint) {{
+  return new Promise((resolve, reject) => {{
+    http.get(`http://127.0.0.1:${{port}}${{endpoint}}`, (res) => {{
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {{
+        try {{
+          resolve(JSON.parse(body));
+        }} catch (_) {{
+          resolve({{ raw: body }});
+        }}
+      }});
+    }}).on('error', reject);
+  }});
+}}
+
+async function run() {{
+  const flags = parseArgs(args.slice(1));
+
+  switch (command) {{
+    case 'spawn-subagent': {{
+      const childType = flags.type || 'agy';
+      const role = flags.role || (childType === 'claude' ? 'planner' : 'executor');
+      const task = flags.task || '';
+      try {{
+        await post('/api/spawn-subagent', {{
+          parent_node_id: nodeId,
+          child_type: childType,
+          role,
+          task
+        }});
+        console.log(`[CGLI] Subagente ${{childType.toUpperCase()}} invocado com sucesso no canvas.`);
+      }} catch (err) {{
+        console.error(`[CGLI Erro] Falha ao invocar subagente:`, err.message);
+      }}
+      break;
+    }}
+
+    case 'create-artifact': {{
+      const title = flags.title || 'Documento de Artefato';
+      let content = flags.content || '';
+      if (flags.file) {{
+        const filePath = path.resolve(workspacePath, String(flags.file));
+        if (fs.existsSync(filePath)) {{
+          content = fs.readFileSync(filePath, 'utf8');
+        }} else {{
+          console.warn(`[CGLI Aviso] Arquivo '${{flags.file}}' não encontrado.`);
+        }}
+      }}
+      try {{
+        await post('/api/create-artifact', {{
+          parent_node_id: nodeId,
+          title,
+          content
+        }});
+        console.log(`[CGLI] Nó de artefato '${{title}}' criado no canvas.`);
+      }} catch (err) {{
+        console.error(`[CGLI Erro] Falha ao criar artefato:`, err.message);
+      }}
+      break;
+    }}
+
+    case 'create-preview': {{
+      const title = flags.title || 'Preview Web';
+      let html = flags.html || '';
+      if (flags.file) {{
+        const filePath = path.resolve(workspacePath, String(flags.file));
+        if (fs.existsSync(filePath)) {{
+          html = fs.readFileSync(filePath, 'utf8');
+        }}
+      }}
+      try {{
+        await post('/api/create-preview', {{
+          parent_node_id: nodeId,
+          title,
+          html
+        }});
+        console.log(`[CGLI] Nó de preview '${{title}}' criado no canvas.`);
+      }} catch (err) {{
+        console.error(`[CGLI Erro] Falha ao criar preview:`, err.message);
+      }}
+      break;
+    }}
+
+    case 'create-diff': {{
+      const title = flags.title || 'Alterações de Código';
+      const filename = flags.file || '';
+      let diffContent = flags.content || '';
+      if (!diffContent) {{
+        try {{
+          const target = filename ? `"${{filename}}"` : '';
+          diffContent = execSync(`git diff ${{target}}`, {{ cwd: workspacePath, encoding: 'utf8' }});
+          if (!diffContent.trim() && filename) {{
+            diffContent = execSync(`git diff HEAD ${{target}}`, {{ cwd: workspacePath, encoding: 'utf8' }});
+          }}
+        }} catch (_) {{}}
+      }}
+      try {{
+        await post('/api/create-diff', {{
+          parent_node_id: nodeId,
+          title,
+          filename: filename || 'diff.patch',
+          content: diffContent
+        }});
+        console.log(`[CGLI] Nó de diff '${{title}}' criado no canvas.`);
+      }} catch (err) {{
+        console.error(`[CGLI Erro] Falha ao criar diff:`, err.message);
+      }}
+      break;
+    }}
+
+    case 'list-folders':
+    case 'folders': {{
+      try {{
+        const info = await get('/api/workspace-info');
+        console.log(`=== CGLI Workspace Info ===`);
+        console.log(`Projeto: ${{info.projectName || info.project_name || 'Projeto Atual'}}`);
+        console.log(`Diretório deste Nó: ${{workspacePath}}`);
+        if (info.folders && Array.isArray(info.folders) && info.folders.length > 0) {{
+          console.log(`Pastas do Projeto (${{info.folders.length}}):`);
+          info.folders.forEach(f => {{
+            console.log(`  • ${{f.name}}: ${{f.path}}`);
+          }});
+        }} else {{
+          console.log(`Pastas do Projeto: ${{workspacePath}}`);
+        }}
+      }} catch (err) {{
+        console.log(`Diretório deste Nó: ${{workspacePath}}`);
+      }}
+      break;
+    }}
+
+    case 'status': {{
+      try {{
+        const st = await get('/api/status');
+        console.log(`[CGLI Status] Bridge ativa na porta ${{st.port || port}}`);
+      }} catch (err) {{
+        console.error(`[CGLI Erro] Ponte indisponível:`, err.message);
+      }}
+      break;
+    }}
+
+    default: {{
+      console.log(`CGLI Canvas CLI Helper
+Uso:
+  cgli spawn-subagent --type [claude|agy] --task "Descricao" [--role planner|executor]
+  cgli create-artifact --title "Titulo" [--content "Markdown" | --file doc.md]
+  cgli create-preview --title "Titulo" [--html "HTML" | --file page.html]
+  cgli create-diff --title "Titulo" [--file src/arquivo.ts]
+  cgli list-folders
+  cgli status`);
+      break;
+    }}
+  }}
+}}
+
+run();
+"#
+    );
+    write_if_changed(&cgli_js_path, &cgli_js_content);
+
+    // Create cgli.cmd wrapper for Windows
     let cgli_cmd_path = bin_dir.join("cgli.cmd");
-    let cgli_cmd_content = format!(
-        r#"@echo off
-setlocal enabledelayedexpansion
+    let cgli_cmd_content = "@echo off\r\nnode \"%~dp0\\cgli.cjs\" %*\r\n";
+    write_if_changed(&cgli_cmd_path, cgli_cmd_content);
 
-if "%CGLI_BRIDGE_PORT%"=="" (
-    set CGLI_BRIDGE_PORT={port}
-)
-
-set CMD=%1
-shift
-
-if "%CMD%"=="spawn-subagent" goto spawn_subagent
-if "%CMD%"=="create-artifact" goto create_artifact
-if "%CMD%"=="create-preview" goto create_preview
-if "%CMD%"=="create-diff" goto create_diff
-if "%CMD%"=="list-folders" goto list_folders
-if "%CMD%"=="folders" goto list_folders
-if "%CMD%"=="status" goto status
-
-echo CGLI Canvas CLI Helper
-echo Usage:
-echo   cgli spawn-subagent --type [claude|agy] --task "Task description" [--role planner|executor]
-echo   cgli create-artifact --title "Title" --content "Markdown..."
-echo   cgli create-preview --title "Title" --html "HTML..."
-echo   cgli create-diff --title "Title" --file path/to/file
-echo   cgli list-folders
-exit /b 1
-
-:spawn_subagent
-set TYPE=agy
-set ROLE=executor
-set TASK=
-:parse_spawn
-if "%1"=="" goto do_spawn
-if "%1"=="--type" (set TYPE=%2& shift & shift & goto parse_spawn)
-if "%1"=="--role" (set ROLE=%2& shift & shift & goto parse_spawn)
-if "%1"=="--task" (set TASK=%2& shift & shift & goto parse_spawn)
-shift
-goto parse_spawn
-:do_spawn
-curl.exe -s -X POST http://127.0.0.1:%CGLI_BRIDGE_PORT%/api/spawn-subagent -H "Content-Type: application/json" -d "{{\"parent_node_id\":\"%CGLI_NODE_ID%\",\"child_type\":\"%TYPE%\",\"role\":\"%ROLE%\",\"task\":\"%TASK%\"}}"
-echo [CGLI] Subagente %TYPE% invocado com sucesso no canvas.
-exit /b 0
-
-:create_artifact
-set TITLE=Documento de Artefato
-set CONTENT=
-:parse_art
-if "%1"=="" goto do_art
-if "%1"=="--title" (set TITLE=%2& shift & shift & goto parse_art)
-if "%1"=="--content" (set CONTENT=%2& shift & shift & goto parse_art)
-shift
-goto parse_art
-:do_art
-curl.exe -s -X POST http://127.0.0.1:%CGLI_BRIDGE_PORT%/api/create-artifact -H "Content-Type: application/json" -d "{{\"parent_node_id\":\"%CGLI_NODE_ID%\",\"title\":\"%TITLE%\",\"content\":\"%CONTENT%\"}}"
-echo [CGLI] Nó de artefato criado no canvas.
-exit /b 0
-
-:create_preview
-set TITLE=Preview Web
-set HTML=
-:parse_prev
-if "%1"=="" goto do_prev
-if "%1"=="--title" (set TITLE=%2& shift & shift & goto parse_prev)
-if "%1"=="--html" (set HTML=%2& shift & shift & goto parse_prev)
-shift
-goto parse_prev
-:do_prev
-curl.exe -s -X POST http://127.0.0.1:%CGLI_BRIDGE_PORT%/api/create-preview -H "Content-Type: application/json" -d "{{\"parent_node_id\":\"%CGLI_NODE_ID%\",\"title\":\"%TITLE%\",\"html\":\"%HTML%\"}}"
-echo [CGLI] Nó de preview web criado no canvas.
-exit /b 0
-
-:create_diff
-set TITLE=Alterações de Código
-set FILENAME=
-:parse_diff
-if "%1"=="" goto do_diff
-if "%1"=="--title" (set TITLE=%2& shift & shift & goto parse_diff)
-if "%1"=="--file" (set FILENAME=%2& shift & shift & goto parse_diff)
-shift
-goto parse_diff
-:do_diff
-curl.exe -s -X POST http://127.0.0.1:%CGLI_BRIDGE_PORT%/api/create-diff -H "Content-Type: application/json" -d "{{\"parent_node_id\":\"%CGLI_NODE_ID%\",\"title\":\"%TITLE%\",\"filename\":\"%FILENAME%\"}}"
-echo [CGLI] Nó de diff criado no canvas.
-exit /b 0
-
-:list_folders
-curl.exe -s http://127.0.0.1:%CGLI_BRIDGE_PORT%/api/workspace-info
-exit /b 0
-
-:status
-curl.exe -s http://127.0.0.1:%CGLI_BRIDGE_PORT%/api/status
-exit /b 0
-"#
-    );
-    let _ = fs::write(&cgli_cmd_path, cgli_cmd_content);
-
-    // Create cgli (sh script for bash environments)
+    // Create cgli sh wrapper
     let cgli_sh_path = bin_dir.join("cgli");
-    let cgli_sh_content = format!(
-        r#"#!/usr/bin/env bash
-CGLI_BRIDGE_PORT="${{CGLI_BRIDGE_PORT:-{port}}}"
-CMD="$1"
-shift
-
-case "$CMD" in
-  spawn-subagent)
-    TYPE="agy"
-    ROLE="executor"
-    TASK=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --type) TYPE="$2"; shift 2 ;;
-        --role) ROLE="$2"; shift 2 ;;
-        --task) TASK="$2"; shift 2 ;;
-        *) shift ;;
-      esac
-    done
-    curl -s -X POST "http://127.0.0.1:${{CGLI_BRIDGE_PORT}}/api/spawn-subagent" \
-      -H "Content-Type: application/json" \
-      -d "{{\"parent_node_id\":\"${{CGLI_NODE_ID}}\",\"child_type\":\"${{TYPE}}\",\"role\":\"${{ROLE}}\",\"task\":\"${{TASK}}\"}}"
-    echo "[CGLI] Subagente ${{TYPE}} invocado com sucesso."
-    ;;
-  create-artifact)
-    TITLE="Artefato"
-    CONTENT=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --title) TITLE="$2"; shift 2 ;;
-        --content) CONTENT="$2"; shift 2 ;;
-        *) shift ;;
-      esac
-    done
-    curl -s -X POST "http://127.0.0.1:${{CGLI_BRIDGE_PORT}}/api/create-artifact" \
-      -H "Content-Type: application/json" \
-      -d "{{\"parent_node_id\":\"${{CGLI_NODE_ID}}\",\"title\":\"${{TITLE}}\",\"content\":\"${{CONTENT}}\"}}"
-    echo "[CGLI] Nó de artefato criado."
-    ;;
-  create-preview)
-    TITLE="Preview Web"
-    HTML=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --title) TITLE="$2"; shift 2 ;;
-        --html) HTML="$2"; shift 2 ;;
-        *) shift ;;
-      esac
-    done
-    curl -s -X POST "http://127.0.0.1:${{CGLI_BRIDGE_PORT}}/api/create-preview" \
-      -H "Content-Type: application/json" \
-      -d "{{\"parent_node_id\":\"${{CGLI_NODE_ID}}\",\"title\":\"${{TITLE}}\",\"html\":\"${{HTML}}\"}}"
-    echo "[CGLI] Nó de preview criado."
-    ;;
-  create-diff)
-    TITLE="Diff"
-    FILENAME=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --title) TITLE="$2"; shift 2 ;;
-        --file) FILENAME="$2"; shift 2 ;;
-        *) shift ;;
-      esac
-    done
-    curl -s -X POST "http://127.0.0.1:${{CGLI_BRIDGE_PORT}}/api/create-diff" \
-      -H "Content-Type: application/json" \
-      -d "{{\"parent_node_id\":\"${{CGLI_NODE_ID}}\",\"title\":\"${{TITLE}}\",\"filename\":\"${{FILENAME}}\"}}"
-    echo "[CGLI] Nó de diff criado."
-    ;;
-  status)
-    curl -s "http://127.0.0.1:${{CGLI_BRIDGE_PORT}}/api/status"
-    ;;
-  *)
-    echo "CGLI Canvas Helper"
-    echo "Usage: cgli [spawn-subagent|create-artifact|create-preview|create-diff|status]"
-    exit 1
-    ;;
-esac
-"#
-    );
-    let _ = fs::write(&cgli_sh_path, cgli_sh_content);
+    let cgli_sh_content = "#!/usr/bin/env sh\nDIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\nnode \"$DIR/cgli.cjs\" \"$@\"\n";
+    write_if_changed(&cgli_sh_path, cgli_sh_content);
 
     // Create .cgli/CGLI_GUIDE.md
     let guide_path = cgli_dir.join("CGLI_GUIDE.md");
@@ -381,16 +456,25 @@ Você pode executar o utilitário `cgli` diretamente no terminal:
 2. **Criar Nó de Artefato (Plano / Especificação / Documento):**
    ```bash
    cgli create-artifact --title "Plano de Implementação" --content "# Detalhes..."
+   # ou a partir de um arquivo:
+   cgli create-artifact --title "Plano de Implementação" --file plano.md
    ```
 
 3. **Criar Nó de Preview Web (HTML / Sandbox Iframe):**
    ```bash
    cgli create-preview --title "Dashboard Preview" --html "<div><h1>Preview</h1></div>"
+   # ou a partir de um arquivo html:
+   cgli create-preview --title "Dashboard Preview" --file index.html
    ```
 
 4. **Criar Nó de Diff (Comparação de Código):**
    ```bash
    cgli create-diff --title "Alterações em Auth" --file "src/auth.ts"
+   ```
+
+5. **Identificar Pastas do Workspace:**
+   ```bash
+   cgli list-folders
    ```
 
 ## Ações via Blocos de Texto
@@ -400,22 +484,22 @@ Alternativamente, você pode emitir blocos estruturados na sua resposta que o CG
 `<<<CGLI:CREATE_PREVIEW {"title":"Preview Botão","html":"<button>Clique</button>"}>>>`
 `<<<CGLI:CREATE_DIFF {"title":"Diff Auth","filename":"src/auth.ts"}>>>`
 "##;
-    let _ = fs::write(&guide_path, guide_content);
+    write_if_changed(&guide_path, guide_content);
 
     // Ensure CLAUDE.md exists in workspace root so Claude Code automatically loads CGLI instructions
     let claude_md_path = workspace_path.join("CLAUDE.md");
     if !claude_md_path.exists() {
-        let _ = fs::write(&claude_md_path, guide_content);
+        write_if_changed(&claude_md_path, guide_content);
     } else if let Ok(existing) = fs::read_to_string(&claude_md_path) {
         if !existing.contains("CGLI (Canvas Agent Orchestrator)") {
             let combined = format!("{}\n\n{}", existing, guide_content);
-            let _ = fs::write(&claude_md_path, combined);
+            write_if_changed(&claude_md_path, &combined);
         }
     }
 
     // Ensure AGY.md exists in workspace root
     let agy_md_path = workspace_path.join("AGY.md");
     if !agy_md_path.exists() {
-        let _ = fs::write(&agy_md_path, guide_content);
+        write_if_changed(&agy_md_path, guide_content);
     }
 }

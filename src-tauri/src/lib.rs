@@ -16,6 +16,14 @@ pub fn run() {
         )
         .setup(|app| {
             bridge::start_bridge_server(app.handle().clone());
+            if let Ok(cwd) = std::env::current_dir() {
+                let target = if cwd.ends_with("src-tauri") {
+                    cwd.parent().unwrap_or(&cwd).to_path_buf()
+                } else {
+                    cwd
+                };
+                bridge::ensure_cgli_environment(&target, 41732);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

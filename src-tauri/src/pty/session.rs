@@ -156,10 +156,16 @@ impl SessionManager {
                 let bin_dir = p.join(".cgli").join("bin");
                 if let Ok(current_path) = std::env::var("PATH") {
                     #[cfg(windows)]
-                    let new_path = format!("{};{}", bin_dir.display(), current_path);
+                    {
+                        let new_path = format!("{};{}", bin_dir.display(), current_path);
+                        cmd.env("PATH", &new_path);
+                        cmd.env("Path", &new_path);
+                    }
                     #[cfg(not(windows))]
-                    let new_path = format!("{}:{}", bin_dir.display(), current_path);
-                    cmd.env("PATH", new_path);
+                    {
+                        let new_path = format!("{}:{}", bin_dir.display(), current_path);
+                        cmd.env("PATH", new_path);
+                    }
                 }
 
                 cmd.env("CGLI_WORKSPACE_PATH", p.display().to_string());
@@ -313,10 +319,8 @@ impl SessionManager {
         let mut sessions = self.sessions.lock().map_err(|e| e.to_string())?;
         if let Some(mut session) = sessions.remove(session_id) {
             let _ = session.child.kill();
-            Ok(())
-        } else {
-            Err(format!("PTY session '{}' not found", session_id))
         }
+        Ok(())
     }
 }
 

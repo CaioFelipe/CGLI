@@ -16,16 +16,25 @@ Você pode executar o utilitário `cgli` diretamente no terminal:
 2. **Criar Nó de Artefato (Plano / Especificação / Documento):**
    ```bash
    cgli create-artifact --title "Plano de Implementação" --content "# Detalhes..."
+   # ou a partir de um arquivo:
+   cgli create-artifact --title "Plano de Implementação" --file plano.md
    ```
 
 3. **Criar Nó de Preview Web (HTML / Sandbox Iframe):**
    ```bash
    cgli create-preview --title "Dashboard Preview" --html "<div><h1>Preview</h1></div>"
+   # ou a partir de um arquivo html:
+   cgli create-preview --title "Dashboard Preview" --file index.html
    ```
 
 4. **Criar Nó de Diff (Comparação de Código):**
    ```bash
    cgli create-diff --title "Alterações em Auth" --file "src/auth.ts"
+   ```
+
+5. **Identificar Pastas do Workspace:**
+   ```bash
+   cgli list-folders
    ```
 
 ## Ações via Blocos de Texto

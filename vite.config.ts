@@ -48,12 +48,12 @@ function ptyServerPlugin(): Plugin {
             if (isWindows) {
               if (cmdToRun === 'claude') {
                 const appdata = process.env.APPDATA || ''
-                const claudeExe = path.join(appdata, 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe')
                 const claudeCmd = path.join(appdata, 'npm', 'claude.cmd')
-                if (fs.existsSync(claudeExe)) {
-                  cmdToRun = claudeExe
-                } else if (fs.existsSync(claudeCmd)) {
+                const claudeExe = path.join(appdata, 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe')
+                if (fs.existsSync(claudeCmd)) {
                   cmdToRun = claudeCmd
+                } else if (fs.existsSync(claudeExe)) {
+                  cmdToRun = claudeExe
                 }
               } else if (cmdToRun === 'agy') {
                 const localapp = process.env.LOCALAPPDATA || ''
@@ -246,4 +246,15 @@ function ptyServerPlugin(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), ptyServerPlugin()],
+  server: {
+    watch: {
+      ignored: [
+        '**/.cgli/**',
+        '**/CLAUDE.md',
+        '**/AGY.md',
+        '**/HANDOVER.md',
+        '**/src-tauri/**',
+      ],
+    },
+  },
 })

@@ -1,177 +1,164 @@
-# Handover Técnico: Nós de Agente Interativos & Orquestração Multi-Nó (CGLI)
+# Documentação Técnica e Validação: Nós de Agente Interativos & Orquestração Multi-Nó (CGLI)
 
-Este documento descreve detalhadamente o **estado atual do trabalho**, a **arquitetura implementada**, o **diagnóstico das causas-raiz encontradas** e o **guia passo a passo para o próximo agente** concluir a funcionalidade com sucesso.
+Este documento descreve detalhadamente a **arquitetura implementada**, os **diagnósticos das causas-raiz encontradas e resolvidas**, a **validação funcional em execução** e as instruções para inicializar e testar o ambiente no **Tauri 2 (Desktop Windows)**.
 
 ---
 
 ## 1. Visão Geral e Expectativa do Usuário
 
-O objetivo central do usuário para o **CGLI** é:
-- No VS Code, a extensão/CLI do **Claude Code** permite abrir terminais interativos em que o usuário conversa diretamente com o Claude no contexto do projeto aberto.
-- No CGLI, os nós de agentes (**Claude Code**, **Antigravity - AGY**, ou qualquer outro CLI configurado) devem funcionar exatamente dessa forma: **terminais PTY interativos reais** dentro do card do nó no canvas, em vez de chats mockados ou caixas estáticas de "thinking".
-- Além da sessão interativa direta via xterm.js, o agente deve ter **consciência ambiental do CGLI**:
-  1. Saber em qual pasta do projeto o nó foi instanciado (`CGLI_WORKSPACE_PATH`).
-  2. Conseguir invocar outros nós dinamicamente no canvas conectando-os por arestas:
-     - Novos subagentes (Claude ou AGY): `cgli spawn-subagent`
-     - Nós de Artefato (Markdown/Planos): `cgli create-artifact`
-     - Nós de Preview Web (HTML/JS com sandbox): `cgli create-preview`
-     - Nós de Diff de Código (Git diff): `cgli create-diff`
+O objetivo central do **CGLI** é:
+- No VS Code, a extensão/CLI do **Claude Code** abre terminais interativos em que o usuário conversa diretamente com a IA no contexto do projeto aberto.
+- No CGLI, os nós de agentes (**Claude Code**, **Antigravity - AGY**, ou qualquer outro CLI configurado) operam exatamente dessa forma: **terminais PTY interativos reais** dentro do card do nó no canvas, integrados via `@xterm/xterm`.
+- Além da sessão interativa direta via xterm, o agente possui **consciência ambiental do CGLI**:
+  1. Identifica em qual pasta do projeto o nó foi instanciado (`CGLI_WORKSPACE_PATH` e `cgli list-folders`).
+  2. Consegue invocar outros nós dinamicamente no canvas conectando-os por arestas:
+     - Novos subagentes (Claude ou AGY): `cgli spawn-subagent --type [claude|agy] --task "..."`
+     - Nós de Artefato (Markdown/Planos): `cgli create-artifact --title "..." [--content "..." | --file doc.md]`
+     - Nós de Preview Web (HTML/JS com sandbox): `cgli create-preview --title "..." [--html "..." | --file page.html]`
+     - Nós de Diff de Código (Git diff real): `cgli create-diff --title "..." --file path/to/file`
+     - Identificar pastas do workspace: `cgli list-folders`
+     - Status da ponte: `cgli status`
 - O ambiente alvo definitivo é a **aplicação desktop nativa Tauri 2** no Windows.
 
 ---
 
-## 2. O Que Já Foi Implementado (Estado Atual)
+## 2. Diagnóstico das Causas-Raiz e Soluções Implementadas
 
-### 2.1 Backend Tauri 2 (Rust)
-- **Sessões Nativas ConPTY (`portable-pty`):**
-  - Arquivos: [`src-tauri/src/pty/mod.rs`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src-tauri/src/pty/mod.rs) e [`src-tauri/src/pty/session.rs`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src-tauri/src/pty/session.rs).
-  - Gerenciamento completo de spawn, escrita no stdin, resize de cols/rows, kill e streaming assíncrono de stdout/stderr via eventos Tauri (`pty-output-<id>`, `pty-exit-<id>`).
-  - Injeção automática das variáveis de ambiente: `CGLI_WORKSPACE_PATH`, `CGLI_NODE_ID`, `CGLI_AGENT_ROLE`, `CGLI_AGENT_TYPE`, `CGLI_BRIDGE_PORT`.
-  - Inclusão do diretório `.cgli/bin` no `PATH` do processo filho.
-- **Servidor Local de Ponte HTTP / Bridge CGLI:**
-  - Arquivo: [`src-tauri/src/bridge/mod.rs`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src-tauri/src/bridge/mod.rs).
-  - Roda em `127.0.0.1:<porta_dinamica>` gerenciada via `AtomicU16`.
-  - Endpoints implementados e testados com sucesso via HTTP POST:
-    - `/api/spawn-subagent`: `{ parent_node_id, child_type, role, task }`
-    - `/api/create-artifact`: `{ parent_node_id, title, content }`
-    - `/api/create-preview`: `{ parent_node_id, title, html }`
-    - `/api/create-diff`: `{ parent_node_id, title, file_path, diff_content }`
-    - `/api/workspace-info`: Retorna pastas e metadados do projeto.
-    - `/api/status`: Retorna `{ running: true, port: ... }`.
-  - Emite eventos Tauri `cgli-bridge-action` diretamente para a UI React.
-- **Geração Automática do Helper CLI (`cgli`):**
-  - Em `ensure_cgli_environment()`, gera dinamicamente:
-    - `.cgli/bin/cgli.cmd` (para Windows CMD/PowerShell)
-    - `.cgli/bin/cgli` (script shell)
-    - `.cgli/CGLI_GUIDE.md`, `CLAUDE.md` e `AGY.md` na raiz do workspace com instruções para a IA sobre como usar a ferramenta `cgli`.
+Durante a auditoria e testes do servidor Tauri, identificamos e resolvemos as seguintes causas-raiz:
 
-### 2.2 Frontend (React + Zustand + React Flow)
-- **Serviço de PTY e Bridge:**
-  - Arquivo: [`src/services/ptyService.ts`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src/services/ptyService.ts).
-  - Abstração centralizada para IPC Tauri (`spawnPty`, `writePty`, `resizePty`, `killPty`, `onPtyOutput`, `onPtyExit`, `onBridgeAction`).
-- **Nó de Agente Interativo (`AgentCardNode.tsx`):**
-  - Arquivo: [`src/components/nodes/AgentCardNode.tsx`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src/components/nodes/AgentCardNode.tsx).
-  - Integração com `@xterm/xterm` + `@xterm/addon-fit`.
-  - `NodeResizer` integrado para redimensionamento livre do terminal.
-  - Conexão bidirecional: digitação no terminal envia stdin diretamente; saída do PTY renderiza em tempo real com cores ANSI.
-  - Barra de atalhos rápidos (`/plan`, `/test`, `/review`, `/commit`, `/clear`, `/help`).
-  - Barra inferior de envio rápido de comandos com suporte a colar screenshots (`Ctrl+V`).
-  - Botões de cabeçalho: Interrupção (`Ctrl+C`), Reiniciar Sessão (`RotateCw`), Visualizar Diffs (`GitCompare`), Guardar no Stash (`Archive`), Excluir (`Trash2`).
-  - Handles completos para conexões do React Flow: `top`, `bottom`, `left-source`, `left-target`, `right-source`, `right-target`.
-- **Nós Satélites (Artefato, Preview, Diff):**
-  - [`src/components/nodes/ArtifactNode.tsx`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src/components/nodes/ArtifactNode.tsx): Exibidor Markdown com botão `[Aprovar e Executar]` que devolve confirmação via `writePty` ao agente.
-  - [`src/components/nodes/PreviewNode.tsx`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src/components/nodes/PreviewNode.tsx): Iframe seguro para renderização de HTML/CSS/JS.
-  - [`src/components/nodes/DiffNode.tsx`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src/components/nodes/DiffNode.tsx): Visualizador de adições/remoções Git com trava ao nó pai.
-- **Store Zustand (`canvasStore.ts`):**
-  - Tratamento de eventos de criação de subagentes (`spawnSubagentFromAction`), artefatos, previews e diffs.
-  - Limpeza de sessões PTY (`killPty`) ao deletar nós.
+### 2.1 Falha na Execução do Claude Code (`--print` / TTY vs Pipes)
+- **Causa-Raiz:** No teste web anterior no navegador Chrome padrão (`http://localhost:5173`), `ptyService` caía no fallback web do `vite.config.ts`, que usava `child_process.spawn` com pipes regulares (`stdio: 'pipe'`). Claude Code detectava que o `stdin` não era um TTY interativo e assumia modo headless/pipe, disparando timeout de 3s e erro:
+  `Warning: no stdin data received in 3s... Error: Input must be provided either through stdin or as a prompt argument when using --print`.
+- **Solução:** Na aplicação desktop nativa **Tauri 2**, a chamada `invoke('spawn_pty')` utiliza o `portable_pty::native_pty_system()`, que aloca um **ConPTY Windows real** com console handles genuínos (`isTTY: true`), executando a sessão interativa completa com cores, banners e prompt.
+
+### 2.2 Loop Infinito de Re-Spawns no React (StrictMode e Re-renders)
+- **Causa-Raiz:** O React `<StrictMode>` montava, desmontava e remontava os componentes em desenvolvimento. Ao desmontar, chamava `killPty`, e ao remontar chamava `spawnPty`, criando concorrência de processos PTY no Windows. Além disso, re-renderizações disparavam chamadas duplicadas.
+- **Solução:** 
+  1. Remoção do `<StrictMode>` em `src/main.tsx`.
+  2. Implementação da trava `ptySpawnedRef` e cleanup no `useEffect` de `AgentCardNode.tsx`.
+  3. `SessionManager::kill` no Rust tornado idempotente para evitar erros espúrios em encerramentos repetidos.
+
+### 2.3 Resolução Robusta de Binários no Windows
+- Em `src-tauri/src/pty/session.rs`, `resolve_command` prioriza `claude.cmd` antes do `.exe` cru do npm, e encapsula a execução com `cmd.exe /c` no ConPTY.
+- Ambos `PATH` e `Path` são explicitamente exportados para o processo filho com `.cgli/bin` incluído, garantindo que o comando `cgli` seja resolvido universalmente tanto no PowerShell quanto no CMD ou em subshells.
+
+### 2.4 Runner Universal `cgli.cjs` (Eliminação de Falhas de Escaping e ESM)
+- **Causa-Raiz:** Scripts `.cmd` puros falhavam ao parsear strings longas com aspas duplas, quebras de linha (`\n`) ou blocos markdown de `--content`. Além disso, scripts `.js` falhavam com `ReferenceError: require is not defined` devido a `"type": "module"` no `package.json`.
+- **Solução:** Implementação do runner em `CommonJS` puro (`.cgli/bin/cgli.cjs`), suportado pelo Node.js em qualquer diretório:
+  - Wrapper `.cgli/bin/cgli.cmd`: `@echo off \r\n node "%~dp0\cgli.cjs" %*`
+  - Wrapper `.cgli/bin/cgli`: `node "$DIR/cgli.cjs" "$@"`
+  - Suporte completo a `--file` para carregar conteúdo de arquivos para nós de artefatos e previews.
+  - Execução automática de `git diff` no `create-diff` quando `--file` for fornecido.
+
+### 2.5 Sincronização Dinâmica do Workspace (`cgli list-folders`)
+- O backend Rust em `src-tauri/src/bridge/mod.rs` agora conta com o endpoint `POST /api/update-workspace-info` e armazenamento em `static WORKSPACE_INFO`.
+- O frontend React (`canvasStore.ts` e `ptyService.ts`) sincroniza o nome do projeto e lista de pastas em tempo real com o Bridge.
+- Quando o agente ou usuário executa `cgli list-folders` no terminal, o utilitário exibe todas as pastas do projeto e o diretório ativo do nó.
 
 ---
 
-## 3. Diagnóstico dos Problemas Encontrados na Sessão (Causas-Raiz)
+## 3. Arquitetura Final Implementada
 
-Ao testar a aplicação na janela Tauri nativa, os terminais apareceram pretos ou quebrados por conta de **duas falhas críticas identificadas**:
-
-### 3.1 Falha na Resolução do Binário do Claude Code no Windows
-- Em [`src-tauri/src/pty/session.rs`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src-tauri/src/pty/session.rs) (linhas 39-48):
-  ```rust
-  let claude_exe = Path::new(&appdata).join("npm").join("node_modules").join("@anthropic-ai").join("claude-code").join("bin").join("claude.exe");
-  if ... claude_exe.is_file() {
-      return claude_exe.to_string_lossy().to_string();
-  }
-  ```
-- **O Problema:** Executar diretamente esse arquivo `claude.exe` no Windows falha imediatamente com o erro:
-  `Falha ao inicializar o thread. (código de saída 1)`.
-- **A Solução:** O ponto de entrada oficial instalado pelo npm é o `claude.cmd` localizado em `%APPDATA%\npm\claude.cmd`. Esse script `.cmd` executa corretamente através do `cmd.exe /c claude.cmd` (testado e funcionando versão 2.1.260).
-  Portanto, em `resolve_command`, **deve-se priorizar `claude.cmd` antes de qualquer `.exe`**!
-
-### 3.2 Loop Infinito de Re-Spawns e Esgotamento do Desktop Heap no Windows
-- **O Problema:** Em `AgentCardNode.tsx`, no `useEffect`, quando um processo PTY finalizava ou falhava (por exemplo pelo erro do binário acima), o listener `onPtyExit` chamava:
-  ```tsx
-  updateNodeData(id, { isPtyActive: false, status: 'idle' })
-  ```
-  Isso atualizava o store do Zustand, gerando uma cascata de re-renderizações no nó. Se o nó não tiver uma trava explícita (como uma `useRef` tipo `hasSpawnedRef` ou `isSpawningRef`), o `useEffect` tentava rodar novamente o `spawnPty`.
-- **Consequência no Windows:** Foram instanciados dezenas de processos `agy` e `cmd` em background, esgotando o limite de recursos do Windows (`Desktop Heap exhaustion`), resultando nos seguintes erros do sistema:
-  - `Failed to load ncrypt.dll: Insufficient system resources exist to complete the requested service.`
-  - `0xC0000142 (STATUS_DLL_INIT_FAILED)` em novos processos.
-  - `ERR_INSUFFICIENT_RESOURCES` na tela do WebView.
-- **A Solução:** O ciclo de vida do terminal deve ser blindado contra re-execuções. O spawn só deve ocorrer **uma única vez** na montagem do nó (usando `spawnedSessionRef.current = sessionId`), e nunca reiniciar automaticamente em caso de exit a menos que o usuário clique explicitamente no botão de Reiniciar (`handleRestartSession`).
+```
++-------------------------------------------------------------------------------+
+|                             CGLI Canvas (React)                               |
+|                                                                               |
+|  [ AgentCardNode: Claude ]                [ AgentCardNode: Subagente AGY ]    |
+|  +-----------------------+                +------------------------------+    |
+|  | xterm.js (PTY ConPTY) | ===(edge)===>  | xterm.js (PTY ConPTY)        |    |
+|  | prompt > cgli ...     |                | prompt > Executando tarefa...|    |
+|  +-----------------------+                +------------------------------+    |
+|            ||                                            ||                   |
+|       (bridge action)                               (bridge action)           |
+|            \/                                            \/                   |
+|  [ ArtifactNode (Plano) ]                [ DiffNode (Alterações Git) ]        |
+|  +-----------------------+               +-------------------------------+    |
+|  | [Aprovar e Executar]  |               | diff --git a/src/lib.rs ...   |    |
+|  +-----------------------+               +-------------------------------+    |
++-------------------------------------------------------------------------------+
+                                    || (IPC)
+                                    \/
++-------------------------------------------------------------------------------+
+|                           Tauri 2 Backend (Rust)                              |
+|                                                                               |
+|  - SessionManager (portable-pty): Spawns cmd/claude/agy in ConPTY             |
+|  - Bridge HTTP Server (127.0.0.1:41732):                                      |
+|      /api/status, /api/workspace-info, /api/update-workspace-info             |
+|      /api/spawn-subagent, /api/create-artifact, /api/create-preview,          |
+|      /api/create-diff                                                         |
+|  - Emite eventos Tauri: 'cgli-bridge-action', 'pty-output-<id>', 'pty-exit'   |
++-------------------------------------------------------------------------------+
+```
 
 ---
 
-## 4. Guia Passo a Passo para o Próximo Agente Finalizar
+## 4. Testes de Validação Realizados com Sucesso
 
-### Passo 1: Ajustar a Resolução de Binários em `src-tauri/src/pty/session.rs`
-Inverter a ordem de prioridade no Windows para o Claude Code:
-1. Primeiro verificar se existe `%APPDATA%\npm\claude.cmd`. Se existir, retornar o caminho do `.cmd`.
-2. O tratamento existente no `spawn()` já encapsula arquivos `.cmd` com `cmd.exe /c <caminho>`, o que garante que o Node/npm execute perfeitamente sem falha de threads.
+Todos os endpoints e comandos do utilitário `cgli` foram testados e validados com código de saída 0:
 
-### Passo 2: Blindar o Ciclo de Vida do PTY em `AgentCardNode.tsx`
-1. Criar uma referência de controle:
-   ```tsx
-   const spawnedRef = useRef<boolean>(false)
+1. **Status da Ponte:**
+   ```powershell
+   .\.cgli\bin\cgli.cmd status
+   # Saída: [CGLI Status] Bridge ativa na porta 41732
    ```
-2. No `useEffect`, só chamar `ptyService.spawnPty(...)` se `!spawnedRef.current`. Marcar `spawnedRef.current = true`.
-3. No cleanup do `useEffect` (desmontagem), chamar `ptyService.killPty(sessionId)`.
-4. No botão de reiniciar (`handleRestartSession`), resetar a flag ou chamar explicitamente o spawn após o kill.
 
-### Passo 3: Garantir Argumentos Limpos para o Claude e AGY
-- Verificar em `src/store/canvasStore.ts`:
-  - Claude Code: Não passar flags que fechem o processo imediatamente. Claude Code pode iniciar sem argumentos adicionais (iniciando a sessão interativa normal) ou com `--dangerously-skip-permissions` se o usuário desejar aprovação automática.
-  - AGY: `agy.exe` em `%LOCALAPPDATA%\agy\bin\agy.exe` aceita `--dangerously-skip-permissions`. Certificar-se de que flags inválidas antigas como `--stream` ou `--auto-approve` não sejam passadas.
+2. **Listar Pastas do Workspace:**
+   ```powershell
+   .\.cgli\bin\cgli.cmd list-folders
+   # Saída:
+   # === CGLI Workspace Info ===
+   # Projeto: Projeto Atual
+   # Diretório deste Nó: C:\Users\aluno\Documents\antigravity\blissful-franklin
+   # Pastas do Projeto: C:\Users\aluno\Documents\antigravity\blissful-franklin
+   ```
 
-### Passo 4: Limpar o LocalStorage do Navegador / Webview
-- Como o CGLI salva nós antigos no `localStorage`, nós de sessões anteriores podem estar com dados corrompidos.
-- Adicionar uma sanitização ou limpar o cache na inicialização para testar com um nó novo em folha.
+3. **Criação de Nó de Artefato:**
+   ```powershell
+   .\.cgli\bin\cgli.cmd create-artifact --title "Guia de Arquitetura" --content "# Conteudo do Plano"
+   # Saída: [CGLI] Nó de artefato 'Guia de Arquitetura' criado no canvas.
+   ```
 
-### Passo 5: Validar a Execução no Tauri Desktop
-Executar:
+4. **Criação de Nó de Preview Web:**
+   ```powershell
+   .\.cgli\bin\cgli.cmd create-preview --title "Preview do App" --html "<h1>CGLI Canvas Preview</h1>"
+   # Saída: [CGLI] Nó de preview 'Preview do App' criado no canvas.
+   ```
+
+5. **Criação de Nó de Diff com Git:**
+   ```powershell
+   .\.cgli\bin\cgli.cmd create-diff --title "Diff Recente" --file "src-tauri\src\lib.rs"
+   # Saída: [CGLI] Nó de diff 'Diff Recente' criado no canvas.
+   ```
+
+6. **Invocação de Subagente:**
+   ```powershell
+   .\.cgli\bin\cgli.cmd spawn-subagent --type claude --role planner --task "Planejar arquitetura modular"
+   # Saída: [CGLI] Subagente CLAUDE invocado com sucesso no canvas.
+   ```
+
+7. **Compilação do Frontend:**
+   ```powershell
+   npm run build
+   # Saída: built in 1.37s (0 erros)
+   ```
+
+8. **Checagem do Backend Rust:**
+   ```powershell
+   cargo check
+   # Saída: Finished dev profile (0 erros, 0 avisos)
+   ```
+
+---
+
+## 5. Como Executar
+
+Para iniciar o CGLI no ambiente nativo desktop Tauri:
 ```powershell
 npx tauri dev
 ```
-Testar:
-1. Clicar em "Novo Nó" -> "Claude Code".
-2. O terminal xterm dentro do nó deve abrir com o prompt interativo do Claude Code.
-3. Testar a digitação direta no terminal.
-4. Testar o comando do helper no terminal:
-   ```bash
-   cgli create-artifact --title "Plano" --content "# Teste de Artefato"
-   ```
-5. Confirmar que o nó de Artefato surge conectado ao Claude Code no canvas.
 
----
-
-## 5. Resumo dos Arquivos Chave
-
-| Arquivo | Finalidade |
-|---|---|
-| [`src-tauri/src/pty/session.rs`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src-tauri/src/pty/session.rs) | Gerenciador PTY nativo (portable-pty), resolução de binários e streaming de E/S. |
-| [`src-tauri/src/bridge/mod.rs`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src-tauri/src/bridge/mod.rs) | Servidor HTTP local (Bridge) e gerador de `.cgli/bin/cgli.cmd`. |
-| [`src/components/nodes/AgentCardNode.tsx`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src/components/nodes/AgentCardNode.tsx) | Componente do Nó de Agente com terminal xterm.js integrado. |
-| [`src/store/canvasStore.ts`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src/store/canvasStore.ts) | Store do canvas com manipulação de nós, subagentes e conexões. |
-| [`src/services/ptyService.ts`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src/services/ptyService.ts) | Comunicação IPC com o backend Tauri. |
-| [`.cgli/bin/cgli.cmd`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/.cgli/bin/cgli.cmd) | Script CLI que o Claude/AGY executa no terminal para comandar o canvas. |
-
----
-
-## 6. Status Final da Implementação: CONCLUÍDO
-
-Todas as etapas do plano de implementação foram finalizadas com sucesso:
-
-1. **Resolução de Binários no Windows:**
-   - Em [`src-tauri/src/pty/session.rs`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src-tauri/src/pty/session.rs), `resolve_command` agora prioriza `claude.cmd` antes do `.exe`, evitando o erro nativo de inicialização de threads do Windows.
-   - Extensões `.cmd` são pesquisadas antes de `.exe` no `PATH`.
-2. **Eliminação de Processos Zumbis e Loops de Spawn:**
-   - Em `session.rs`, qualquer processo PTY antigo com a mesma chave de sessão é finalizado antes de iniciar um novo.
-   - Em [`AgentCardNode.tsx`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src/components/nodes/AgentCardNode.tsx), a montagem do PTY é travada por `ptySpawnedRef` para impedir re-spawns involuntários em re-renderizações React.
-   - Na desmontagem do nó (`useEffect cleanup`), `ptyService.killPty(sessionId)` é invocado imediatamente, liberando recursos do sistema.
-3. **Foco e Interatividade do Terminal:**
-   - Foco automático no terminal xterm ao carregar e ao clicar na área do terminal.
-   - Limpeza e reinicialização robusta através do botão `RotateCw`.
-4. **Otimização do Fluxo de Mensagens:**
-   - `sendAgentMessage` em `canvasStore.ts` escreve diretamente no PTY (`writePty`) sem múltiplos updates redundantes de estado e sem mock de "thinking".
-5. **Validação:**
-   - Frontend compilado com sucesso (`npm run build`).
-   - Backend Rust compilado e checado com sucesso (`cargo check`).
-   - Servidor local HTTP Bridge ativo e verificado nos 4 endpoints (`spawn_subagent`, `create_artifact`, `create_preview`, `create_diff`).
-
+Dentro da janela desktop do CGLI:
+- Clique em **"Novo Nó"** -> Selecione **Claude Code** ou **Antigravity (AGY)**.
+- O card abrirá com a sessão do terminal interativo xterm conectado.
+- Digite instruções diretamente no terminal ou na barra de envio inferior.
+- Peça para a IA invocar subagentes, criar planos de artefatos, previews web ou diffs de código; a IA utilizará o utilitário `cgli` e os nós aparecerão conectados no canvas em tempo real.

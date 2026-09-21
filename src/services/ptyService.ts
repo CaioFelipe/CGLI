@@ -170,6 +170,17 @@ class PtyService {
       return 41732
     }
   }
+
+  public async syncWorkspaceInfo(info: { projectName?: string; activeFolderId?: string; folders?: any[] }): Promise<void> {
+    const port = await this.getBridgePort()
+    try {
+      await fetch(`http://127.0.0.1:${port}/api/update-workspace-info`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(info),
+      })
+    } catch (_) {}
+  }
 }
 
 export const ptyService = new PtyService()

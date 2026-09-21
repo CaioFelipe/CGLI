@@ -228,7 +228,11 @@ const getInitialCanvasState = (projectId: string): { nodes: Node[]; edges: Edge[
           // Sanitize any legacy mock demo nodes or legacy diff mock content
           const cleanNodes = parsed.nodes
             .filter(
-              (n: any) => n.id !== 'node-claude-1' && n.id !== 'node-agy-1' && n.id !== 'node-archived-demo'
+              (n: any) =>
+                n.id !== 'node-claude-1' &&
+                n.id !== 'node-agy-1' &&
+                n.id !== 'node-archived-demo' &&
+                !String(n.id || '').includes('sub-1789828517030')
             )
             .map((n: any) => {
               if (n.type === 'diffNode') {
@@ -810,7 +814,15 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   setProject: (partial) => {
-    set((state) => ({ project: { ...state.project, ...partial } }))
+    set((state) => {
+      const updated = { ...state.project, ...partial }
+      ptyService.syncWorkspaceInfo({
+        projectName: updated.name,
+        activeFolderId: updated.activeFolderId,
+        folders: updated.folders,
+      })
+      return { project: updated }
+    })
   },
 
   getActiveWorkspacePath: () => {
@@ -1785,6 +1797,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const posX = parent.position.x + 480
     const posY = parent.position.y + existingOutEdges.length * 140
 
+    const workspacePath = (parent.data as any)?.workspacePath || get().getActiveWorkspacePath()
     const newSubNode: Node = {
       id: childId,
       type: 'agentNode',
@@ -1800,6 +1813,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         approvals: [],
         attachedImages: [],
         terminalLogs: [],
+        workspacePath,
+        sessionId: `pty-${childId}`,
       },
     }
 
@@ -2017,6 +2032,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         ],
         workspacePath,
         sessionId: `pty-${childId}`,
+        initialTask: task,
       },
     }
 
@@ -2416,4 +2432,14 @@ if (typeof window !== 'undefined') {
       )
     }
   })
+
+  // Initial sync of project workspace info to bridge
+  try {
+    const initProj = useCanvasStore.getState().project
+    ptyService.syncWorkspaceInfo({
+      projectName: initProj.name,
+      activeFolderId: initProj.activeFolderId,
+      folders: initProj.folders,
+    })
+  } catch (_) {}
 }

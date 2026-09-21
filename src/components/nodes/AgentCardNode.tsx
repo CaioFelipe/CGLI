@@ -258,6 +258,15 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                 isPtyActive: true,
               })
               term.focus()
+              if (nodeData.initialTask) {
+                const taskToSend = nodeData.initialTask
+                updateNodeData(id, { initialTask: undefined })
+                setTimeout(() => {
+                  if (!isDisposed) {
+                    ptyService.writePty(sessionId, `${taskToSend}\r`)
+                  }
+                }, 1800)
+              }
             }
           })
           .catch((err) => {

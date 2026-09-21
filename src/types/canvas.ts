@@ -71,6 +71,7 @@ export interface AgentNodeData {
   cliId?: string
   customBinary?: string
   defaultArgs?: string
+  initialTask?: string
 }
 
 export interface DiffLine {
