@@ -12,6 +12,7 @@ import { create } from 'zustand'
 import { ptyService } from '../services/ptyService'
 import type {
   ActionApproval,
+  AgentViewMode,
   AnnotationItem,
   AttachedArtifactBadge,
   ChatMessage,
@@ -93,7 +94,9 @@ interface CanvasState {
 
   // Node Actions
   sendAgentMessage: (nodeId: string, text: string, images?: string[]) => void
+  setAgentViewMode: (nodeId: string, mode: AgentViewMode) => void
   toggleAgentViewMode: (nodeId: string) => void
+  clearAgentMessages: (nodeId: string) => void
   handleApproval: (nodeId: string, approvalId: string, action: 'approved' | 'rejected') => void
   approveArtifact: (nodeId: string) => void
   attachImageToAgent: (nodeId: string, image: { id: string; url: string; name: string; nodeId?: string }) => void
@@ -1503,7 +1506,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }
 
     const currentMessages = ((node.data as any).messages || []) as ChatMessage[]
-    const updatedMessages = [...currentMessages, userMessage]
+    const assistantMessage: ChatMessage = {
+      id: `msg-agent-${Date.now()}`,
+      sender: 'agent',
+      text: '',
+      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      isStreaming: true,
+    }
+    const updatedMessages = [...currentMessages, userMessage, assistantMessage]
 
     try {
       const proj = get().project
@@ -1543,6 +1553,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       get().updateNodeData(nodeId, {
         messages: updatedMessages,
         status: 'running',
+        thinking: {
+          duration: 'Pensando...',
+          thoughts: [`Processando instrução: "${text.slice(0, 70)}..."`],
+          isExpanded: true,
+        },
         attachedImages: [],
         terminalLogs: [
           ...((node.data as any).terminalLogs || []),
@@ -1558,18 +1573,31 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       }
       get().updateNodeData(nodeId, {
-        messages: [...updatedMessages, errMessage],
+        messages: [...currentMessages, userMessage, errMessage],
         status: 'error',
       })
     }
   },
 
+  setAgentViewMode: (nodeId, mode) => {
+    get().updateNodeData(nodeId, { viewMode: mode })
+  },
+
   toggleAgentViewMode: (nodeId) => {
     const node = get().nodes.find((n) => n.id === nodeId)
     if (!node) return
-    const currentMode = (node.data as any).viewMode || 'terminal'
+    const currentMode = (node.data as any).viewMode || 'extension'
     const newMode = currentMode === 'terminal' ? 'extension' : 'terminal'
     get().updateNodeData(nodeId, { viewMode: newMode })
+  },
+
+  clearAgentMessages: (nodeId) => {
+    get().updateNodeData(nodeId, {
+      messages: [],
+      thinking: null,
+      approvals: [],
+      status: 'idle',
+    })
   },
 
   handleApproval: (nodeId, approvalId, action) => {

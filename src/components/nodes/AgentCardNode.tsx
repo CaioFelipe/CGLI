@@ -8,7 +8,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Code2,
+  ChevronUp,
   Copy,
   CornerDownLeft,
   Eye,
@@ -16,8 +16,10 @@ import {
   FolderSync,
   GitCompare,
   Image as ImageIcon,
+  MessageSquare,
   Paperclip,
   RotateCw,
+  Sparkles,
   Terminal as TerminalIcon,
   Trash2,
   X,
@@ -78,6 +80,65 @@ const AVAILABLE_SLASH_COMMANDS: SlashCommand[] = [
   },
 ]
 
+export function cleanPtyOutput(raw: string): string {
+  if (!raw) return ''
+
+  // 1. Remove OSC escape sequences (\x1b] ... \x07 or \x1b\)
+  let text = raw.replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '')
+
+  // 2. Remove CSI escape sequences (\x1b[ ... letter)
+  text = text.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
+
+  // 3. Remove simple escape sequences (\x1b=, \x1b>, etc.)
+  text = text.replace(/\x1b[=><()#]/g, '')
+
+  // 4. Remove bell and control characters (except newline \n and carriage return \r)
+  text = text.replace(/[\x07\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+
+  // 5. Handle carriage returns (\r) without \n (line overwrites from spinners / progress bars)
+  const lines = text.split('\n').map((line) => {
+    if (!line.includes('\r')) return line
+    const segments = line.split('\r').filter(Boolean)
+    return segments.length > 0 ? segments[segments.length - 1] : ''
+  })
+
+  return lines.join('\n')
+}
+
+export function cleanResponseText(raw: string, promptSent?: string): string {
+  let cleaned = cleanPtyOutput(raw).trim()
+
+  if (promptSent && promptSent.trim()) {
+    const trimmedPrompt = promptSent.trim()
+    if (cleaned.startsWith(trimmedPrompt)) {
+      cleaned = cleaned.slice(trimmedPrompt.length).trim()
+    }
+  }
+
+  // Remove trailing prompt character (e.g. `>` or `$` or `❯`) if on its own line at the end
+  cleaned = cleaned.replace(/(\r?\n|\s)*(>|❯|\$|#)\s*$/g, '')
+
+  // Remove initial CLI banners or safety warnings if at the top
+  const lines = cleaned.split('\n')
+  while (lines.length > 0) {
+    const first = lines[0].trim()
+    if (
+      first.startsWith('Quick safety check:') ||
+      first.startsWith('Welcome to Claude Code') ||
+      first.startsWith('╭─') ||
+      first.startsWith('╰─') ||
+      first.startsWith('│') ||
+      first.startsWith('Warning: no stdin data received')
+    ) {
+      lines.shift()
+    } else {
+      break
+    }
+  }
+
+  return lines.join('\n').trim()
+}
+
 function parseMessageContent(text: string): Array<
   | { type: 'text'; content: string }
   | { type: 'code'; language: string; code: string }
@@ -92,7 +153,7 @@ function parseMessageContent(text: string): Array<
 
   while ((match = codeBlockRegex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      const txt = text.slice(lastIndex, match.index).trim()
+      const txt = text.slice(lastIndex, match.index)
       if (txt) parts.push({ type: 'text', content: txt })
     }
     parts.push({
@@ -104,15 +165,91 @@ function parseMessageContent(text: string): Array<
   }
 
   if (lastIndex < text.length) {
-    const txt = text.slice(lastIndex).trim()
+    const txt = text.slice(lastIndex)
     if (txt) parts.push({ type: 'text', content: txt })
   }
 
   if (parts.length === 0 && text.trim()) {
-    parts.push({ type: 'text', content: text.trim() })
+    parts.push({ type: 'text', content: text })
   }
 
   return parts
+}
+
+function formatInline(text: string): React.ReactNode[] {
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g)
+  return parts.map((part, i) => {
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code
+          key={i}
+          className="px-1.5 py-0.5 mx-0.5 rounded bg-slate-800 text-indigo-300 font-mono text-[11px] border border-slate-700/60"
+        >
+          {part.slice(1, -1)}
+        </code>
+      )
+    }
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={i} className="font-semibold text-slate-100">
+          {part.slice(2, -2)}
+        </strong>
+      )
+    }
+    return <span key={i}>{part}</span>
+  })
+}
+
+function renderMarkdownText(text: string): React.ReactNode {
+  const lines = text.split('\n')
+  return (
+    <div className="space-y-1">
+      {lines.map((line, idx) => {
+        if (line.startsWith('### ')) {
+          return (
+            <h4 key={idx} className="font-bold text-xs mt-2 mb-1 text-slate-200">
+              {line.replace(/^###\s+/, '')}
+            </h4>
+          )
+        }
+        if (line.startsWith('## ')) {
+          return (
+            <h3 key={idx} className="font-bold text-sm mt-2.5 mb-1 text-slate-100">
+              {line.replace(/^##\s+/, '')}
+            </h3>
+          )
+        }
+        if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+          const content = line.trim().replace(/^[-*]\s+/, '')
+          return (
+            <div key={idx} className="flex items-start gap-1.5 my-0.5 ml-1">
+              <span className="text-indigo-400 leading-relaxed">•</span>
+              <span className="leading-relaxed">{formatInline(content)}</span>
+            </div>
+          )
+        }
+        const numMatch = line.trim().match(/^(\d+)\.\s+(.*)/)
+        if (numMatch) {
+          return (
+            <div key={idx} className="flex items-start gap-1.5 my-0.5 ml-1">
+              <span className="text-indigo-400 font-mono text-[10px] shrink-0 mt-0.5">
+                {numMatch[1]}.
+              </span>
+              <span className="leading-relaxed">{formatInline(numMatch[2])}</span>
+            </div>
+          )
+        }
+        if (!line.trim()) {
+          return <div key={idx} className="h-1.5" />
+        }
+        return (
+          <p key={idx} className="leading-relaxed my-0.5">
+            {formatInline(line)}
+          </p>
+        )
+      })}
+    </div>
+  )
 }
 
 export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
@@ -122,7 +259,8 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     clis,
     getActiveWorkspacePath,
     sendAgentMessage,
-    toggleAgentViewMode,
+    setAgentViewMode,
+    clearAgentMessages,
     handleApproval,
     stashNode,
     deleteNode,
@@ -146,8 +284,12 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const fitAddonInstance = useRef<FitAddon | null>(null)
   const ptySpawnedRef = useRef<boolean>(false)
   const chatBottomRef = useRef<HTMLDivElement>(null)
-  const ptyOutputBufferRef = useRef<string>('')
-  const outputDebounceTimerRef = useRef<any>(null)
+
+  // Stream output synchronization refs
+  const ptyBufferRef = useRef<string>('')
+  const activePromptRef = useRef<string>('')
+  const startTimeRef = useRef<number>(Date.now())
+  const debounceTimerRef = useRef<any>(null)
 
   const isClaude =
     nodeData.agentType?.toLowerCase().includes('claude') ||
@@ -243,7 +385,6 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
       // Attach custom key event handler to isolate xterm from React Flow
       term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
-        // Stop React Flow canvas and window listeners from capturing arrow keys, Enter, Backspace, Delete, etc.
         e.stopPropagation()
         return true
       })
@@ -278,38 +419,106 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         ptyService.writePty(sessionId, d)
       })
 
-      // 1. Listen for PTY output chunks BEFORE spawning so no banner is lost
+      // Listen for PTY output chunks and stream to both xterm and Extension chat
       ptyService
         .onPtyOutput(sessionId, (chunk) => {
           if (!isDisposed) {
+            // Write raw chunk to xterm
             term.write(chunk)
 
-            // Buffer clean output text for Extension mode chat sync
-            const cleanChunk = chunk.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
-            ptyOutputBufferRef.current += cleanChunk
+            // Buffer raw text for assistant chat response
+            ptyBufferRef.current += chunk
 
-            if (outputDebounceTimerRef.current) {
-              clearTimeout(outputDebounceTimerRef.current)
+            // Clear previous debounce timer
+            if (debounceTimerRef.current) {
+              clearTimeout(debounceTimerRef.current)
             }
 
-            outputDebounceTimerRef.current = setTimeout(() => {
-              const fullText = ptyOutputBufferRef.current.trim()
-              if (fullText) {
-                // If the node status was running, mark it idle and update thoughts
+            // Clean the accumulated buffer for the chat view
+            const currentCleaned = cleanResponseText(ptyBufferRef.current, activePromptRef.current)
+
+            // If the node is running and we have an assistant message placeholder, stream live!
+            const currentMessages = nodeData.messages || []
+            const lastMsg = currentMessages[currentMessages.length - 1]
+
+            if (lastMsg && lastMsg.sender === 'agent' && nodeData.status === 'running') {
+              if (currentCleaned && currentCleaned !== lastMsg.text) {
+                const updated = currentMessages.map((m, idx) =>
+                  idx === currentMessages.length - 1
+                    ? { ...m, text: currentCleaned, isStreaming: true }
+                    : m
+                )
+                updateNodeData(id, { messages: updated })
+              }
+            } else if (currentCleaned && nodeData.status === 'running') {
+              // If no assistant message exists yet, create one
+              const newMsg: ChatMessage = {
+                id: `msg-agent-${Date.now()}`,
+                sender: 'agent',
+                text: currentCleaned,
+                timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                isStreaming: true,
+              }
+              updateNodeData(id, { messages: [...currentMessages, newMsg] })
+            }
+
+            // Debounce timer: when output settles for 1200ms, finalize the response
+            debounceTimerRef.current = setTimeout(() => {
+              const finalCleaned = cleanResponseText(ptyBufferRef.current, activePromptRef.current)
+              const msgs = nodeData.messages || []
+              const finalLast = msgs[msgs.length - 1]
+
+              const durationSec = `${((Date.now() - startTimeRef.current) / 1000).toFixed(1)}s`
+
+              if (finalLast && finalLast.sender === 'agent') {
+                const updated = msgs.map((m, idx) =>
+                  idx === msgs.length - 1
+                    ? {
+                        ...m,
+                        text: finalCleaned || '(Execução concluída no terminal)',
+                        isStreaming: false,
+                      }
+                    : m
+                )
                 updateNodeData(id, {
+                  messages: updated,
                   status: 'idle',
                   thinking: {
-                    duration: '2.1s',
+                    duration: durationSec,
                     thoughts: [
-                      `Processo executado no terminal (${command}).`,
-                      'Saída sincronizada com sucesso.',
+                      `Executado pelo modelo ${nodeData.title} em ${durationSec}.`,
+                      'Resposta gerada e sincronizada com sucesso.',
                     ],
                     isExpanded: false,
                   },
                 })
-                ptyOutputBufferRef.current = ''
+              } else if (finalCleaned) {
+                const newMsg: ChatMessage = {
+                  id: `msg-agent-${Date.now()}`,
+                  sender: 'agent',
+                  text: finalCleaned,
+                  timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                  isStreaming: false,
+                }
+                updateNodeData(id, {
+                  messages: [...msgs, newMsg],
+                  status: 'idle',
+                  thinking: {
+                    duration: durationSec,
+                    thoughts: [
+                      `Executado pelo modelo ${nodeData.title} em ${durationSec}.`,
+                      'Resposta sincronizada.',
+                    ],
+                    isExpanded: false,
+                  },
+                })
+              } else {
+                updateNodeData(id, { status: 'idle' })
               }
-            }, 1800)
+
+              ptyBufferRef.current = ''
+              activePromptRef.current = ''
+            }, 1400)
           }
         })
         .then((unlisten) => {
@@ -320,7 +529,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           }
         })
 
-      // 2. Listen for PTY process exit
+      // Listen for PTY process exit
       ptyService
         .onPtyExit(sessionId, () => {
           if (!isDisposed) {
@@ -336,7 +545,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           }
         })
 
-      // 3. Spawn native PTY directly in workspace folder
+      // Spawn native PTY directly in workspace folder
       if (!ptySpawnedRef.current) {
         ptySpawnedRef.current = true
         ptyService
@@ -358,9 +567,11 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                 updateNodeData(id, { initialTask: undefined })
                 setTimeout(() => {
                   if (!isDisposed) {
-                    ptyService.writePty(sessionId, `${taskToSend}\r`)
+                    activePromptRef.current = taskToSend
+                    startTimeRef.current = Date.now()
+                    sendAgentMessage(id, taskToSend)
                   }
-                }, 1800)
+                }, 1500)
               }
             }
           })
@@ -375,7 +586,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       return () => {
         isDisposed = true
         ro.disconnect()
-        if (outputDebounceTimerRef.current) clearTimeout(outputDebounceTimerRef.current)
+        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
         if (unlistenOutput) unlistenOutput()
         if (unlistenExit) unlistenExit()
         ptyService.killPty(sessionId)
@@ -423,7 +634,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     await ptyService.killPty(sessionId)
     if (terminalInstance.current) {
       terminalInstance.current.clear()
-      terminalInstance.current.writeln('\r\n\x1b[33m=== Reiniciando Sessão... ===\x1b[0m\r\n')
+      terminalInstance.current.writeln('\r\n\x1b[33m=== Reiniciando Sessão PTY... ===\x1b[0m\r\n')
     }
     await ptyService.spawnPty(sessionId, command, args, workspacePath, {
       CGLI_NODE_ID: id,
@@ -433,6 +644,23 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     })
     updateNodeData(id, { isPtyActive: true, status: 'idle' })
     terminalInstance.current?.focus()
+  }
+
+  const handleClearHistory = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    clearAgentMessages(id)
+  }
+
+  const handleSwitchViewMode = (mode: AgentViewMode) => {
+    setAgentViewMode(id, mode)
+    if (mode === 'terminal') {
+      setTimeout(() => {
+        try {
+          fitAddonInstance.current?.fit()
+          terminalInstance.current?.focus()
+        } catch (_) {}
+      }, 50)
+    }
   }
 
   // Autocomplete slash command detection
@@ -451,8 +679,9 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       )
     : []
 
-  const handleSendMessage = () => {
-    const text = inputVal.trim()
+  const handleSendMessage = (overrideText?: string) => {
+    const rawText = overrideText !== undefined ? overrideText : inputVal
+    const text = rawText.trim()
     const attached = nodeData.attachedImages?.map((img) => img.url)
 
     // If input is empty, send an Enter / newline to the PTY (useful for interactive CLI menus & prompts)
@@ -468,7 +697,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       if (viewMode === 'terminal') {
         terminalInstance.current?.clear()
       } else {
-        updateNodeData(id, { messages: [], approvals: [], thinking: null })
+        clearAgentMessages(id)
       }
       setInputVal('')
       if (viewMode === 'terminal') {
@@ -476,6 +705,11 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       }
       return
     }
+
+    // Set tracking refs for stream synchronization
+    activePromptRef.current = text
+    ptyBufferRef.current = ''
+    startTimeRef.current = Date.now()
 
     sendAgentMessage(id, text, attached)
     setInputVal('')
@@ -489,7 +723,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       if (viewMode === 'terminal') {
         terminalInstance.current?.clear()
       } else {
-        updateNodeData(id, { messages: [], approvals: [], thinking: null })
+        clearAgentMessages(id)
       }
       setInputVal('')
       return
@@ -499,10 +733,6 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     setInputVal(newVal)
     setSelectedSlashIndex(0)
     inputRef.current?.focus()
-  }
-
-  const addSlashCommand = (cmd: string) => {
-    applySlashCommand(cmd)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -576,17 +806,17 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           : 'bg-white border-slate-300 text-slate-900'
       }`}
       style={{
-        width: 520,
-        height: 480,
-        minWidth: 420,
-        minHeight: 380,
+        width: 560,
+        height: 520,
+        minWidth: 440,
+        minHeight: 400,
         borderColor: selected ? accentColor : undefined,
         boxShadow: selected ? `0 0 0 2px ${accentColor}44, 0 10px 25px -5px rgba(0,0,0,0.3)` : undefined,
       }}
     >
       <NodeResizer
-        minWidth={420}
-        minHeight={380}
+        minWidth={440}
+        minHeight={400}
         isVisible={selected}
         lineClassName="border-indigo-500"
         handleClassName="h-3 w-3 bg-white border-2 border-indigo-500 rounded-xs"
@@ -631,9 +861,9 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           borderTop: `3px solid ${accentColor}`,
         }}
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0">
           <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0"
+            className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 shadow-xs"
             style={{
               backgroundColor: accentLight,
               color: accentColor,
@@ -666,7 +896,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
               />
               <span className="text-[10px] font-medium text-slate-400">
                 {nodeData.status === 'running'
-                  ? 'Processando...'
+                  ? 'Processando resposta...'
                   : nodeData.isPtyActive !== false
                   ? 'Conectado'
                   : 'Parado'}
@@ -682,50 +912,8 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           </div>
         </div>
 
-        {/* Header Controls */}
+        {/* Header Action Controls */}
         <div className="flex items-center gap-1 shrink-0">
-          {/* View Mode Toggle Button */}
-          <button
-            type="button"
-            onClick={() => {
-              toggleAgentViewMode(id)
-            }}
-            title={
-              viewMode === 'extension'
-                ? 'Alternar para Terminal (PTY interativo)'
-                : 'Alternar para Modo Extensão (Chat & Raciocínio)'
-            }
-            className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-indigo-400 transition-colors cursor-pointer"
-          >
-            {viewMode === 'extension' ? (
-              <TerminalIcon className="w-3.5 h-3.5" />
-            ) : (
-              <Code2 className="w-3.5 h-3.5" />
-            )}
-          </button>
-
-          {/* Terminal-specific shortcuts */}
-          {viewMode === 'terminal' && (
-            <>
-              <button
-                type="button"
-                onClick={handleInterrupt}
-                title="Interromper Processo (Ctrl+C)"
-                className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-              >
-                Ctrl+C
-              </button>
-              <button
-                type="button"
-                onClick={handleRestartSession}
-                title="Reiniciar Sessão PTY"
-                className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
-              >
-                <RotateCw className="w-3.5 h-3.5" />
-              </button>
-            </>
-          )}
-
           <button
             type="button"
             onClick={() => toggleAgentDiffNode(id)}
@@ -753,7 +941,100 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         </div>
       </div>
 
-      {/* Body: Live Interactive Terminal (Always mounted to preserve session, hidden when in Extension view) */}
+      {/* Segmented Mode Switcher (Conversa vs Terminal PTY) */}
+      <div className="flex items-center justify-between px-3 py-1.5 border-b bg-slate-100/70 dark:bg-[#11161F] border-slate-200 dark:border-[#21262D] shrink-0">
+        <div className="flex items-center gap-1 bg-slate-200/80 dark:bg-[#161B22] p-0.5 rounded-lg border border-slate-300/80 dark:border-[#30363D]">
+          <button
+            type="button"
+            onClick={() => handleSwitchViewMode('extension')}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+              viewMode === 'extension'
+                ? 'bg-white dark:bg-indigo-600 text-slate-900 dark:text-white shadow-xs font-semibold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Conversa</span>
+            {nodeData.messages && nodeData.messages.length > 0 && (
+              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[9px] bg-slate-200 dark:bg-indigo-700/80 text-slate-700 dark:text-white">
+                {nodeData.messages.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSwitchViewMode('terminal')}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+              viewMode === 'terminal'
+                ? 'bg-white dark:bg-indigo-600 text-slate-900 dark:text-white shadow-xs font-semibold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <TerminalIcon className="w-3.5 h-3.5" />
+            <span>Terminal PTY</span>
+          </button>
+        </div>
+
+        {viewMode === 'terminal' ? (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => ptyService.writePty(sessionId, '\r')}
+              title="Enviar Enter ao prompt do terminal"
+              className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-500/30 transition-colors cursor-pointer flex items-center gap-1"
+            >
+              <CornerDownLeft className="w-2.5 h-2.5" /> Enter
+            </button>
+            <button
+              type="button"
+              onClick={() => ptyService.writePty(sessionId, '\x1b[A')}
+              title="Seta Cima (Navegar menu)"
+              className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <ChevronUp className="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              onClick={() => ptyService.writePty(sessionId, '\x1b[B')}
+              title="Seta Baixo (Navegar menu)"
+              className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              onClick={handleInterrupt}
+              title="Interromper Processo (Ctrl+C)"
+              className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+            >
+              Ctrl+C
+            </button>
+            <button
+              type="button"
+              onClick={handleRestartSession}
+              title="Reiniciar Sessão PTY"
+              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1">
+            {nodeData.messages && nodeData.messages.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearHistory}
+                title="Limpar mensagens da conversa"
+                className="text-[10px] text-slate-400 hover:text-rose-400 px-2 py-0.5 rounded hover:bg-slate-800/50 transition-colors cursor-pointer"
+              >
+                Limpar chat
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Body: Live Interactive Terminal (Always mounted to preserve session, hidden when in Conversa view) */}
       <div
         className={`nodrag nowheel nopan flex-1 w-full p-2 bg-[#0D1117] font-mono text-xs overflow-hidden flex-col min-h-0 cursor-text select-text ${
           viewMode === 'terminal' ? 'flex' : 'hidden'
@@ -774,7 +1055,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         />
       </div>
 
-      {/* Body: VS Code Extension Chat Style (Modo Bonito) */}
+      {/* Body: VS Code Extension Chat Style (Conversa) */}
       {viewMode === 'extension' && (
         <div className="nodrag nowheel nopan flex flex-col flex-1 min-h-0 overflow-hidden">
           {/* Thinking Accordion (Collapsible) */}
@@ -823,16 +1104,39 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           <div className="nodrag nowheel flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
             {(!nodeData.messages || nodeData.messages.length === 0) ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-4 text-slate-400 dark:text-slate-500 select-none">
-                <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                  {nodeData.title} Pronto
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center mb-2 shadow-sm"
+                  style={{ backgroundColor: accentLight, color: accentColor }}
+                >
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  Como posso ajudar você hoje?
                 </span>
-                <span className="text-[11px] mt-1 max-w-[280px] leading-relaxed">
-                  Digite uma instrução abaixo ou alterne para o terminal para interagir diretamente.
+                <span className="text-[11px] mt-1 max-w-[280px] leading-relaxed text-slate-400">
+                  Faça uma pergunta sobre o código ou selecione uma ação rápida:
                 </span>
+                <div className="mt-3 flex flex-col gap-1.5 w-full max-w-[320px]">
+                  {[
+                    'Explique a arquitetura e pastas deste projeto',
+                    'Escreva testes unitários para os módulos principais',
+                    'Crie um plano de refatoração para os componentes',
+                  ].map((suggestion, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => handleSendMessage(suggestion)}
+                      className="text-left text-[11px] px-2.5 py-1.5 rounded-lg border border-slate-700/60 bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                    >
+                      💡 {suggestion}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : (
               nodeData.messages.map((msg: ChatMessage) => {
                 const isUser = msg.sender === 'user'
+                const isStreaming = msg.isStreaming && (!msg.text || !msg.text.trim())
                 const parsedContent = parseMessageContent(msg.text)
 
                 return (
@@ -862,7 +1166,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                     )}
 
                     <div
-                      className={`rounded-lg px-3 py-2 text-xs max-w-[92%] leading-relaxed select-text ${
+                      className={`rounded-lg px-3 py-2 text-xs max-w-[94%] leading-relaxed select-text ${
                         isUser
                           ? theme === 'dark'
                             ? 'bg-[#21262D] text-[#F0F6FC] border border-[#30363D]'
@@ -872,60 +1176,66 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                             : 'bg-white text-slate-800 border border-slate-300 shadow-xs'
                       }`}
                     >
-                      {/* Render Parsed Content: Text & Code Blocks with Copy Button */}
-                      {parsedContent.map((block, idx) => {
-                        if (block.type === 'code') {
-                          const blockKey = `${msg.id}-${idx}`
-                          return (
-                            <div
-                              key={idx}
-                              className="mt-2 mb-1 rounded-md overflow-hidden border border-slate-700/80 bg-[#0B0F17] text-slate-200 font-mono text-[11px]"
-                            >
-                              <div className="flex items-center justify-between px-2.5 py-1 bg-slate-900/90 border-b border-slate-800 text-[10px] text-slate-400">
-                                <span className="font-semibold">{block.language}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => copyCodeToClipboard(block.code, blockKey)}
-                                  className="flex items-center gap-1 hover:text-slate-100 transition-colors cursor-pointer"
+                      {isStreaming ? (
+                        <div className="flex items-center gap-2 py-1 px-0.5 text-slate-400">
+                          <span className="flex gap-1 items-center">
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                          </span>
+                          <span className="text-[11px] text-slate-400">Pensando na resposta...</span>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Render Parsed Content: Text & Code Blocks with Copy Button */}
+                          {parsedContent.map((block, idx) => {
+                            if (block.type === 'code') {
+                              const blockKey = `${msg.id}-${idx}`
+                              return (
+                                <div
+                                  key={idx}
+                                  className="mt-2 mb-1.5 rounded-md overflow-hidden border border-slate-700/80 bg-[#0B0F17] text-slate-200 font-mono text-[11px]"
                                 >
-                                  {copiedBlock === blockKey ? (
-                                    <>
-                                      <Check className="w-3 h-3 text-emerald-400" />
-                                      <span className="text-emerald-400">Copiado</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Copy className="w-3 h-3" />
-                                      <span>Copiar</span>
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                              <pre className="p-2.5 overflow-x-auto text-[11px] leading-relaxed">
-                                <code>{block.code}</code>
-                              </pre>
-                            </div>
-                          )
-                        }
+                                  <div className="flex items-center justify-between px-2.5 py-1 bg-slate-900/90 border-b border-slate-800 text-[10px] text-slate-400">
+                                    <span className="font-semibold">{block.language}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => copyCodeToClipboard(block.code, blockKey)}
+                                      className="flex items-center gap-1 hover:text-slate-100 transition-colors cursor-pointer"
+                                    >
+                                      {copiedBlock === blockKey ? (
+                                        <>
+                                          <Check className="w-3 h-3 text-emerald-400" />
+                                          <span className="text-emerald-400">Copiado</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Copy className="w-3 h-3" />
+                                          <span>Copiar</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                  <pre className="p-2.5 overflow-x-auto text-[11px] leading-relaxed">
+                                    <code>{block.code}</code>
+                                  </pre>
+                                </div>
+                              )
+                            }
 
-                        return (
-                          <p key={idx} className="whitespace-pre-wrap">
-                            {block.content}
-                          </p>
-                        )
-                      })}
+                            return <div key={idx}>{renderMarkdownText(block.content)}</div>
+                          })}
+
+                          {/* Subtle blinking cursor when message is actively streaming */}
+                          {msg.isStreaming && msg.text && (
+                            <span className="inline-block w-1.5 h-3 ml-0.5 bg-indigo-400 animate-pulse align-middle" />
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 )
               })
-            )}
-
-            {/* Running indicator when agent is processing and no new assistant message yet */}
-            {nodeData.status === 'running' && (
-              <div className="flex items-center gap-2 px-1 text-slate-400 text-xs py-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-[11px]">Agente em execução...</span>
-              </div>
             )}
 
             {/* Action Approvals (diffs and commands requiring user decision) */}
@@ -1038,7 +1348,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
               <button
                 type="button"
                 onClick={() => removeAttachedImage(id, img.id)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
               >
                 <X className="w-2.5 h-2.5" />
               </button>
@@ -1127,7 +1437,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             <button
               key={cmd}
               type="button"
-              onClick={() => addSlashCommand(cmd)}
+              onClick={() => applySlashCommand(cmd)}
               className={`px-2 py-0.5 rounded transition-colors font-mono font-medium cursor-pointer ${
                 theme === 'dark'
                   ? 'bg-[#21262D] text-slate-300 hover:bg-[#30363D]'
@@ -1153,7 +1463,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             placeholder={
               viewMode === 'terminal'
                 ? 'Digitar no terminal ou pressionar Enter para confirmar...'
-                : 'Instruir agente... (Ctrl+V para prints)'
+                : 'Instruir agente... (Ctrl+V para colar prints)'
             }
             className={`w-full text-xs rounded-lg px-3 py-2 pr-9 border transition-colors focus:outline-hidden ${
               theme === 'dark'
@@ -1163,7 +1473,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           />
           <button
             type="button"
-            onClick={handleSendMessage}
+            onClick={() => handleSendMessage()}
             title={
               inputVal.trim()
                 ? 'Enviar instrução ao agente'

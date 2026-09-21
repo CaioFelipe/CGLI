@@ -20,6 +20,7 @@ export interface ChatMessage {
   codeBlocks?: CodeBlockData[]
   timestamp: string
   images?: string[]
+  isStreaming?: boolean
 }
 
 export interface ActionApproval {
