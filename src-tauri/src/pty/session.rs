@@ -2,6 +2,8 @@ use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize}
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::Path;
+#[cfg(windows)]
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 
@@ -16,6 +18,82 @@ pub struct PtySession {
 #[derive(Clone, Default)]
 pub struct SessionManager {
     sessions: Arc<Mutex<HashMap<String, PtySession>>>,
+}
+
+/// Lowercased command name without a trailing executable extension ("Claude.CMD" -> "claude").
+#[cfg(windows)]
+fn command_stem(name: &str) -> String {
+    let lower = name.trim().to_lowercase();
+    for ext in [".exe", ".cmd", ".bat", ".com"] {
+        if let Some(stem) = lower.strip_suffix(ext) {
+            return stem.to_string();
+        }
+    }
+    lower
+}
+
+/// Known install locations of the native executables of AI CLIs, in order of preference.
+/// Matching is on the exact command name so unrelated names (e.g. "legacy") never hit a shortcut.
+#[cfg(windows)]
+fn known_native_candidates(stem: &str) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    match stem {
+        "claude" | "claude-code" => {
+            if let Ok(appdata) = std::env::var("APPDATA") {
+                candidates.push(
+                    Path::new(&appdata)
+                        .join("npm")
+                        .join("node_modules")
+                        .join("@anthropic-ai")
+                        .join("claude-code")
+                        .join("bin")
+                        .join("claude.exe"),
+                );
+            }
+            if let Ok(profile) = std::env::var("USERPROFILE") {
+                candidates.push(Path::new(&profile).join(".local").join("bin").join("claude.exe"));
+            }
+        }
+        "agy" => {
+            if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                candidates.push(Path::new(&localappdata).join("agy").join("bin").join("agy.exe"));
+            }
+        }
+        _ => {}
+    }
+    candidates
+}
+
+/// Decodes as much of `pending` as forms complete UTF-8, leaving an incomplete trailing
+/// sequence in the buffer for the next read. Invalid bytes become U+FFFD.
+/// Reads of the PTY can end in the middle of a multi-byte character (box drawing, spinners),
+/// and lossy-decoding each read independently would corrupt those characters.
+fn drain_utf8(pending: &mut Vec<u8>) -> String {
+    let mut out = String::new();
+    loop {
+        match std::str::from_utf8(pending) {
+            Ok(s) => {
+                out.push_str(s);
+                pending.clear();
+                break;
+            }
+            Err(e) => {
+                let valid = e.valid_up_to();
+                out.push_str(&String::from_utf8_lossy(&pending[..valid]));
+                match e.error_len() {
+                    Some(bad) => {
+                        out.push('\u{FFFD}');
+                        pending.drain(..valid + bad);
+                    }
+                    None => {
+                        pending.drain(..valid);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 pub fn resolve_command(command: &str) -> String {
@@ -35,41 +113,34 @@ pub fn resolve_command(command: &str) -> String {
 
     #[cfg(windows)]
     {
-        // Direct known path shortcuts for common AI CLI tools
-        if let Ok(appdata) = std::env::var("APPDATA") {
-            let claude_cmd = Path::new(&appdata).join("npm").join("claude.cmd");
-            if (trimmed == "claude" || trimmed == "claude.cmd" || trimmed == "claude-code" || trimmed.contains("claude")) && claude_cmd.is_file() {
-                return claude_cmd.to_string_lossy().to_string();
-            }
-            let claude_exe = Path::new(&appdata).join("npm").join("node_modules").join("@anthropic-ai").join("claude-code").join("bin").join("claude.exe");
-            if (trimmed == "claude" || trimmed == "claude.exe" || trimmed == "claude-code" || trimmed.contains("claude")) && claude_exe.is_file() {
-                return claude_exe.to_string_lossy().to_string();
-            }
-        }
-        if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-            let agy_exe = Path::new(&localappdata).join("agy").join("bin").join("agy.exe");
-            if (trimmed == "agy" || trimmed == "agy.exe" || trimmed.contains("agy")) && agy_exe.is_file() {
-                return agy_exe.to_string_lossy().to_string();
-            }
+        // Native PE executables of the known AI CLIs win over their `.cmd` npm shims: running a
+        // shim needs `cmd.exe /c`, which adds an extra process between the ConPTY and the CLI.
+        let stem = command_stem(trimmed);
+        if let Some(native) = known_native_candidates(&stem).into_iter().find(|p| p.is_file()) {
+            return native.to_string_lossy().to_string();
         }
 
         if let Ok(path_var) = std::env::var("PATH") {
-            let extensions = [".cmd", ".exe", ".bat", ".com"];
+            let dirs: Vec<PathBuf> = std::env::split_paths(&path_var).collect();
 
-            for dir in std::env::split_paths(&path_var) {
-                // If trimmed already has an extension, check direct file
-                if trimmed.contains('.') {
+            // If trimmed already has an extension, check the direct file first
+            if trimmed.contains('.') {
+                for dir in &dirs {
                     let direct = dir.join(trimmed);
                     if direct.is_file() {
                         return direct.to_string_lossy().to_string();
                     }
                 }
+            }
 
-                // Check with standard executable extensions
-                for ext in &extensions {
-                    let with_ext = dir.join(format!("{}{}", trimmed, ext));
-                    if with_ext.is_file() {
-                        return with_ext.to_string_lossy().to_string();
+            // Real executables anywhere on PATH before batch shims
+            for extensions in [&[".exe", ".com"][..], &[".cmd", ".bat"][..]] {
+                for dir in &dirs {
+                    for ext in extensions {
+                        let with_ext = dir.join(format!("{}{}", trimmed, ext));
+                        if with_ext.is_file() {
+                            return with_ext.to_string_lossy().to_string();
+                        }
                     }
                 }
             }
@@ -118,6 +189,7 @@ impl SessionManager {
             .map_err(|e| format!("Failed to open PTY pair: {}", e))?;
 
         let resolved_cmd = resolve_command(&command);
+        log::info!("PTY session '{}': '{}' resolved to '{}'", session_id, command, resolved_cmd);
 
         #[cfg(windows)]
         let (exec_cmd, final_args) = {
@@ -223,16 +295,25 @@ impl SessionManager {
 
         std::thread::spawn(move || {
             let mut buf = [0u8; 8192];
+            let mut pending: Vec<u8> = Vec::new();
             let event_name = format!("pty-output-{}", session_id_clone);
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => {
                         log::info!("PTY session '{}' output stream reached EOF", session_id_clone);
+                        if !pending.is_empty() {
+                            let rest = String::from_utf8_lossy(&pending).to_string();
+                            let _ = app_handle_clone.emit(&event_name, rest);
+                        }
                         let _ = app_handle_clone.emit(&format!("pty-exit-{}", session_id_clone), ());
                         break;
                     }
                     Ok(n) => {
-                        let data = String::from_utf8_lossy(&buf[..n]).to_string();
+                        pending.extend_from_slice(&buf[..n]);
+                        let data = drain_utf8(&mut pending);
+                        if data.is_empty() {
+                            continue;
+                        }
 
                         // Detect stream markers like <<<CGLI:ACTION JSON>>>
                         if data.contains("<<<CGLI:") {
@@ -341,6 +422,49 @@ mod tests {
     fn test_resolve_command_explicit_path() {
         let path = "C:\\Windows\\System32\\cmd.exe";
         assert_eq!(resolve_command(path), path);
+    }
+
+    #[test]
+    fn test_drain_utf8_keeps_split_multibyte_char() {
+        // "─" is E2 94 80; feed it split across two reads
+        let mut pending = vec![b'a', 0xE2, 0x94];
+        assert_eq!(drain_utf8(&mut pending), "a");
+        assert_eq!(pending, vec![0xE2, 0x94]);
+
+        pending.push(0x80);
+        assert_eq!(drain_utf8(&mut pending), "─");
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn test_drain_utf8_replaces_invalid_bytes() {
+        let mut pending = vec![b'a', 0xFF, b'b'];
+        assert_eq!(drain_utf8(&mut pending), "a\u{FFFD}b");
+        assert!(pending.is_empty());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_command_stem_and_shortcuts_match_exact_names_only() {
+        assert_eq!(command_stem("Claude.CMD"), "claude");
+        assert_eq!(command_stem("agy.exe"), "agy");
+        assert!(known_native_candidates("legacy").is_empty());
+        assert!(known_native_candidates("my-claude-wrapper").is_empty());
+        assert!(!known_native_candidates("claude").is_empty());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_resolve_command_prefers_native_exe_over_cmd_shim() {
+        for name in ["claude", "agy"] {
+            let resolved = resolve_command(name).to_lowercase();
+            assert!(
+                !resolved.ends_with(".cmd") && !resolved.ends_with(".bat"),
+                "'{}' resolved to a batch shim: {}",
+                name,
+                resolved
+            );
+        }
     }
 
     #[test]

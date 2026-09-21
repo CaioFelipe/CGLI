@@ -1,5 +1,5 @@
 import { FitAddon } from '@xterm/addon-fit'
-import { Terminal } from '@xterm/xterm'
+import { type ITheme, Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { Handle, type NodeProps, Position, NodeResizer } from '@xyflow/react'
 import {
@@ -16,7 +16,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ptyService } from '../../services/ptyService'
 import { useCanvasStore } from '../../store/canvasStore'
 import type { AgentNodeData } from '../../types/canvas'
@@ -35,6 +35,53 @@ const AVAILABLE_SLASH_COMMANDS: SlashCommand[] = [
   { cmd: '/clear', label: '/clear', desc: 'Limpar a tela do terminal' },
   { cmd: '/help', label: '/help', desc: 'Exibir comandos disponíveis' },
 ]
+
+const TERMINAL_THEMES: Record<'dark' | 'light', ITheme> = {
+  dark: {
+    background: '#0D1117',
+    foreground: '#C9D1D9',
+    cursor: '#58A6FF',
+    selectionBackground: '#1F6FEB44',
+    black: '#0D1117',
+    red: '#FF7B72',
+    green: '#3FB950',
+    yellow: '#D29922',
+    blue: '#58A6FF',
+    magenta: '#BC8CFF',
+    cyan: '#39C5CF',
+    white: '#C9D1D9',
+    brightBlack: '#484F58',
+    brightRed: '#FFA198',
+    brightGreen: '#56D364',
+    brightYellow: '#E3B341',
+    brightBlue: '#79C0FF',
+    brightMagenta: '#D2A8FF',
+    brightCyan: '#56D4DD',
+    brightWhite: '#F0F6FC',
+  },
+  light: {
+    background: '#F8FAFC',
+    foreground: '#1E293B',
+    cursor: '#0284C7',
+    selectionBackground: '#0284C722',
+    black: '#1E293B',
+    red: '#EF4444',
+    green: '#10B981',
+    yellow: '#F59E0B',
+    blue: '#0284C7',
+    magenta: '#8B5CF6',
+    cyan: '#06B6D4',
+    white: '#F8FAFC',
+    brightBlack: '#64748B',
+    brightRed: '#F87171',
+    brightGreen: '#34D399',
+    brightYellow: '#FBBF24',
+    brightBlue: '#38BDF8',
+    brightMagenta: '#A78BFA',
+    brightCyan: '#22D3EE',
+    brightWhite: '#FFFFFF',
+  },
+}
 
 export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const nodeData = data as unknown as AgentNodeData
@@ -55,7 +102,6 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const terminalInstance = useRef<Terminal | null>(null)
   const fitAddonInstance = useRef<FitAddon | null>(null)
-  const ptySpawnedRef = useRef<boolean>(false)
 
   const isClaude =
     nodeData.agentType?.toLowerCase().includes('claude') ||
@@ -88,144 +134,148 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
   const args = cliConfig?.defaultArgs ? cliConfig.defaultArgs.split(' ').filter(Boolean) : []
 
-  // Initialize and manage xterm and PTY session lifecycle
+  // `args` is rebuilt on every render, so it must never be an effect dependency. Everything the
+  // spawn needs is read from this ref at call time instead; the terminal effect below only
+  // depends on the node/session identity and therefore mounts exactly once per node.
+  const launchRef = useRef({
+    command,
+    args,
+    workspacePath,
+    role: nodeData.role,
+    agentType: nodeData.agentType,
+    theme,
+  })
   useEffect(() => {
-    let isDisposed = false
-
-    if (terminalRef.current && !terminalInstance.current) {
-      const term = new Terminal({
-        theme:
-          theme === 'dark'
-            ? {
-                background: '#0D1117',
-                foreground: '#C9D1D9',
-                cursor: '#58A6FF',
-                selectionBackground: '#1F6FEB44',
-                black: '#0D1117',
-                red: '#FF7B72',
-                green: '#3FB950',
-                yellow: '#D29922',
-                blue: '#58A6FF',
-                magenta: '#BC8CFF',
-                cyan: '#39C5CF',
-                white: '#C9D1D9',
-                brightBlack: '#484F58',
-                brightRed: '#FFA198',
-                brightGreen: '#56D364',
-                brightYellow: '#E3B341',
-                brightBlue: '#79C0FF',
-                brightMagenta: '#D2A8FF',
-                brightCyan: '#56D4DD',
-                brightWhite: '#F0F6FC',
-              }
-            : {
-                background: '#F8FAFC',
-                foreground: '#1E293B',
-                cursor: '#0284C7',
-                selectionBackground: '#0284C722',
-                black: '#1E293B',
-                red: '#EF4444',
-                green: '#10B981',
-                yellow: '#F59E0B',
-                blue: '#0284C7',
-                magenta: '#8B5CF6',
-                cyan: '#06B6D4',
-                white: '#F8FAFC',
-                brightBlack: '#64748B',
-                brightRed: '#F87171',
-                brightGreen: '#34D399',
-                brightYellow: '#FBBF24',
-                brightBlue: '#38BDF8',
-                brightMagenta: '#A78BFA',
-                brightCyan: '#22D3EE',
-                brightWhite: '#FFFFFF',
-              },
-        fontSize: 12.5,
-        lineHeight: 1.15,
-        fontFamily: '"Cascadia Code", "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace',
-        cursorBlink: true,
-        convertEol: false,
-      })
-
-      // Attach custom key event handler to isolate xterm from React Flow
-      term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
-        e.stopPropagation()
-        return true
-      })
-
-      const fitAddon = new FitAddon()
-      term.loadAddon(fitAddon)
-      term.open(terminalRef.current)
-
-      terminalInstance.current = term
-      fitAddonInstance.current = fitAddon
-
-      setTimeout(() => {
-        try {
-          if (!isDisposed) fitAddon.fit()
-        } catch (_) {}
-      }, 50)
-
-      const ro = new ResizeObserver(() => {
-        try {
-          if (!isDisposed && terminalRef.current) {
-            fitAddon.fit()
-            if (term.cols > 0 && term.rows > 0) {
-              ptyService.resizePty(sessionId, term.cols, term.rows)
-            }
-          }
-        } catch (_) {}
-      })
-      ro.observe(terminalRef.current)
-
-      // Send terminal keyboard input directly to PTY stdin
-      term.onData((d) => {
-        ptyService.writePty(sessionId, d)
-      })
-
-      // Stream raw chunks directly from PTY into xterm without parsing loss
-      ptyService.onPtyOutput(sessionId, (chunk) => {
-        if (!isDisposed) {
-          term.write(chunk)
-          updateNodeData(id, { isPtyActive: true })
-        }
-      })
-
-      // Auto-spawn PTY process on first mount
-      if (!ptySpawnedRef.current) {
-        ptySpawnedRef.current = true
-        ptyService
-          .spawnPty(sessionId, command, args, workspacePath, {
-            CGLI_NODE_ID: id,
-            CGLI_AGENT_ROLE: nodeData.role,
-            CGLI_AGENT_TYPE: nodeData.agentType,
-            CGLI_WORKSPACE_PATH: workspacePath,
-          })
-          .then(() => {
-            updateNodeData(id, { isPtyActive: true, status: 'idle' })
-            setTimeout(() => {
-              try {
-                fitAddon.fit()
-                term.focus()
-              } catch (_) {}
-            }, 100)
-          })
-          .catch((err) => {
-            console.error('Failed to spawn PTY:', err)
-            updateNodeData(id, { isPtyActive: false, status: 'error' })
-          })
-      }
-
-      return () => {
-        isDisposed = true
-        ro.disconnect()
-      }
+    launchRef.current = {
+      command,
+      args,
+      workspacePath,
+      role: nodeData.role,
+      agentType: nodeData.agentType,
+      theme,
     }
-  }, [id, sessionId, command, args, workspacePath, nodeData.role, nodeData.agentType, theme])
+  })
+
+  const startPty = useCallback(async () => {
+    const term = terminalInstance.current
+    const cfg = launchRef.current
+    try {
+      await ptyService.spawnPty(sessionId, cfg.command, cfg.args, cfg.workspacePath, {
+        CGLI_NODE_ID: id,
+        CGLI_AGENT_ROLE: cfg.role,
+        CGLI_AGENT_TYPE: cfg.agentType,
+        CGLI_WORKSPACE_PATH: cfg.workspacePath,
+      })
+      updateNodeData(id, { isPtyActive: true, status: 'idle' })
+
+      // The PTY is created at 80x24; push the real size as soon as it exists.
+      const fit = fitAddonInstance.current
+      if (term && fit) {
+        try {
+          fit.fit()
+        } catch (_) {}
+        if (term.cols > 0 && term.rows > 0) {
+          ptyService.resizePty(sessionId, term.cols, term.rows).catch(() => {})
+        }
+        term.focus()
+      }
+    } catch (err) {
+      console.error('Failed to spawn PTY:', err)
+      // Without this the viewport stays silently black when the spawn fails.
+      term?.writeln(`\r\n\x1b[31mFalha ao iniciar '${cfg.command}': ${String(err)}\x1b[0m`)
+      updateNodeData(id, { isPtyActive: false, status: 'error' })
+    }
+  }, [id, sessionId, updateNodeData])
+
+  // xterm + output listener + PTY spawn. Mounted once per node; torn down only on real unmount.
+  useEffect(() => {
+    const container = terminalRef.current
+    if (!container) return
+
+    let disposed = false
+    let unlistenOutput: (() => void) | undefined
+
+    const term = new Terminal({
+      theme: TERMINAL_THEMES[launchRef.current.theme === 'dark' ? 'dark' : 'light'],
+      fontSize: 12.5,
+      lineHeight: 1.15,
+      fontFamily: '"Cascadia Code", "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace',
+      cursorBlink: true,
+      convertEol: false,
+    })
+
+    // Keep keystrokes inside xterm so React Flow shortcuts (Delete, arrows...) don't fire
+    term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      e.stopPropagation()
+      return true
+    })
+
+    const fitAddon = new FitAddon()
+    term.loadAddon(fitAddon)
+    term.open(container)
+    terminalInstance.current = term
+    fitAddonInstance.current = fitAddon
+
+    const safeFit = () => {
+      // Hidden / 0x0 containers make fit() throw or produce NaN dimensions
+      if (disposed || container.clientWidth === 0 || container.clientHeight === 0) return
+      try {
+        fitAddon.fit()
+        if (term.cols > 0 && term.rows > 0) {
+          ptyService.resizePty(sessionId, term.cols, term.rows).catch(() => {})
+        }
+      } catch (_) {}
+    }
+
+    let rafId = 0
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(safeFit)
+    })
+    ro.observe(container)
+
+    // Keyboard input typed inside the terminal goes straight to the PTY stdin
+    const dataSub = term.onData((d) => {
+      ptyService.writePty(sessionId, d).catch(() => {})
+    })
+
+    void (async () => {
+      // The listener must be registered (awaited) BEFORE spawning, otherwise the first
+      // frames of output can be emitted before anyone is listening.
+      const unlisten = await ptyService.onPtyOutput(sessionId, (chunk) => {
+        if (!disposed) term.write(chunk)
+      })
+      if (disposed) {
+        unlisten()
+        return
+      }
+      unlistenOutput = unlisten
+      safeFit()
+      await startPty()
+    })()
+
+    return () => {
+      disposed = true
+      cancelAnimationFrame(rafId)
+      ro.disconnect()
+      dataSub.dispose()
+      unlistenOutput?.()
+      term.dispose()
+      terminalInstance.current = null
+      fitAddonInstance.current = null
+    }
+  }, [sessionId, startPty])
+
+  // Theme changes update the live terminal instead of rebuilding it
+  useEffect(() => {
+    if (terminalInstance.current) {
+      terminalInstance.current.options.theme = TERMINAL_THEMES[theme === 'dark' ? 'dark' : 'light']
+    }
+  }, [theme])
 
   const handleInterrupt = (e: React.MouseEvent) => {
     e.stopPropagation()
-    ptyService.writePty(sessionId, '\x03')
+    ptyService.writePty(sessionId, '\x03').catch(() => {})
   }
 
   const handleRestartSession = async (e: React.MouseEvent) => {
@@ -235,19 +285,13 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       terminalInstance.current.clear()
       terminalInstance.current.writeln('\r\n\x1b[33m=== Reiniciando Sessão PTY... ===\x1b[0m\r\n')
     }
-    await ptyService.spawnPty(sessionId, command, args, workspacePath, {
-      CGLI_NODE_ID: id,
-      CGLI_AGENT_ROLE: nodeData.role,
-      CGLI_AGENT_TYPE: nodeData.agentType,
-      CGLI_WORKSPACE_PATH: workspacePath,
-    })
-    updateNodeData(id, { isPtyActive: true, status: 'idle' })
-    terminalInstance.current?.focus()
+    // The output listener from the mount effect is still attached and keeps receiving the new session
+    await startPty()
   }
 
   const handleSendMessage = () => {
     if (!inputVal.trim()) return
-    ptyService.writePty(sessionId, `${inputVal}\r`)
+    ptyService.writePty(sessionId, `${inputVal}\r`).catch(() => {})
     setInputVal('')
     terminalInstance.current?.focus()
   }
@@ -521,6 +565,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         onMouseDown={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
+        onClick={() => terminalInstance.current?.focus()}
       >
         <div ref={terminalRef} className="w-full h-full" />
       </div>
