@@ -336,8 +336,8 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           : 'bg-white border-slate-300 text-slate-900'
       }`}
       style={{
-        width: 600,
-        height: 520,
+        width: '100%',
+        height: '100%',
         minWidth: 440,
         minHeight: 380,
         borderColor: selected ? accentColor : undefined,
@@ -348,11 +348,24 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         minWidth={440}
         minHeight={380}
         isVisible={selected}
-        lineClassName="border-indigo-500"
-        handleClassName="h-3 w-3 bg-white border-2 border-indigo-500 rounded-xs"
+        lineClassName="!border-indigo-500"
+        handleClassName="!w-2.5 !h-2.5 !bg-white !border-2 !border-indigo-500 !rounded-xs"
         onResize={() => {
           try {
             fitAddonInstance.current?.fit()
+            const term = terminalInstance.current
+            if (term && term.cols > 0 && term.rows > 0) {
+              ptyService.resizePty(sessionId, term.cols, term.rows).catch(() => {})
+            }
+          } catch (_) {}
+        }}
+        onResizeEnd={() => {
+          try {
+            fitAddonInstance.current?.fit()
+            const term = terminalInstance.current
+            if (term && term.cols > 0 && term.rows > 0) {
+              ptyService.resizePty(sessionId, term.cols, term.rows).catch(() => {})
+            }
           } catch (_) {}
         }}
       />

@@ -184,6 +184,7 @@ export interface StashItem {
   savedAt: string
   nodeData: any
   position: { x: number; y: number }
+  style?: Record<string, any>
   previewSnippet: string
 }
 

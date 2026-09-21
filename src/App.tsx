@@ -150,6 +150,7 @@ const CanvasInner: React.FC = () => {
       id: `node-${type}-${Date.now()}`,
       type: 'agentNode',
       position: { x: pos.x - 190, y: pos.y - 150 },
+      style: { width: 600, height: 520 },
       data: {
         title: isClaude ? 'Claude Code' : 'Antigravity (AGY)',
         agentType: type,

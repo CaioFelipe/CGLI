@@ -262,6 +262,11 @@ const getInitialCanvasState = (projectId: string): { nodes: Node[]; edges: Edge[
               if (n.type === 'agentNode') {
                 return {
                   ...n,
+                  style: {
+                    width: n.style?.width || 600,
+                    height: n.style?.height || 520,
+                    ...n.style,
+                  },
                   data: {
                     ...n.data,
                     status: 'idle',
@@ -421,7 +426,7 @@ export const getNodeDimensions = (node: Node): { width: number; height: number }
 
   switch (node.type) {
     case 'agentNode':
-      return { width: 380, height: 380 }
+      return { width: 600, height: 520 }
     case 'artifactNode':
       return { width: 400, height: 320 }
     case 'previewNode':
@@ -1275,6 +1280,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       savedAt: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       nodeData: node.data,
       position: node.position,
+      style: node.style,
       previewSnippet: typeof preview === 'string' ? preview.slice(0, 70) : 'Item arquivado',
     }
 
@@ -1359,6 +1365,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         x: item.position.x + 40,
         y: item.position.y + 40,
       },
+      style: item.style || (nodeType === 'agentNode' ? { width: 600, height: 520 } : undefined),
       data: item.nodeData,
     }
 
@@ -1833,6 +1840,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       id: childId,
       type: 'agentNode',
       position: { x: posX, y: posY },
+      style: { width: 600, height: 520 },
       data: {
         title: isClaude ? 'Subagente Claude Code' : 'Subagente Antigravity (AGY)',
         agentType: childType,
@@ -2047,6 +2055,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       id: childId,
       type: 'agentNode',
       position: { x: posX, y: posY },
+      style: { width: 600, height: 520 },
       data: {
         title: isClaude ? 'Subagente Claude Code' : 'Subagente Antigravity (AGY)',
         agentType: childType,

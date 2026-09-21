@@ -63,6 +63,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
       id: nodeId,
       type: 'agentNode',
       position: { x: 200 + nodes.length * 30, y: 150 + nodes.length * 20 },
+      style: { width: 600, height: 520 },
       data: {
         title,
         agentType: type,
