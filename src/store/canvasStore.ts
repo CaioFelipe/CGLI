@@ -254,6 +254,7 @@ const getInitialCanvasState = (projectId: string): { nodes: Node[]; edges: Edge[
                   ...n,
                   data: {
                     ...n.data,
+                    status: 'idle',
                     viewMode: 'terminal',
                     sessionId: n.data?.sessionId || `pty-${n.id}`,
                     isPtyActive: true,
@@ -1489,22 +1490,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const currentMessages = ((node.data as any).messages || []) as ChatMessage[]
     const updatedMessages = [...currentMessages, userMessage]
 
-    get().updateNodeData(nodeId, {
-      messages: updatedMessages,
-      status: 'running',
-      attachedImages: [],
-      thinking: {
-        duration: 'Executando CLI real...',
-        thoughts: [
-          `Enviando instrução para o binário ${agentType} instalado no sistema...`,
-          allImages.length > 0
-            ? `${allImages.length} imagem(ns) conectada(s) pelo canvas incluída(s) no contexto.`
-            : 'Contexto do workspace anexado.',
-        ],
-        isExpanded: true,
-      },
-    })
-
     try {
       const proj = get().project
       const activeFolder = proj.folders?.find((f) => f.id === proj.activeFolderId) || proj.folders?.[0]
@@ -1543,6 +1528,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       get().updateNodeData(nodeId, {
         messages: updatedMessages,
         status: 'running',
+        attachedImages: [],
         terminalLogs: [
           ...((node.data as any).terminalLogs || []),
           `> [${agentType.toUpperCase()}] ${text}`,

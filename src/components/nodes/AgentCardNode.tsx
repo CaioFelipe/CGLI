@@ -86,6 +86,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const terminalInstance = useRef<Terminal | null>(null)
   const fitAddonInstance = useRef<FitAddon | null>(null)
+  const ptySpawnedRef = useRef<boolean>(false)
 
   const isClaude =
     nodeData.agentType?.toLowerCase().includes('claude') ||
@@ -240,37 +241,43 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         })
 
       // 3. Spawn native PTY directly in workspace folder
-      ptyService
-        .spawnPty(sessionId, command, args, workspacePath, {
-          CGLI_NODE_ID: id,
-          CGLI_AGENT_ROLE: nodeData.role,
-          CGLI_AGENT_TYPE: nodeData.agentType,
-          CGLI_WORKSPACE_PATH: workspacePath,
-        })
-        .then(() => {
-          if (!isDisposed) {
-            updateNodeData(id, {
-              sessionId,
-              workspacePath,
-              isPtyActive: true,
-            })
-          }
-        })
-        .catch((err) => {
-          if (!isDisposed) {
-            term.writeln(`\r\n\x1b[31m[CGLI Erro ao iniciar sessão PTY]: ${err}\x1b[0m\r\n`)
-            updateNodeData(id, { isPtyActive: false })
-          }
-        })
+      if (!ptySpawnedRef.current) {
+        ptySpawnedRef.current = true
+        ptyService
+          .spawnPty(sessionId, command, args, workspacePath, {
+            CGLI_NODE_ID: id,
+            CGLI_AGENT_ROLE: nodeData.role,
+            CGLI_AGENT_TYPE: nodeData.agentType,
+            CGLI_WORKSPACE_PATH: workspacePath,
+          })
+          .then(() => {
+            if (!isDisposed) {
+              updateNodeData(id, {
+                sessionId,
+                workspacePath,
+                isPtyActive: true,
+              })
+              term.focus()
+            }
+          })
+          .catch((err) => {
+            if (!isDisposed) {
+              term.writeln(`\r\n\x1b[31m[CGLI Erro ao iniciar sessão PTY]: ${err}\x1b[0m\r\n`)
+              updateNodeData(id, { isPtyActive: false })
+            }
+          })
+      }
 
       return () => {
         isDisposed = true
         ro.disconnect()
         if (unlistenOutput) unlistenOutput()
         if (unlistenExit) unlistenExit()
+        ptyService.killPty(sessionId)
         term.dispose()
         terminalInstance.current = null
         fitAddonInstance.current = null
+        ptySpawnedRef.current = false
       }
     }
   }, [id, sessionId, command, workspacePath])
@@ -298,6 +305,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     e.stopPropagation()
     await ptyService.killPty(sessionId)
     if (terminalInstance.current) {
+      terminalInstance.current.clear()
       terminalInstance.current.writeln('\r\n\x1b[33m=== Reiniciando Sessão PTY... ===\x1b[0m\r\n')
     }
     await ptyService.spawnPty(sessionId, command, args, workspacePath, {
@@ -570,7 +578,10 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       </div>
 
       {/* Body: Live Interactive Terminal */}
-      <div className="flex-1 w-full p-2 bg-[#0D1117] font-mono text-xs overflow-hidden flex flex-col min-h-0">
+      <div
+        className="flex-1 w-full p-2 bg-[#0D1117] font-mono text-xs overflow-hidden flex flex-col min-h-0 cursor-text"
+        onClick={() => terminalInstance.current?.focus()}
+      >
         <div ref={terminalRef} className="w-full flex-1 terminal-container overflow-hidden" />
       </div>
 

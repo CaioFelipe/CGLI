@@ -151,3 +151,27 @@ Testar:
 | [`src/store/canvasStore.ts`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src/store/canvasStore.ts) | Store do canvas com manipulação de nós, subagentes e conexões. |
 | [`src/services/ptyService.ts`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src/services/ptyService.ts) | Comunicação IPC com o backend Tauri. |
 | [`.cgli/bin/cgli.cmd`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/.cgli/bin/cgli.cmd) | Script CLI que o Claude/AGY executa no terminal para comandar o canvas. |
+
+---
+
+## 6. Status Final da Implementação: CONCLUÍDO
+
+Todas as etapas do plano de implementação foram finalizadas com sucesso:
+
+1. **Resolução de Binários no Windows:**
+   - Em [`src-tauri/src/pty/session.rs`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src-tauri/src/pty/session.rs), `resolve_command` agora prioriza `claude.cmd` antes do `.exe`, evitando o erro nativo de inicialização de threads do Windows.
+   - Extensões `.cmd` são pesquisadas antes de `.exe` no `PATH`.
+2. **Eliminação de Processos Zumbis e Loops de Spawn:**
+   - Em `session.rs`, qualquer processo PTY antigo com a mesma chave de sessão é finalizado antes de iniciar um novo.
+   - Em [`AgentCardNode.tsx`](file:///c:/Users/aluno/Documents/antigravity/blissful-franklin/src/components/nodes/AgentCardNode.tsx), a montagem do PTY é travada por `ptySpawnedRef` para impedir re-spawns involuntários em re-renderizações React.
+   - Na desmontagem do nó (`useEffect cleanup`), `ptyService.killPty(sessionId)` é invocado imediatamente, liberando recursos do sistema.
+3. **Foco e Interatividade do Terminal:**
+   - Foco automático no terminal xterm ao carregar e ao clicar na área do terminal.
+   - Limpeza e reinicialização robusta através do botão `RotateCw`.
+4. **Otimização do Fluxo de Mensagens:**
+   - `sendAgentMessage` em `canvasStore.ts` escreve diretamente no PTY (`writePty`) sem múltiplos updates redundantes de estado e sem mock de "thinking".
+5. **Validação:**
+   - Frontend compilado com sucesso (`npm run build`).
+   - Backend Rust compilado e checado com sucesso (`cargo check`).
+   - Servidor local HTTP Bridge ativo e verificado nos 4 endpoints (`spawn_subagent`, `create_artifact`, `create_preview`, `create_diff`).
+

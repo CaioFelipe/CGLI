@@ -37,13 +37,13 @@ pub fn resolve_command(command: &str) -> String {
     {
         // Direct known path shortcuts for common AI CLI tools
         if let Ok(appdata) = std::env::var("APPDATA") {
-            let claude_exe = Path::new(&appdata).join("npm").join("node_modules").join("@anthropic-ai").join("claude-code").join("bin").join("claude.exe");
-            if (trimmed == "claude" || trimmed == "claude.exe" || trimmed == "claude-code" || trimmed.contains("claude")) && claude_exe.is_file() {
-                return claude_exe.to_string_lossy().to_string();
-            }
             let claude_cmd = Path::new(&appdata).join("npm").join("claude.cmd");
             if (trimmed == "claude" || trimmed == "claude.cmd" || trimmed == "claude-code" || trimmed.contains("claude")) && claude_cmd.is_file() {
                 return claude_cmd.to_string_lossy().to_string();
+            }
+            let claude_exe = Path::new(&appdata).join("npm").join("node_modules").join("@anthropic-ai").join("claude-code").join("bin").join("claude.exe");
+            if (trimmed == "claude" || trimmed == "claude.exe" || trimmed == "claude-code" || trimmed.contains("claude")) && claude_exe.is_file() {
+                return claude_exe.to_string_lossy().to_string();
             }
         }
         if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
@@ -54,7 +54,7 @@ pub fn resolve_command(command: &str) -> String {
         }
 
         if let Ok(path_var) = std::env::var("PATH") {
-            let extensions = [".exe", ".cmd", ".bat", ".com"];
+            let extensions = [".cmd", ".exe", ".bat", ".com"];
 
             for dir in std::env::split_paths(&path_var) {
                 // If trimmed already has an extension, check direct file
@@ -205,6 +205,9 @@ impl SessionManager {
 
         {
             let mut sessions = self.sessions.lock().map_err(|e| e.to_string())?;
+            if let Some(mut old) = sessions.remove(&session_id) {
+                let _ = old.child.kill();
+            }
             sessions.insert(session_id.clone(), session);
         }
 
