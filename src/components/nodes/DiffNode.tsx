@@ -129,35 +129,43 @@ export const DiffNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         <span className="text-[10px] text-slate-400 shrink-0">Unified Diff</span>
       </div>
 
-      {/* Diff Content Lines */}
-      <div className="flex-1 min-h-[180px] p-2 bg-[#0B0F17] overflow-y-auto font-mono text-[11px] space-y-0.5">
-        {lines.length === 0 ? (
-          <div className="h-full flex items-center justify-center p-4 text-slate-500 text-xs text-center">
-            Nenhuma alteração pendente ou registrada para este agente.
-          </div>
-        ) : (
-          lines.map((line, idx) => {
-            const isAdd = line.type === 'add'
-            const isRemove = line.type === 'remove'
-            return (
-              <div
-                key={idx}
-                className={`flex items-start gap-2 px-2 py-0.5 rounded-xs transition-colors ${
-                  isAdd
-                    ? 'bg-emerald-950/50 text-emerald-300 border-l-2 border-emerald-500'
-                    : isRemove
-                    ? 'bg-rose-950/50 text-rose-300 border-l-2 border-rose-500'
-                    : 'text-slate-400'
-                }`}
-              >
-                <span className="w-4 text-center select-none text-[10px] opacity-60 shrink-0">
-                  {isAdd ? '+' : isRemove ? '-' : ' '}
-                </span>
-                <span className="whitespace-pre overflow-x-auto leading-relaxed">{line.content}</span>
-              </div>
-            )
-          })
-        )}
+      {/* Diff Content Lines with Full Event Isolation */}
+      <div
+        className="nodrag nowheel nopan flex-1 min-h-0 overflow-auto overscroll-contain select-text cursor-text p-2 bg-[#0B0F17] font-mono text-[11px]"
+        onWheel={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        <div className="min-w-max space-y-0.5">
+          {lines.length === 0 ? (
+            <div className="h-full flex items-center justify-center p-4 text-slate-500 text-xs text-center font-sans">
+              Nenhuma alteração pendente ou registrada para este agente.
+            </div>
+          ) : (
+            lines.map((line, idx) => {
+              const isAdd = line.type === 'add'
+              const isRemove = line.type === 'remove'
+              return (
+                <div
+                  key={idx}
+                  className={`flex items-start gap-2 px-2 py-0.5 rounded-xs transition-colors ${
+                    isAdd
+                      ? 'bg-emerald-950/50 text-emerald-300 border-l-2 border-emerald-500'
+                      : isRemove
+                      ? 'bg-rose-950/50 text-rose-300 border-l-2 border-rose-500'
+                      : 'text-slate-400'
+                  }`}
+                >
+                  <span className="w-4 text-center select-none text-[10px] opacity-60 shrink-0">
+                    {isAdd ? '+' : isRemove ? '-' : ' '}
+                  </span>
+                  <span className="whitespace-pre leading-relaxed">{line.content}</span>
+                </div>
+              )
+            })
+          )}
+        </div>
       </div>
 
       {/* Footer warning on linking */}

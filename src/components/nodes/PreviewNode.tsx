@@ -159,13 +159,18 @@ export const PreviewNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         </div>
       </div>
 
-      {/* Preview Sandbox Area */}
-      <div className="flex-1 min-h-[240px] p-2.5 overflow-hidden flex flex-col">
+      {/* Preview Sandbox Area with Event Isolation & Security Sandbox */}
+      <div
+        className="nodrag nowheel nopan flex-1 min-h-0 p-2.5 overflow-hidden flex flex-col relative"
+        onWheel={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
         <div className="w-full flex-1 rounded-lg border border-slate-700/80 overflow-hidden bg-slate-950 shadow-inner">
           <iframe
             key={iframeKey}
             title="Web Sandbox"
-            sandbox="allow-scripts allow-same-origin"
+            sandbox="allow-scripts"
             srcDoc={nodeData.htmlPreview || '<div style="font-family:sans-serif;padding:24px;color:#94a3b8;background:#0D1117;min-height:100vh"><h3>Aguardando conteúdo de preview...</h3></div>'}
             className="w-full h-full border-0"
           />

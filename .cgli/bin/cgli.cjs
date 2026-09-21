@@ -14,13 +14,35 @@ const command = args[0];
 function parseArgs(argsList) {
   const flags = {};
   for (let i = 0; i < argsList.length; i++) {
-    if (argsList[i].startsWith('--')) {
-      const key = argsList[i].slice(2);
-      const val = argsList[i + 1] && !argsList[i + 1].startsWith('--') ? argsList[++i] : true;
-      flags[key] = val;
+    const item = argsList[i];
+    if (/^--[a-zA-Z][\w-]*=/.test(item)) {
+      const idx = item.indexOf('=');
+      flags[item.slice(2, idx)] = item.slice(idx + 1);
+    } else if (/^--[a-zA-Z][\w-]*$/.test(item)) {
+      const key = item.slice(2);
+      const next = argsList[i + 1];
+      if (next !== undefined && !/^--[a-zA-Z][\w-]*(=|$)/.test(next)) {
+        flags[key] = argsList[++i];
+      } else {
+        flags[key] = true;
+      }
     }
   }
   return flags;
+}
+
+function readStdin() {
+  return new Promise((resolve) => {
+    let data = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('readable', () => {
+      let chunk;
+      while ((chunk = process.stdin.read()) !== null) {
+        data += chunk;
+      }
+    });
+    process.stdin.on('end', () => resolve(data));
+  });
 }
 
 function post(endpoint, data) {
@@ -86,6 +108,7 @@ async function run() {
         console.log(`[CGLI] Subagente ${childType.toUpperCase()} invocado com sucesso no canvas.`);
       } catch (err) {
         console.error(`[CGLI Erro] Falha ao invocar subagente:`, err.message);
+        process.exit(1);
       }
       break;
     }
@@ -93,12 +116,15 @@ async function run() {
     case 'create-artifact': {
       const title = flags.title || 'Documento de Artefato';
       let content = flags.content || '';
-      if (flags.file) {
+      if (flags.stdin) {
+        content = await readStdin();
+      } else if (flags.file) {
         const filePath = path.resolve(workspacePath, String(flags.file));
         if (fs.existsSync(filePath)) {
           content = fs.readFileSync(filePath, 'utf8');
         } else {
-          console.warn(`[CGLI Aviso] Arquivo '${flags.file}' não encontrado.`);
+          console.error(`[CGLI Erro] Arquivo '${flags.file}' não foi encontrado no workspace.`);
+          process.exit(1);
         }
       }
       try {
@@ -107,9 +133,10 @@ async function run() {
           title,
           content
         });
-        console.log(`[CGLI] Nó de artefato '${title}' criado no canvas.`);
+        console.log(`[CGLI] Nó de artefato '${title}' criado com sucesso no canvas.`);
       } catch (err) {
         console.error(`[CGLI Erro] Falha ao criar artefato:`, err.message);
+        process.exit(1);
       }
       break;
     }

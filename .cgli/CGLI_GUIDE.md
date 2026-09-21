@@ -1,45 +1,30 @@
-# CGLI (Canvas Agent Orchestrator) - Guia de Interação
+# CGLI (Canvas Agent Orchestrator) — Regras de Execução
 
-Você está executando dentro do ambiente **CGLI**.
-Você tem total acesso ao projeto neste diretório e pode criar ou invocar nós diretamente no canvas.
+Você está executando dentro do ambiente interativo **CGLI** no desktop Tauri.
+O canvas do CGLI só exibe planos, especificações, diffs e subagentes que você registrar com o comando `cgli`.
 
-## Comandos do Canvas Disponíveis
+## 📌 REGRA MANDATÓRIA PARA O PAPEL DE PLANEJADOR (PLANNER)
+Sempre que concluir um plano de arquitetura, plano de implementação, especificação ou documento técnico:
+1. Salve o plano em arquivo markdown na pasta de artefatos: `.cgli/artifacts/<nome-do-plano>.md`
+2. Registre-o e publique-o imediatamente no canvas executando no terminal:
+   `cgli create-artifact --title "Título do Plano" --file .cgli/artifacts/<nome-do-plano>.md`
+   (ou envie diretamente via stdin: `cat plano.md | cgli create-artifact --title "Título do Plano" --stdin`)
+3. Após criar o nó no canvas, responda ao usuário no terminal com um breve resumo de 2 a 3 linhas citando o título do plano criado.
 
-Você pode executar o utilitário `cgli` diretamente no terminal:
+## 🛠️ Comandos Disponíveis do Canvas
 
-1. **Invocar Subagente:**
-   ```bash
-   cgli spawn-subagent --type agy --task "Executar suite de testes e build"
-   cgli spawn-subagent --type claude --role planner --task "Planejar arquitetura"
-   ```
+- **Criar Nó de Artefato (Plano / Especificação / Documento):**
+  `cgli create-artifact --title "Título" --file caminho/documento.md`
 
-2. **Criar Nó de Artefato (Plano / Especificação / Documento):**
-   ```bash
-   cgli create-artifact --title "Plano de Implementação" --content "# Detalhes..."
-   # ou a partir de um arquivo:
-   cgli create-artifact --title "Plano de Implementação" --file plano.md
-   ```
+- **Invocar Subagente Conectado no Canvas:**
+  `cgli spawn-subagent --type claude --role planner --task "Descrição da tarefa"`
+  `cgli spawn-subagent --type agy --role executor --task "Executar build e testes"`
 
-3. **Criar Nó de Preview Web (HTML / Sandbox Iframe):**
-   ```bash
-   cgli create-preview --title "Dashboard Preview" --html "<div><h1>Preview</h1></div>"
-   # ou a partir de um arquivo html:
-   cgli create-preview --title "Dashboard Preview" --file index.html
-   ```
+- **Criar Nó de Diff (Alterações de Código):**
+  `cgli create-diff --title "Alterações em Auth" --file "src/auth.ts"`
 
-4. **Criar Nó de Diff (Comparação de Código):**
-   ```bash
-   cgli create-diff --title "Alterações em Auth" --file "src/auth.ts"
-   ```
+- **Criar Nó de Preview Web (HTML / Sandbox Iframe):**
+  `cgli create-preview --title "Dashboard Preview" --file index.html`
 
-5. **Identificar Pastas do Workspace:**
-   ```bash
-   cgli list-folders
-   ```
-
-## Ações via Blocos de Texto
-Alternativamente, você pode emitir blocos estruturados na sua resposta que o CGLI interceptará:
-`<<<CGLI:SPAWN_SUBAGENT {"child_type":"agy","role":"executor","task":"Executar testes"}>>>`
-`<<<CGLI:CREATE_ARTIFACT {"title":"Plano de Teste","content":"# Plano\n..."}>>>`
-`<<<CGLI:CREATE_PREVIEW {"title":"Preview Botão","html":"<button>Clique</button>"}>>>`
-`<<<CGLI:CREATE_DIFF {"title":"Diff Auth","filename":"src/auth.ts"}>>>`
+- **Listar Pastas do Workspace:**
+  `cgli list-folders`

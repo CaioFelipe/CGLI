@@ -202,11 +202,36 @@ fn write_if_changed(path: &Path, content: &str) {
     let _ = fs::write(path, content);
 }
 
+fn upsert_managed_block(path: &Path, block_content: &str) {
+    let begin_marker = "<!-- CGLI:BEGIN v2 -->";
+    let end_marker = "<!-- CGLI:END -->";
+    let wrapped = format!("{}\n{}\n{}", begin_marker, block_content.trim(), end_marker);
+
+    if let Ok(existing) = fs::read_to_string(path) {
+        if let (Some(start_idx), Some(end_idx)) = (existing.find(begin_marker), existing.find(end_marker)) {
+            if end_idx >= start_idx {
+                let after = &existing[end_idx + end_marker.len()..];
+                let new_content = format!("{}{}{}", &existing[..start_idx], wrapped, after);
+                write_if_changed(path, &new_content);
+                return;
+            }
+        }
+        let combined = format!("{}\n\n{}", existing.trim_end(), wrapped);
+        write_if_changed(path, &combined);
+    } else {
+        write_if_changed(path, &wrapped);
+    }
+}
+
 pub fn ensure_cgli_environment(workspace_path: &Path, port: u16) {
     let cgli_dir = workspace_path.join(".cgli");
     let bin_dir = cgli_dir.join("bin");
+    let artifacts_dir = cgli_dir.join("artifacts");
+    let gemini_dir = workspace_path.join(".gemini");
 
     let _ = fs::create_dir_all(&bin_dir);
+    let _ = fs::create_dir_all(&artifacts_dir);
+    let _ = fs::create_dir_all(&gemini_dir);
 
     // Create cgli.cjs (universal Node.js CLI runner)
     let cgli_js_path = bin_dir.join("cgli.cjs");
@@ -227,13 +252,35 @@ const command = args[0];
 function parseArgs(argsList) {{
   const flags = {{}};
   for (let i = 0; i < argsList.length; i++) {{
-    if (argsList[i].startsWith('--')) {{
-      const key = argsList[i].slice(2);
-      const val = argsList[i + 1] && !argsList[i + 1].startsWith('--') ? argsList[++i] : true;
-      flags[key] = val;
+    const item = argsList[i];
+    if (/^--[a-zA-Z][\w-]*=/.test(item)) {{
+      const idx = item.indexOf('=');
+      flags[item.slice(2, idx)] = item.slice(idx + 1);
+    }} else if (/^--[a-zA-Z][\w-]*$/.test(item)) {{
+      const key = item.slice(2);
+      const next = argsList[i + 1];
+      if (next !== undefined && !/^--[a-zA-Z][\w-]*(=|$)/.test(next)) {{
+        flags[key] = argsList[++i];
+      }} else {{
+        flags[key] = true;
+      }}
     }}
   }}
   return flags;
+}}
+
+function readStdin() {{
+  return new Promise((resolve) => {{
+    let data = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('readable', () => {{
+      let chunk;
+      while ((chunk = process.stdin.read()) !== null) {{
+        data += chunk;
+      }}
+    }});
+    process.stdin.on('end', () => resolve(data));
+  }});
 }}
 
 function post(endpoint, data) {{
@@ -299,6 +346,7 @@ async function run() {{
         console.log(`[CGLI] Subagente ${{childType.toUpperCase()}} invocado com sucesso no canvas.`);
       }} catch (err) {{
         console.error(`[CGLI Erro] Falha ao invocar subagente:`, err.message);
+        process.exit(1);
       }}
       break;
     }}
@@ -306,12 +354,15 @@ async function run() {{
     case 'create-artifact': {{
       const title = flags.title || 'Documento de Artefato';
       let content = flags.content || '';
-      if (flags.file) {{
+      if (flags.stdin) {{
+        content = await readStdin();
+      }} else if (flags.file) {{
         const filePath = path.resolve(workspacePath, String(flags.file));
         if (fs.existsSync(filePath)) {{
           content = fs.readFileSync(filePath, 'utf8');
         }} else {{
-          console.warn(`[CGLI Aviso] Arquivo '${{flags.file}}' não encontrado.`);
+          console.error(`[CGLI Erro] Arquivo '${{flags.file}}' não foi encontrado no workspace.`);
+          process.exit(1);
         }}
       }}
       try {{
@@ -320,9 +371,10 @@ async function run() {{
           title,
           content
         }});
-        console.log(`[CGLI] Nó de artefato '${{title}}' criado no canvas.`);
+        console.log(`[CGLI] Nó de artefato '${{title}}' criado com sucesso no canvas.`);
       }} catch (err) {{
         console.error(`[CGLI Erro] Falha ao criar artefato:`, err.message);
+        process.exit(1);
       }}
       break;
     }}
@@ -438,68 +490,43 @@ run();
 
     // Create .cgli/CGLI_GUIDE.md
     let guide_path = cgli_dir.join("CGLI_GUIDE.md");
-    let guide_content = r##"# CGLI (Canvas Agent Orchestrator) - Guia de Interação
+    let guide_content = r##"# CGLI (Canvas Agent Orchestrator) — Regras de Execução
 
-Você está executando dentro do ambiente **CGLI**.
-Você tem total acesso ao projeto neste diretório e pode criar ou invocar nós diretamente no canvas.
+Você está executando dentro do ambiente interativo **CGLI** no desktop Tauri.
+O canvas do CGLI só exibe planos, especificações, diffs e subagentes que você registrar com o comando `cgli`.
 
-## Comandos do Canvas Disponíveis
+## 📌 REGRA MANDATÓRIA PARA O PAPEL DE PLANEJADOR (PLANNER)
+Sempre que concluir um plano de arquitetura, plano de implementação, especificação ou documento técnico:
+1. Salve o plano em arquivo markdown na pasta de artefatos: `.cgli/artifacts/<nome-do-plano>.md`
+2. Registre-o e publique-o imediatamente no canvas executando no terminal:
+   `cgli create-artifact --title "Título do Plano" --file .cgli/artifacts/<nome-do-plano>.md`
+   (ou envie diretamente via stdin: `cat plano.md | cgli create-artifact --title "Título do Plano" --stdin`)
+3. Após criar o nó no canvas, responda ao usuário no terminal com um breve resumo de 2 a 3 linhas citando o título do plano criado.
 
-Você pode executar o utilitário `cgli` diretamente no terminal:
+## 🛠️ Comandos Disponíveis do Canvas
 
-1. **Invocar Subagente:**
-   ```bash
-   cgli spawn-subagent --type agy --task "Executar suite de testes e build"
-   cgli spawn-subagent --type claude --role planner --task "Planejar arquitetura"
-   ```
+- **Criar Nó de Artefato (Plano / Especificação / Documento):**
+  `cgli create-artifact --title "Título" --file caminho/documento.md`
 
-2. **Criar Nó de Artefato (Plano / Especificação / Documento):**
-   ```bash
-   cgli create-artifact --title "Plano de Implementação" --content "# Detalhes..."
-   # ou a partir de um arquivo:
-   cgli create-artifact --title "Plano de Implementação" --file plano.md
-   ```
+- **Invocar Subagente Conectado no Canvas:**
+  `cgli spawn-subagent --type claude --role planner --task "Descrição da tarefa"`
+  `cgli spawn-subagent --type agy --role executor --task "Executar build e testes"`
 
-3. **Criar Nó de Preview Web (HTML / Sandbox Iframe):**
-   ```bash
-   cgli create-preview --title "Dashboard Preview" --html "<div><h1>Preview</h1></div>"
-   # ou a partir de um arquivo html:
-   cgli create-preview --title "Dashboard Preview" --file index.html
-   ```
+- **Criar Nó de Diff (Alterações de Código):**
+  `cgli create-diff --title "Alterações em Auth" --file "src/auth.ts"`
 
-4. **Criar Nó de Diff (Comparação de Código):**
-   ```bash
-   cgli create-diff --title "Alterações em Auth" --file "src/auth.ts"
-   ```
+- **Criar Nó de Preview Web (HTML / Sandbox Iframe):**
+  `cgli create-preview --title "Dashboard Preview" --file index.html`
 
-5. **Identificar Pastas do Workspace:**
-   ```bash
-   cgli list-folders
-   ```
-
-## Ações via Blocos de Texto
-Alternativamente, você pode emitir blocos estruturados na sua resposta que o CGLI interceptará:
-`<<<CGLI:SPAWN_SUBAGENT {"child_type":"agy","role":"executor","task":"Executar testes"}>>>`
-`<<<CGLI:CREATE_ARTIFACT {"title":"Plano de Teste","content":"# Plano\n..."}>>>`
-`<<<CGLI:CREATE_PREVIEW {"title":"Preview Botão","html":"<button>Clique</button>"}>>>`
-`<<<CGLI:CREATE_DIFF {"title":"Diff Auth","filename":"src/auth.ts"}>>>`
+- **Listar Pastas do Workspace:**
+  `cgli list-folders`
 "##;
     write_if_changed(&guide_path, guide_content);
 
-    // Ensure CLAUDE.md exists in workspace root so Claude Code automatically loads CGLI instructions
-    let claude_md_path = workspace_path.join("CLAUDE.md");
-    if !claude_md_path.exists() {
-        write_if_changed(&claude_md_path, guide_content);
-    } else if let Ok(existing) = fs::read_to_string(&claude_md_path) {
-        if !existing.contains("CGLI (Canvas Agent Orchestrator)") {
-            let combined = format!("{}\n\n{}", existing, guide_content);
-            write_if_changed(&claude_md_path, &combined);
-        }
-    }
-
-    // Ensure AGY.md exists in workspace root
-    let agy_md_path = workspace_path.join("AGY.md");
-    if !agy_md_path.exists() {
-        write_if_changed(&agy_md_path, guide_content);
-    }
+    // Upsert managed CGLI block across all model instructions files
+    upsert_managed_block(&workspace_path.join("CLAUDE.md"), guide_content);
+    upsert_managed_block(&workspace_path.join("GEMINI.md"), guide_content);
+    upsert_managed_block(&workspace_path.join(".gemini").join("GEMINI.md"), guide_content);
+    upsert_managed_block(&workspace_path.join("AGENTS.md"), guide_content);
+    upsert_managed_block(&workspace_path.join("AGY.md"), guide_content);
 }
