@@ -206,10 +206,19 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     }
   })
 
+  const markSessionStarted = useCallback(() => {
+    if (!hasStartedRef.current) {
+      hasStartedRef.current = true
+      updateNodeData(id, { hasStarted: true })
+    }
+  }, [id, updateNodeData])
+
   const startPty = useCallback(async (forceFresh = false) => {
     const term = terminalInstance.current
     const cfg = launchRef.current
-    const shouldResume = !forceFresh && hasStartedRef.current
+    const cachedOutput = (typeof localStorage !== 'undefined' ? localStorage.getItem(`cgli_term_${id}`) : '') || ''
+    // Only attempt resume if the session has actually engaged AND there is prior cached output
+    const shouldResume = !forceFresh && hasStartedRef.current && cachedOutput.trim().length > 0
     const sessId = cliSessionIdRef.current
     const argsToUse = computeArgs(shouldResume, sessId, cfg.args)
 
@@ -220,11 +229,9 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         CGLI_AGENT_TYPE: cfg.agentType,
         CGLI_WORKSPACE_PATH: cfg.workspacePath,
       })
-      hasStartedRef.current = true
       updateNodeData(id, {
         isPtyActive: true,
         status: 'idle',
-        hasStarted: true,
         cliSessionId: sessId,
       })
 
@@ -255,11 +262,10 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             CGLI_AGENT_TYPE: cfg.agentType,
             CGLI_WORKSPACE_PATH: cfg.workspacePath,
           })
-          hasStartedRef.current = true
           updateNodeData(id, {
             isPtyActive: true,
             status: 'idle',
-            hasStarted: true,
+            hasStarted: false,
             cliSessionId: newSessId,
           })
           return
@@ -302,9 +308,19 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     // Preload cached terminal output if this node already has prior session history
     try {
       const cached = localStorage.getItem(`cgli_term_${id}`)
-      if (cached && hasStartedRef.current) {
-        term.write(cached)
-        termOutputBufferRef.current = cached
+      if (cached) {
+        if (
+          cached.includes('No conversation found with session ID') ||
+          (cached.includes('Session ID') && cached.includes('already in use'))
+        ) {
+          localStorage.removeItem(`cgli_term_${id}`)
+          hasStartedRef.current = false
+          cliSessionIdRef.current = generateUuid()
+          updateNodeData(id, { hasStarted: false, cliSessionId: cliSessionIdRef.current })
+        } else if (hasStartedRef.current) {
+          term.write(cached)
+          termOutputBufferRef.current = cached
+        }
       }
     } catch (_) {}
 
@@ -328,6 +344,9 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
     // Keyboard input typed inside the terminal goes straight to the PTY stdin
     const dataSub = term.onData((d) => {
+      if (d.includes('\r')) {
+        markSessionStarted()
+      }
       ptyService.writePty(sessionId, d).catch(() => {})
     })
 
@@ -336,6 +355,33 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       // frames of output can be emitted before anyone is listening.
       const unlisten = await ptyService.onPtyOutput(sessionId, (chunk) => {
         if (!disposed) {
+          // Detect if Claude Code failed because the session was not found or already in use
+          if (
+            chunk.includes('No conversation found with session ID') ||
+            (chunk.includes('Session ID') && chunk.includes('already in use'))
+          ) {
+            console.warn('Session ID mismatch detected from Claude Code. Auto-recovering with fresh session...')
+            hasStartedRef.current = false
+            const newUuid = generateUuid()
+            cliSessionIdRef.current = newUuid
+            updateNodeData(id, {
+              cliSessionId: newUuid,
+              hasStarted: false,
+            })
+            termOutputBufferRef.current = ''
+            try {
+              localStorage.removeItem(`cgli_term_${id}`)
+            } catch (_) {}
+            term.clear()
+            term.writeln('\r\n\x1b[33m=== Sessão anterior não encontrada. Iniciando nova sessão limpa... ===\x1b[0m\r\n')
+            setTimeout(() => {
+              if (!disposed) {
+                void startPty(true)
+              }
+            }, 300)
+            return
+          }
+
           term.write(chunk)
           termOutputBufferRef.current = (termOutputBufferRef.current + chunk).slice(-60000)
           if (saveTermTimeoutRef.current) clearTimeout(saveTermTimeoutRef.current)
@@ -425,6 +471,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
   const handleSendMessage = () => {
     if (!inputVal.trim()) return
+    markSessionStarted()
     ptyService.writePty(sessionId, `${inputVal}\r`).catch(() => {})
     setInputVal('')
     terminalInstance.current?.focus()
@@ -626,7 +673,10 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           {/* Quick Enter / Confirm Button */}
           <button
             type="button"
-            onClick={() => ptyService.writePty(sessionId, '\r')}
+            onClick={() => {
+              markSessionStarted()
+              ptyService.writePty(sessionId, '\r')
+            }}
             title="Enviar Enter / Confirmar prompt atual (↵)"
             className="flex items-center gap-1 px-2.5 py-1 rounded font-semibold text-[11px] bg-emerald-600/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600/30 transition-all cursor-pointer shadow-xs"
           >
