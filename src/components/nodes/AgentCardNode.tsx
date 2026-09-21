@@ -15,6 +15,7 @@ import {
   Terminal as TerminalIcon,
   Trash2,
   X,
+  Plus,
 } from 'lucide-react'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ptyService } from '../../services/ptyService'
@@ -83,6 +84,17 @@ const TERMINAL_THEMES: Record<'dark' | 'light', ITheme> = {
   },
 }
 
+function generateUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+
 export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const nodeData = data as unknown as AgentNodeData
   const {
@@ -134,6 +146,44 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
   const args = cliConfig?.defaultArgs ? cliConfig.defaultArgs.split(' ').filter(Boolean) : []
 
+  const cliSessionIdRef = useRef<string>(
+    nodeData.cliSessionId || generateUuid()
+  )
+  const hasStartedRef = useRef<boolean>(Boolean(nodeData.hasStarted))
+  const termOutputBufferRef = useRef<string>('')
+  const saveTermTimeoutRef = useRef<any>(null)
+
+  const computeArgs = useCallback((resume: boolean, sessId: string, baseArgs: string[]) => {
+    if (isClaude) {
+      const filtered = baseArgs.filter(
+        (a, i, arr) =>
+          a !== '--resume' &&
+          a !== '-r' &&
+          a !== '--session-id' &&
+          a !== '--continue' &&
+          a !== '-c' &&
+          arr[i - 1] !== '--session-id' &&
+          arr[i - 1] !== '--resume' &&
+          arr[i - 1] !== '-r'
+      )
+      if (resume) {
+        return ['--resume', sessId, ...filtered]
+      } else {
+        return ['--session-id', sessId, ...filtered]
+      }
+    } else if (isAgy) {
+      const filtered = baseArgs.filter(
+        (a) => a !== '--continue' && a !== '-c' && a !== '--conversation'
+      )
+      if (resume) {
+        return ['--continue', ...filtered]
+      } else {
+        return [...filtered]
+      }
+    }
+    return baseArgs
+  }, [isClaude, isAgy])
+
   // `args` is rebuilt on every render, so it must never be an effect dependency. Everything the
   // spawn needs is read from this ref at call time instead; the terminal effect below only
   // depends on the node/session identity and therefore mounts exactly once per node.
@@ -156,17 +206,27 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     }
   })
 
-  const startPty = useCallback(async () => {
+  const startPty = useCallback(async (forceFresh = false) => {
     const term = terminalInstance.current
     const cfg = launchRef.current
+    const shouldResume = !forceFresh && hasStartedRef.current
+    const sessId = cliSessionIdRef.current
+    const argsToUse = computeArgs(shouldResume, sessId, cfg.args)
+
     try {
-      await ptyService.spawnPty(sessionId, cfg.command, cfg.args, cfg.workspacePath, {
+      await ptyService.spawnPty(sessionId, cfg.command, argsToUse, cfg.workspacePath, {
         CGLI_NODE_ID: id,
         CGLI_AGENT_ROLE: cfg.role,
         CGLI_AGENT_TYPE: cfg.agentType,
         CGLI_WORKSPACE_PATH: cfg.workspacePath,
       })
-      updateNodeData(id, { isPtyActive: true, status: 'idle' })
+      hasStartedRef.current = true
+      updateNodeData(id, {
+        isPtyActive: true,
+        status: 'idle',
+        hasStarted: true,
+        cliSessionId: sessId,
+      })
 
       // The PTY is created at 80x24; push the real size as soon as it exists.
       const fit = fitAddonInstance.current
@@ -181,11 +241,34 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       }
     } catch (err) {
       console.error('Failed to spawn PTY:', err)
-      // Without this the viewport stays silently black when the spawn fails.
+      // If resuming failed (e.g. session was cleaned up or expired), fallback to a fresh session
+      if (shouldResume && isClaude) {
+        console.warn('Resume failed, starting clean session...')
+        const newSessId = generateUuid()
+        cliSessionIdRef.current = newSessId
+        hasStartedRef.current = false
+        const fallbackArgs = computeArgs(false, newSessId, cfg.args)
+        try {
+          await ptyService.spawnPty(sessionId, cfg.command, fallbackArgs, cfg.workspacePath, {
+            CGLI_NODE_ID: id,
+            CGLI_AGENT_ROLE: cfg.role,
+            CGLI_AGENT_TYPE: cfg.agentType,
+            CGLI_WORKSPACE_PATH: cfg.workspacePath,
+          })
+          hasStartedRef.current = true
+          updateNodeData(id, {
+            isPtyActive: true,
+            status: 'idle',
+            hasStarted: true,
+            cliSessionId: newSessId,
+          })
+          return
+        } catch (_) {}
+      }
       term?.writeln(`\r\n\x1b[31mFalha ao iniciar '${cfg.command}': ${String(err)}\x1b[0m`)
       updateNodeData(id, { isPtyActive: false, status: 'error' })
     }
-  }, [id, sessionId, updateNodeData])
+  }, [id, sessionId, computeArgs, isClaude, updateNodeData])
 
   // xterm + output listener + PTY spawn. Mounted once per node; torn down only on real unmount.
   useEffect(() => {
@@ -216,6 +299,15 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     terminalInstance.current = term
     fitAddonInstance.current = fitAddon
 
+    // Preload cached terminal output if this node already has prior session history
+    try {
+      const cached = localStorage.getItem(`cgli_term_${id}`)
+      if (cached && hasStartedRef.current) {
+        term.write(cached)
+        termOutputBufferRef.current = cached
+      }
+    } catch (_) {}
+
     const safeFit = () => {
       // Hidden / 0x0 containers make fit() throw or produce NaN dimensions
       if (disposed || container.clientWidth === 0 || container.clientHeight === 0) return
@@ -243,7 +335,16 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       // The listener must be registered (awaited) BEFORE spawning, otherwise the first
       // frames of output can be emitted before anyone is listening.
       const unlisten = await ptyService.onPtyOutput(sessionId, (chunk) => {
-        if (!disposed) term.write(chunk)
+        if (!disposed) {
+          term.write(chunk)
+          termOutputBufferRef.current = (termOutputBufferRef.current + chunk).slice(-60000)
+          if (saveTermTimeoutRef.current) clearTimeout(saveTermTimeoutRef.current)
+          saveTermTimeoutRef.current = setTimeout(() => {
+            try {
+              localStorage.setItem(`cgli_term_${id}`, termOutputBufferRef.current)
+            } catch (_) {}
+          }, 1000)
+        }
       })
       if (disposed) {
         unlisten()
@@ -260,11 +361,17 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       ro.disconnect()
       dataSub.dispose()
       unlistenOutput?.()
+      if (saveTermTimeoutRef.current) clearTimeout(saveTermTimeoutRef.current)
+      try {
+        if (termOutputBufferRef.current) {
+          localStorage.setItem(`cgli_term_${id}`, termOutputBufferRef.current)
+        }
+      } catch (_) {}
       term.dispose()
       terminalInstance.current = null
       fitAddonInstance.current = null
     }
-  }, [sessionId, startPty])
+  }, [id, sessionId, startPty])
 
   // Theme changes update the live terminal instead of rebuilding it
   useEffect(() => {
@@ -282,11 +389,38 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     e.stopPropagation()
     await ptyService.killPty(sessionId)
     if (terminalInstance.current) {
-      terminalInstance.current.clear()
-      terminalInstance.current.writeln('\r\n\x1b[33m=== Reiniciando Sessão PTY... ===\x1b[0m\r\n')
+      terminalInstance.current.writeln('\r\n\x1b[33m=== Reconectando Sessão PTY... ===\x1b[0m\r\n')
     }
     // The output listener from the mount effect is still attached and keeps receiving the new session
     await startPty()
+  }
+
+  const handleNewSession = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const ok = window.confirm('Deseja iniciar uma nova conversa e limpar o histórico anterior deste agente?')
+    if (!ok) return
+
+    await ptyService.killPty(sessionId)
+    termOutputBufferRef.current = ''
+    try {
+      localStorage.removeItem(`cgli_term_${id}`)
+    } catch (_) {}
+
+    const newUuid = generateUuid()
+    cliSessionIdRef.current = newUuid
+    hasStartedRef.current = false
+
+    updateNodeData(id, {
+      cliSessionId: newUuid,
+      hasStarted: false,
+    })
+
+    if (terminalInstance.current) {
+      terminalInstance.current.clear()
+      terminalInstance.current.writeln('\r\n\x1b[35m=== Nova Conversa Iniciada (Contexto Limpo) ===\x1b[0m\r\n')
+    }
+
+    await startPty(true)
   }
 
   const handleSendMessage = () => {
@@ -330,26 +464,18 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
   return (
     <div
-      className={`rounded-xl border shadow-xl flex flex-col overflow-hidden transition-all duration-150 select-none ${
-        theme === 'dark'
-          ? 'bg-[#0D1117] border-[#30363D] text-[#C9D1D9]'
-          : 'bg-white border-slate-300 text-slate-900'
-      }`}
+      className="relative w-full h-full"
       style={{
-        width: '100%',
-        height: '100%',
         minWidth: 440,
         minHeight: 380,
-        borderColor: selected ? accentColor : undefined,
-        boxShadow: selected ? `0 0 0 2px ${accentColor}44, 0 10px 25px -5px rgba(0,0,0,0.4)` : undefined,
       }}
     >
       <NodeResizer
         minWidth={440}
         minHeight={380}
         isVisible={selected}
-        lineClassName="!border-indigo-500"
-        handleClassName="!w-2.5 !h-2.5 !bg-white !border-2 !border-indigo-500 !rounded-xs"
+        lineClassName="!border-indigo-500 !z-40"
+        handleClassName="!w-3 !h-3 !bg-white !border-2 !border-indigo-500 !rounded-xs shadow-md cursor-pointer !z-50"
         onResize={() => {
           try {
             fitAddonInstance.current?.fit()
@@ -374,30 +500,42 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       <Handle
         type="target"
         position={Position.Top}
-        className="w-3.5 h-3.5 bg-indigo-500 border-2 border-white dark:border-slate-900 rounded-full cursor-crosshair transition-transform hover:scale-125"
+        className="w-3.5 h-3.5 bg-indigo-500 border-2 border-white dark:border-slate-900 rounded-full cursor-crosshair transition-transform hover:scale-125 z-20"
       />
       <Handle
         type="target"
         id="left"
         position={Position.Left}
-        className="w-3.5 h-3.5 bg-indigo-500 border-2 border-white dark:border-slate-900 rounded-full cursor-crosshair transition-transform hover:scale-125"
+        className="w-3.5 h-3.5 bg-indigo-500 border-2 border-white dark:border-slate-900 rounded-full cursor-crosshair transition-transform hover:scale-125 z-20"
       />
       <Handle
         type="source"
         id="left-source"
         position={Position.Left}
-        className="w-3.5 h-3.5 bg-indigo-500 border-2 border-white dark:border-slate-900 rounded-full cursor-crosshair transition-transform hover:scale-125"
+        className="w-3.5 h-3.5 bg-indigo-500 border-2 border-white dark:border-slate-900 rounded-full cursor-crosshair transition-transform hover:scale-125 z-20"
       />
       <Handle
         type="source"
         position={Position.Right}
-        className="w-3.5 h-3.5 bg-indigo-500 border-2 border-white dark:border-slate-900 rounded-full cursor-crosshair transition-transform hover:scale-125"
+        className="w-3.5 h-3.5 bg-indigo-500 border-2 border-white dark:border-slate-900 rounded-full cursor-crosshair transition-transform hover:scale-125 z-20"
       />
       <Handle
         type="source"
         position={Position.Bottom}
-        className="w-3.5 h-3.5 bg-indigo-500 border-2 border-white dark:border-slate-900 rounded-full cursor-crosshair transition-transform hover:scale-125"
+        className="w-3.5 h-3.5 bg-indigo-500 border-2 border-white dark:border-slate-900 rounded-full cursor-crosshair transition-transform hover:scale-125 z-20"
       />
+
+      <div
+        className={`w-full h-full rounded-xl border shadow-xl flex flex-col overflow-hidden transition-all duration-150 select-none ${
+          theme === 'dark'
+            ? 'bg-[#0D1117] border-[#30363D] text-[#C9D1D9]'
+            : 'bg-white border-slate-300 text-slate-900'
+        }`}
+        style={{
+          borderColor: selected ? accentColor : undefined,
+          boxShadow: selected ? `0 0 0 2px ${accentColor}44, 0 10px 25px -5px rgba(0,0,0,0.4)` : undefined,
+        }}
+      >
 
       {/* Header */}
       <div
@@ -549,6 +687,17 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         </div>
 
         <div className="flex items-center gap-1">
+          {/* New Clean Session */}
+          <button
+            type="button"
+            onClick={handleNewSession}
+            title="Nova Conversa (Limpar contexto e iniciar nova sessão)"
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border border-sky-800/60 bg-sky-950/40 text-sky-300 hover:bg-sky-900/60 transition-colors cursor-pointer"
+          >
+            <Plus className="w-3 h-3" />
+            <span>Nova Conversa</span>
+          </button>
+
           {/* Clear terminal */}
           <button
             type="button"
@@ -559,11 +708,11 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             <RotateCw className="w-3.5 h-3.5" />
           </button>
 
-          {/* Restart PTY */}
+          {/* Reconnect PTY preserving session context */}
           <button
             type="button"
             onClick={handleRestartSession}
-            title="Reiniciar Sessão PTY"
+            title="Reconectar Sessão PTY mantendo histórico"
             className="p-1 rounded text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <FolderSync className="w-3.5 h-3.5" />
@@ -648,6 +797,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           </button>
         </div>
       </div>
+    </div>
     </div>
   )
 }

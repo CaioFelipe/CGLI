@@ -67,6 +67,8 @@ export interface AgentNodeData {
   attachedArtifacts?: AttachedArtifactBadge[]
   terminalLogs: string[]
   sessionId?: string
+  cliSessionId?: string
+  hasStarted?: boolean
   workspacePath?: string
   isPtyActive?: boolean
   cliId?: string
@@ -174,6 +176,7 @@ export interface GroupNodeData {
   color?: string
   isReactive?: boolean
   isDragOver?: boolean
+  isResizing?: boolean
 }
 
 export interface StashItem {

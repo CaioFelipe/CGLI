@@ -34,6 +34,8 @@ export const GroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     removeNodeFromGroup,
     autoFitGroup,
     toggleGroupReactive,
+    setGroupResizing,
+    updateGroupDimensions,
   } = useCanvasStore()
 
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -101,8 +103,27 @@ export const GroupNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         minWidth={340}
         minHeight={240}
         isVisible={selected}
-        lineClassName="!border-indigo-500"
-        handleClassName="!w-2.5 !h-2.5 !bg-white !border-2 !border-indigo-500 !rounded-xs"
+        lineClassName="!border-indigo-500 !z-40"
+        handleClassName="!w-3 !h-3 !bg-white !border-2 !border-indigo-500 !rounded-xs shadow-md cursor-pointer !z-50"
+        onResizeStart={() => {
+          setGroupResizing(id, true)
+          updateNodeData(id, { isReactive: false, isResizing: true })
+        }}
+        onResize={(_, params) => {
+          updateNodeData(id, {
+            width: Math.round(params.width),
+            height: Math.round(params.height),
+            isReactive: false,
+            isResizing: true,
+          })
+        }}
+        onResizeEnd={(_, params) => {
+          setGroupResizing(id, false)
+          updateGroupDimensions(id, Math.round(params.width), Math.round(params.height), {
+            x: Math.round(params.x),
+            y: Math.round(params.y),
+          })
+        }}
       />
 
       {/* Handles */}

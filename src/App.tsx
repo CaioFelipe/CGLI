@@ -30,7 +30,7 @@ import { ImageGroupNode } from './components/nodes/ImageGroupNode'
 import { ImageNode } from './components/nodes/ImageNode'
 import { RemovableEdge } from './components/edges/RemovableEdge'
 import { StashDrawer } from './components/panels/StashDrawer'
-import { useCanvasStore } from './store/canvasStore'
+import { useCanvasStore, getNodeDimensions } from './store/canvasStore'
 
 // Register custom node types
 const nodeTypes: NodeTypes = {
@@ -72,9 +72,11 @@ const CanvasInner: React.FC = () => {
     (_: MouseEvent | TouchEvent, node: Node) => {
       if (node.type === 'groupNode') return
       const groups = nodes.filter((n) => n.type === 'groupNode')
-      const nodeWidth = Number(node.measured?.width) || 380
-      const nodeCenterX = node.position.x + nodeWidth / 2
-      const nodeCenterY = node.position.y + 40
+      const { width: nW, height: nH } = getNodeDimensions(node)
+      const nX = node.position.x
+      const nY = node.position.y
+      const nCenterX = nX + nW / 2
+      const nCenterY = nY + nH / 2
 
       let targetGroupId: string | null = null
       for (const group of groups) {
@@ -83,10 +85,21 @@ const CanvasInner: React.FC = () => {
 
         const gX = group.position.x
         const gY = group.position.y
-        const gW = Number((group.data as any)?.width) || (group.style?.width as number) || 560
-        const gH = Number((group.data as any)?.height) || (group.style?.height as number) || 420
+        const { width: gW, height: gH } = getNodeDimensions(group)
 
-        if (nodeCenterX >= gX && nodeCenterX <= gX + gW && nodeCenterY >= gY && nodeCenterY <= gY + gH) {
+        const isCenterIn =
+          nCenterX >= gX &&
+          nCenterX <= gX + gW &&
+          nCenterY >= gY &&
+          nCenterY <= gY + gH
+
+        const overlapX = Math.max(0, Math.min(nX + nW, gX + gW) - Math.max(nX, gX))
+        const overlapY = Math.max(0, Math.min(nY + nH, gY + gH) - Math.max(nY, gY))
+        const overlapArea = overlapX * overlapY
+        const nodeArea = nW * nH
+        const hasOverlap = nodeArea > 0 && overlapArea / nodeArea > 0.25
+
+        if (isCenterIn || hasOverlap) {
           targetGroupId = group.id
           break
         }
@@ -102,9 +115,11 @@ const CanvasInner: React.FC = () => {
       if (node.type === 'groupNode') return
 
       const groups = nodes.filter((n) => n.type === 'groupNode')
-      const nodeWidth = Number(node.measured?.width) || 380
-      const nodeCenterX = node.position.x + nodeWidth / 2
-      const nodeCenterY = node.position.y + 40
+      const { width: nW, height: nH } = getNodeDimensions(node)
+      const nX = node.position.x
+      const nY = node.position.y
+      const nCenterX = nX + nW / 2
+      const nCenterY = nY + nH / 2
 
       for (const group of groups) {
         const memberIds = ((group.data as any)?.nodeIds || []) as string[]
@@ -112,10 +127,21 @@ const CanvasInner: React.FC = () => {
 
         const gX = group.position.x
         const gY = group.position.y
-        const gW = Number((group.data as any)?.width) || (group.style?.width as number) || 560
-        const gH = Number((group.data as any)?.height) || (group.style?.height as number) || 420
+        const { width: gW, height: gH } = getNodeDimensions(group)
 
-        if (nodeCenterX >= gX && nodeCenterX <= gX + gW && nodeCenterY >= gY && nodeCenterY <= gY + gH) {
+        const isCenterIn =
+          nCenterX >= gX &&
+          nCenterX <= gX + gW &&
+          nCenterY >= gY &&
+          nCenterY <= gY + gH
+
+        const overlapX = Math.max(0, Math.min(nX + nW, gX + gW) - Math.max(nX, gX))
+        const overlapY = Math.max(0, Math.min(nY + nH, gY + gH) - Math.max(nY, gY))
+        const overlapArea = overlapX * overlapY
+        const nodeArea = nW * nH
+        const hasOverlap = nodeArea > 0 && overlapArea / nodeArea > 0.25
+
+        if (isCenterIn || hasOverlap) {
           addNodeToGroup(group.id, node.id)
           break
         }
@@ -162,6 +188,8 @@ const CanvasInner: React.FC = () => {
         approvals: [],
         attachedImages: [],
         terminalLogs: [],
+        cliSessionId: crypto.randomUUID(),
+        hasStarted: false,
       },
     }
     addNode(newNode)
@@ -191,7 +219,7 @@ const CanvasInner: React.FC = () => {
       id: `group-${Date.now()}`,
       type: 'groupNode',
       position: { x: pos.x - 200, y: pos.y - 150 },
-      style: { width: 560, height: 420, zIndex: -1 },
+      style: { width: 560, height: 420, zIndex: 0 },
       data: {
         title: 'Novo Grupo de Nós',
         nodeIds: [],

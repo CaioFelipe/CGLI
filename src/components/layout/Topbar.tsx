@@ -78,6 +78,8 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
         terminalLogs: [],
         workspacePath,
         sessionId: `pty-${nodeId}`,
+        cliSessionId: crypto.randomUUID(),
+        hasStarted: false,
       },
     }
     addNode(newNode)
@@ -108,7 +110,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
       id: `group-${Date.now()}`,
       type: 'groupNode',
       position: { x: 150 + nodes.length * 20, y: 150 + nodes.length * 20 },
-      style: { width: 560, height: 420, zIndex: -1 },
+      style: { width: 560, height: 420, zIndex: 0 },
       data: {
         title: 'Novo Grupo de Nós',
         nodeIds: [],
