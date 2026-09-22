@@ -66,4 +66,23 @@ Sempre que concluir um plano de arquitetura, plano de implementação, especific
 
 - **Listar Pastas do Workspace:**
   `cgli list-folders`
+
+## 🧠 Memória Compartilhada no Obsidian (Vaults Local e Global)
+
+O CGLI possui memória persistente integrada ao Obsidian dividida em dois níveis:
+1. **Vault Local do Projeto (`.cgli/vault/`):** decisões de arquitetura (ADRs), especificações, tarefas e journal de sessões deste repositório.
+2. **Vault Global do Usuário (`~/.cgli/vault/`):** aprendizados gerais, preferências do desenvolvedor e convenções universais.
+
+### Comandos de Memória:
+- **Registrar observação no journal diário (append-only):**
+  `cgli memory write [--scope project|global] --text "Texto da observação" [--tags tag1,tag2]`
+- **Registrar decisão (ADR) ou aprendizado formal:**
+  `cgli memory note [--scope project|global] --type decision --title "Título" [--content "..." | --file doc.md]`
+  `cgli memory note --scope global --type learning --title "Convenção" --content "Conteúdo"`
+- **Listar notas de memória salvas:**
+  `cgli memory list [--scope project|global] [--type decision]`
+- **Consultar conteúdo de uma nota:**
+  `cgli memory get <id_ou_nome>`
+- **Abrir o Vault no aplicativo Obsidian:**
+  `cgli memory open [--scope project|global]`
 <!-- CGLI:END -->

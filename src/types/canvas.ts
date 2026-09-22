@@ -179,11 +179,25 @@ export interface GroupNodeData {
   isResizing?: boolean
 }
 
+export interface MemoryNodeData {
+  id?: string
+  title: string
+  noteType: 'decision' | 'knowledge' | 'learning' | 'rule' | 'task' | 'entity' | 'journal' | string
+  scope: 'project' | 'global'
+  content: string
+  tags?: string[]
+  author?: string
+  created?: string
+  relativePath?: string
+  fullPath?: string
+  parentAgentId?: string
+}
+
 export interface StashItem {
   id: string
   nodeId: string
   name: string
-  type: 'agent' | 'artifact' | 'preview' | 'diff' | 'image' | 'imageGroup' | 'group'
+  type: 'agent' | 'artifact' | 'preview' | 'diff' | 'image' | 'imageGroup' | 'group' | 'memory'
   savedAt: string
   nodeData: any
   position: { x: number; y: number }

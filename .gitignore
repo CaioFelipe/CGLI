@@ -26,3 +26,13 @@ src-tauri/target
 .canvas_context_image.png
 screenshot_*.png
 .agents/
+
+# CGLI Memory Vault - exclusão de staging, journals brutos, outbox e contexto compilado do Git
+.cgli/vault/.tmp/
+.cgli/vault/90-journal/
+.cgli/vault/00-inbox/
+.cgli/vault/**/.compacted_ledger.json
+.cgli/vault/**/.idem-ledger.ndjson
+.cgli/context/
+
+

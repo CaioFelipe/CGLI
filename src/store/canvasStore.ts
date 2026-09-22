@@ -18,6 +18,7 @@ import type {
   ChatMessage,
   CliConfig,
   DiffLine,
+  MemoryNodeData,
   ProjectInfo,
   SkillItem,
   StashItem,
@@ -75,6 +76,12 @@ interface CanvasState {
   openSettings: (tab?: number) => void
   closeSettings: () => void
   setSettingsTab: (tab: number) => void
+
+  isMemoryExplorerOpen: boolean
+  memoryExplorerTargetPos: { x: number; y: number } | null
+  openMemoryExplorer: (pos?: { x: number; y: number }) => void
+  closeMemoryExplorer: () => void
+  spawnMemoryNode: (note: Partial<MemoryNodeData>, position?: { x: number; y: number }) => void
 
   // Image Annotation Modal
   annotatingNodeId: string | null
@@ -444,6 +451,8 @@ export const getNodeDimensions = (node: Node): { width: number; height: number }
       return { width: 360, height: 300 }
     case 'groupNode':
       return { width: 560, height: 420 }
+    case 'memoryNode':
+      return { width: 440, height: 380 }
     default:
       return { width: 380, height: 320 }
   }
@@ -1073,6 +1082,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       strokeColor = (sourceNode.data as any).agentType === 'claude' ? '#EA580C' : '#0284C7'
     } else if (sourceNode?.type === 'previewNode') {
       strokeColor = '#06B6D4'
+    } else if (sourceNode?.type === 'memoryNode' || targetNode?.type === 'memoryNode') {
+      strokeColor = '#10B981'
     }
 
     set({
@@ -1087,11 +1098,30 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       ),
     })
 
+    // If connecting a memoryNode to an agent (in either direction), attach and log
+    const isSourceMem = sourceNode?.type === 'memoryNode'
+    const isTargetMem = targetNode?.type === 'memoryNode'
+    const isTargetAgent = targetNode?.type === 'agentNode'
+    const isSourceAgent = sourceNode?.type === 'agentNode'
+
+    const memNode = isSourceMem && isTargetAgent ? sourceNode : isTargetMem && isSourceAgent ? targetNode : null
+    const memTargetAgent = isSourceMem && isTargetAgent ? targetNode : isTargetMem && isSourceAgent ? sourceNode : null
+
+    if (memNode && memTargetAgent) {
+      const memData = memNode.data as any
+      const noteTitle = memData.title || 'Nota de Memória'
+      const currentLogs = ((memTargetAgent.data as any)?.terminalLogs || []) as string[]
+      get().updateNodeData(memTargetAgent.id, {
+        terminalLogs: [
+          ...currentLogs,
+          `> [CGLI] Memória [[${noteTitle}]] conectada e fixada no contexto deste agente.`,
+        ],
+      })
+    }
+
     // If connecting an image or image group to an agent (in either direction), automatically attach it
     const isSourceImg = sourceNode?.type === 'imageNode' || sourceNode?.type === 'imageGroupNode'
-    const isTargetAgent = targetNode?.type === 'agentNode'
     const isTargetImg = targetNode?.type === 'imageNode' || targetNode?.type === 'imageGroupNode'
-    const isSourceAgent = sourceNode?.type === 'agentNode'
 
     const imgNode = isSourceImg && isTargetAgent ? sourceNode : isTargetImg && isSourceAgent ? targetNode : null
     const agentNode = isSourceImg && isTargetAgent ? targetNode : isTargetImg && isSourceAgent ? sourceNode : null
@@ -1370,6 +1400,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     else if (item.type === 'diff') nodeType = 'diffNode'
     else if (item.type === 'image') nodeType = 'imageNode'
     else if (item.type === 'imageGroup') nodeType = 'imageGroupNode'
+    else if (item.type === 'memory') nodeType = 'memoryNode'
 
     const restoredNode: Node = {
       id: `${item.nodeId}-restored-${Date.now()}`,
@@ -1415,6 +1446,38 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   openSettings: (tab = 0) => set({ isSettingsOpen: true, settingsTab: tab }),
   closeSettings: () => set({ isSettingsOpen: false }),
   setSettingsTab: (tab) => set({ settingsTab: tab }),
+
+  isMemoryExplorerOpen: false,
+  memoryExplorerTargetPos: null,
+  openMemoryExplorer: (pos) => set({ isMemoryExplorerOpen: true, memoryExplorerTargetPos: pos || null }),
+  closeMemoryExplorer: () => set({ isMemoryExplorerOpen: false, memoryExplorerTargetPos: null }),
+  spawnMemoryNode: (note, position) => {
+    const nodes = get().nodes
+    const pos = position || get().memoryExplorerTargetPos || {
+      x: 200 + nodes.length * 30,
+      y: 150 + nodes.length * 20,
+    }
+    const nodeId = `node-memory-${Date.now()}`
+    const newNode = {
+      id: nodeId,
+      type: 'memoryNode',
+      position: pos,
+      style: { width: 440, height: 380 },
+      data: {
+        id: note.id,
+        title: note.title || 'Nota de Memória',
+        noteType: note.noteType || 'knowledge',
+        scope: note.scope || 'project',
+        content: note.content || '',
+        tags: note.tags || [],
+        author: note.author || 'agente',
+        relativePath: note.relativePath || '',
+        fullPath: note.fullPath || '',
+      },
+    }
+    get().addNode(newNode as any)
+    set({ isMemoryExplorerOpen: false, memoryExplorerTargetPos: null })
+  },
 
   annotatingNodeId: null,
   openAnnotationModal: (nodeId) => set({ annotatingNodeId: nodeId }),
@@ -1897,6 +1960,49 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       ],
       edges: [...get().edges, newEdge],
     })
+
+    // Auto-compila arquivo de contexto contextual para o subagente
+    const attachedMemoryIds: string[] = []
+    const allEdges = get().edges
+    const parentEdges = allEdges.filter((e) => e.source === parentId || e.target === parentId)
+    for (const pe of parentEdges) {
+      const otherId = pe.source === parentId ? pe.target : pe.source
+      const otherNode = get().nodes.find((n) => n.id === otherId)
+      if (otherNode?.type === 'memoryNode') {
+        const memData = otherNode.data as any
+        if (memData.id) attachedMemoryIds.push(memData.id)
+        else if (memData.relativePath) attachedMemoryIds.push(memData.relativePath)
+      }
+    }
+
+    void (async () => {
+      try {
+        const res = await fetch('/api/memory/context-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: isClaude ? 'planejamento arquitetura' : 'execução projeto',
+            nodeId: childId,
+            budgetTokens: 3000,
+            attachedMemoryIds,
+            workspacePath,
+          }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.hasContext && data.contextFilePath) {
+            const relPath = data.relativeContextPath || `.cgli/context/${childId}.md`
+            const currentSubLogs = ((newSubNode.data as any)?.terminalLogs || []) as string[]
+            get().updateNodeData(childId, {
+              terminalLogs: [
+                ...currentSubLogs,
+                `> [CGLI] Contexto compilado em ${relPath} (${data.notesCount} notas, ~${data.estimatedTokens} tokens).`,
+              ],
+            })
+          }
+        }
+      } catch (_) {}
+    })()
   },
 
   createArtifactFromAgent: (agentId, title, content) => {
@@ -2119,12 +2225,62 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       edges: [...get().edges, newEdge],
     })
 
-    // If task was provided, write to PTY after brief startup delay
-    if (task) {
-      setTimeout(() => {
-        ptyService.writePty(`pty-${childId}`, `${task}\r`)
-      }, 1200)
+    // Coleta notas de memória conectadas ao nó pai (fixadas no contexto)
+    const attachedMemoryIds: string[] = []
+    const allEdges = get().edges
+    const parentEdges = allEdges.filter((e) => e.source === parentId || e.target === parentId)
+    for (const pe of parentEdges) {
+      const otherId = pe.source === parentId ? pe.target : pe.source
+      const otherNode = get().nodes.find((n) => n.id === otherId)
+      if (otherNode?.type === 'memoryNode') {
+        const memData = otherNode.data as any
+        if (memData.id) attachedMemoryIds.push(memData.id)
+        else if (memData.relativePath) attachedMemoryIds.push(memData.relativePath)
+      }
     }
+
+    // Auto-compila arquivo de contexto em .cgli/context/<childId>.md e injeta referência em linha única
+    const query = task || (role === 'planner' ? 'planejamento arquitetura' : 'execução projeto')
+    void (async () => {
+      let taskToSend = task || ''
+      try {
+        const res = await fetch('/api/memory/context-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query,
+            nodeId: childId,
+            budgetTokens: 3000,
+            attachedMemoryIds,
+            workspacePath,
+          }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.hasContext && data.contextFilePath) {
+            const relPath = data.relativeContextPath || `.cgli/context/${childId}.md`
+            const prefix = `[CGLI] Contexto de memória do projeto em ${relPath} — leia antes de começar.`
+            taskToSend = taskToSend ? `${prefix} Tarefa: ${taskToSend}` : prefix
+
+            const currentSubLogs = ((newSubNode.data as any)?.terminalLogs || []) as string[]
+            get().updateNodeData(childId, {
+              terminalLogs: [
+                ...currentSubLogs,
+                `> [CGLI] Contexto compilado em ${relPath} (${data.notesCount} notas, ~${data.estimatedTokens} tokens).`,
+              ],
+            })
+          }
+        }
+      } catch (err) {
+        console.warn('[CGLI] Falha ao compilar context-file para subagente:', err)
+      }
+
+      if (taskToSend) {
+        setTimeout(() => {
+          ptyService.writePty(`pty-${childId}`, `${taskToSend}\r`)
+        }, 1200)
+      }
+    })()
   },
 
   deleteEdge: (edgeId) => {

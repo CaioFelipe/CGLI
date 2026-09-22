@@ -106,80 +106,155 @@ pub fn start_bridge_server(app_handle: AppHandle) {
                         }
                     }
 
-                    let (status_code, response_json) = match (method, path) {
-                        ("GET", "/api/status") => (
-                            "200 OK",
-                            serde_json::json!({ "status": "ok", "port": port }).to_string(),
-                        ),
-                        ("POST", "/api/spawn-subagent") => {
-                            if let Ok(mut action) = serde_json::from_str::<BridgeAction>(&body_str) {
-                                action.action_type = "spawn_subagent".to_string();
-                                let _ = app.emit("cgli-bridge-action", &action);
-                                ("200 OK", serde_json::json!({ "success": true, "action": "spawn_subagent" }).to_string())
-                            } else {
-                                ("400 Bad Request", serde_json::json!({ "error": "Invalid JSON body" }).to_string())
-                            }
-                        }
-                        ("POST", "/api/create-artifact") => {
-                            if let Ok(mut action) = serde_json::from_str::<BridgeAction>(&body_str) {
-                                action.action_type = "create_artifact".to_string();
-                                let _ = app.emit("cgli-bridge-action", &action);
-                                ("200 OK", serde_json::json!({ "success": true, "action": "create_artifact" }).to_string())
-                            } else {
-                                ("400 Bad Request", serde_json::json!({ "error": "Invalid JSON body" }).to_string())
-                            }
-                        }
-                        ("POST", "/api/create-preview") => {
-                            if let Ok(mut action) = serde_json::from_str::<BridgeAction>(&body_str) {
-                                action.action_type = "create_preview".to_string();
-                                let _ = app.emit("cgli-bridge-action", &action);
-                                ("200 OK", serde_json::json!({ "success": true, "action": "create_preview" }).to_string())
-                            } else {
-                                ("400 Bad Request", serde_json::json!({ "error": "Invalid JSON body" }).to_string())
-                            }
-                        }
-                        ("POST", "/api/create-diff") => {
-                            if let Ok(mut action) = serde_json::from_str::<BridgeAction>(&body_str) {
-                                action.action_type = "create_diff".to_string();
-                                let _ = app.emit("cgli-bridge-action", &action);
-                                ("200 OK", serde_json::json!({ "success": true, "action": "create_diff" }).to_string())
-                            } else {
-                                ("400 Bad Request", serde_json::json!({ "error": "Invalid JSON body" }).to_string())
-                            }
-                        }
-                        ("POST", "/api/update-workspace-info") => {
-                            if let Ok(info) = serde_json::from_str::<serde_json::Value>(&body_str) {
-                                if let Ok(mut lock) = WORKSPACE_INFO.lock() {
-                                    *lock = Some(info);
-                                }
-                                ("200 OK", serde_json::json!({ "success": true }).to_string())
-                            } else {
-                                ("400 Bad Request", serde_json::json!({ "error": "Invalid JSON" }).to_string())
-                            }
-                        }
-                        ("GET", "/api/workspace-info") => {
-                            let mut base = serde_json::json!({
-                                "success": true,
-                                "bridge_port": port,
-                                "status": "online",
-                                "description": "CGLI Agent Studio Bridge"
-                            });
+                    let (status_code, response_json) = if method == "OPTIONS" {
+                        ("204 No Content", String::new())
+                    } else if path.starts_with("/api/memory/") {
+                        let mut ws_path = std::env::var("CGLI_WORKSPACE_PATH").unwrap_or_default();
+                        if ws_path.is_empty() {
                             if let Ok(lock) = WORKSPACE_INFO.lock() {
                                 if let Some(ref info) = *lock {
-                                    if let Some(obj) = info.as_object() {
-                                        for (k, v) in obj {
-                                            base[k] = v.clone();
-                                        }
+                                    if let Some(p) = info.get("workspacePath").and_then(|v| v.as_str()) {
+                                        ws_path = p.to_string();
+                                    } else if let Some(p) = info.get("path").and_then(|v| v.as_str()) {
+                                        ws_path = p.to_string();
                                     }
                                 }
                             }
-                            ("200 OK", base.to_string())
                         }
-                        _ => ("404 Not Found", serde_json::json!({ "error": "Endpoint not found" }).to_string()),
+                        if ws_path.is_empty() {
+                            if let Ok(cur) = std::env::current_dir() {
+                                ws_path = cur.to_string_lossy().to_string();
+                            }
+                        }
+
+                        let script_path = Path::new(&ws_path).join(".cgli").join("bin").join("vaultManager.cjs");
+                        let mut cmd = std::process::Command::new("node");
+                        if script_path.exists() {
+                            cmd.arg(&script_path);
+                        } else {
+                            cmd.arg(".cgli/bin/vaultManager.cjs");
+                        }
+                        if !ws_path.is_empty() {
+                            cmd.current_dir(&ws_path);
+                            cmd.env("CGLI_WORKSPACE_PATH", &ws_path);
+                        }
+
+                        cmd.arg("rpc")
+                            .arg(method)
+                            .arg(path);
+
+                        if method == "POST" || method == "PUT" {
+                            cmd.arg(&body_str);
+                        }
+
+                        match cmd.output() {
+                            Ok(out) => {
+                                let out_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                                if out.status.success() && !out_str.is_empty() {
+                                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&out_str) {
+                                        if val.get("conflict").and_then(|v| v.as_bool()).unwrap_or(false)
+                                            || val.get("statusCode").and_then(|v| v.as_i64()) == Some(409)
+                                        {
+                                            ("409 Conflict", out_str)
+                                        } else {
+                                            ("200 OK", out_str)
+                                        }
+                                    } else {
+                                        ("200 OK", out_str)
+                                    }
+                                } else {
+                                    let err_msg = String::from_utf8_lossy(&out.stderr);
+                                    let resp = serde_json::json!({
+                                        "success": false,
+                                        "error": format!("VaultManager RPC erro: {}", err_msg)
+                                    }).to_string();
+                                    ("500 Internal Server Error", resp)
+                                }
+                            }
+                            Err(e) => {
+                                let resp = serde_json::json!({
+                                    "success": false,
+                                    "error": format!("Falha ao executar Node.js para vaultManager: {}", e)
+                                }).to_string();
+                                ("500 Internal Server Error", resp)
+                            }
+                        }
+                    } else {
+                        match (method, path) {
+                            ("GET", "/api/status") => (
+                                "200 OK",
+                                serde_json::json!({ "status": "ok", "port": port }).to_string(),
+                            ),
+                            ("POST", "/api/spawn-subagent") => {
+                                if let Ok(mut action) = serde_json::from_str::<BridgeAction>(&body_str) {
+                                    action.action_type = "spawn_subagent".to_string();
+                                    let _ = app.emit("cgli-bridge-action", &action);
+                                    ("200 OK", serde_json::json!({ "success": true, "action": "spawn_subagent" }).to_string())
+                                } else {
+                                    ("400 Bad Request", serde_json::json!({ "error": "Invalid JSON body" }).to_string())
+                                }
+                            }
+                            ("POST", "/api/create-artifact") => {
+                                if let Ok(mut action) = serde_json::from_str::<BridgeAction>(&body_str) {
+                                    action.action_type = "create_artifact".to_string();
+                                    let _ = app.emit("cgli-bridge-action", &action);
+                                    ("200 OK", serde_json::json!({ "success": true, "action": "create_artifact" }).to_string())
+                                } else {
+                                    ("400 Bad Request", serde_json::json!({ "error": "Invalid JSON body" }).to_string())
+                                }
+                            }
+                            ("POST", "/api/create-preview") => {
+                                if let Ok(mut action) = serde_json::from_str::<BridgeAction>(&body_str) {
+                                    action.action_type = "create_preview".to_string();
+                                    let _ = app.emit("cgli-bridge-action", &action);
+                                    ("200 OK", serde_json::json!({ "success": true, "action": "create_preview" }).to_string())
+                                } else {
+                                    ("400 Bad Request", serde_json::json!({ "error": "Invalid JSON body" }).to_string())
+                                }
+                            }
+                            ("POST", "/api/create-diff") => {
+                                if let Ok(mut action) = serde_json::from_str::<BridgeAction>(&body_str) {
+                                    action.action_type = "create_diff".to_string();
+                                    let _ = app.emit("cgli-bridge-action", &action);
+                                    ("200 OK", serde_json::json!({ "success": true, "action": "create_diff" }).to_string())
+                                } else {
+                                    ("400 Bad Request", serde_json::json!({ "error": "Invalid JSON body" }).to_string())
+                                }
+                            }
+                            ("POST", "/api/update-workspace-info") => {
+                                if let Ok(info) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                                    if let Ok(mut lock) = WORKSPACE_INFO.lock() {
+                                        *lock = Some(info);
+                                    }
+                                    ("200 OK", serde_json::json!({ "success": true }).to_string())
+                                } else {
+                                    ("400 Bad Request", serde_json::json!({ "error": "Invalid JSON" }).to_string())
+                                }
+                            }
+                            ("GET", "/api/workspace-info") => {
+                                let mut base = serde_json::json!({
+                                    "success": true,
+                                    "bridge_port": port,
+                                    "status": "online",
+                                    "description": "CGLI Agent Studio Bridge"
+                                });
+                                if let Ok(lock) = WORKSPACE_INFO.lock() {
+                                    if let Some(ref info) = *lock {
+                                        if let Some(obj) = info.as_object() {
+                                            for (k, v) in obj {
+                                                base[k] = v.clone();
+                                            }
+                                        }
+                                    }
+                                }
+                                ("200 OK", base.to_string())
+                            }
+                            _ => ("404 Not Found", serde_json::json!({ "error": "Endpoint not found" }).to_string()),
+                        }
                     };
 
                     let response = format!(
-                        "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n{}",
+                        "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nConnection: close\r\n\r\n{}",
                         status_code,
                         response_json.len(),
                         response_json
@@ -476,7 +551,22 @@ Uso:
 run();
 "#
     );
-    write_if_changed(&cgli_js_path, &cgli_js_content);
+    // Preserva o cgli.cjs avançado caso já possua suporte a memória para não regredir
+    let should_write_cgli = match fs::read_to_string(&cgli_js_path) {
+        Ok(existing) => !existing.contains("case 'memory'"),
+        Err(_) => true,
+    };
+    if should_write_cgli {
+        write_if_changed(&cgli_js_path, &cgli_js_content);
+    }
+
+    // Garante que vaultManager.cjs exista no bin_dir do workspace
+    let vault_manager_path = bin_dir.join("vaultManager.cjs");
+    if !vault_manager_path.exists() {
+        if let Ok(src_content) = fs::read_to_string(workspace_path.join(".cgli/bin/vaultManager.cjs")) {
+            write_if_changed(&vault_manager_path, &src_content);
+        }
+    }
 
     // Create cgli.cmd wrapper for Windows
     let cgli_cmd_path = bin_dir.join("cgli.cmd");
@@ -520,6 +610,25 @@ Sempre que concluir um plano de arquitetura, plano de implementação, especific
 
 - **Listar Pastas do Workspace:**
   `cgli list-folders`
+
+## 🧠 Memória Compartilhada no Obsidian (Vaults Local e Global)
+
+O CGLI possui memória persistente integrada ao Obsidian dividida em dois níveis:
+1. **Vault Local do Projeto (`.cgli/vault/`):** decisões de arquitetura (ADRs), especificações, tarefas e journal de sessões deste repositório.
+2. **Vault Global do Usuário (`~/.cgli/vault/`):** aprendizados gerais, preferências do desenvolvedor e convenções universais.
+
+### Comandos de Memória:
+- **Registrar observação no journal diário (append-only):**
+  `cgli memory write [--scope project|global] --text "Texto da observação" [--tags tag1,tag2]`
+- **Registrar decisão (ADR) ou aprendizado formal:**
+  `cgli memory note [--scope project|global] --type decision --title "Título" [--content "..." | --file doc.md]`
+  `cgli memory note --scope global --type learning --title "Convenção" --content "Conteúdo"`
+- **Listar notas de memória salvas:**
+  `cgli memory list [--scope project|global] [--type decision]`
+- **Consultar conteúdo de uma nota:**
+  `cgli memory get <id_ou_nome>`
+- **Abrir o Vault no aplicativo Obsidian:**
+  `cgli memory open [--scope project|global]`
 "##;
     write_if_changed(&guide_path, guide_content);
 

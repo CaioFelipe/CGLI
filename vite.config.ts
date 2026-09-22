@@ -1,9 +1,14 @@
+import { createRequire } from 'node:module'
 import { spawn, type ChildProcess } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
+
+const nodeRequire = createRequire(import.meta.url)
+const vaultManager = nodeRequire('./.cgli/bin/vaultManager.cjs')
+
 
 interface PtySessionState {
   child: ChildProcess
@@ -19,6 +24,13 @@ function ptyServerPlugin(): Plugin {
   return {
     name: 'pty-server-plugin',
     configureServer(server) {
+      // Status endpoint for healthcheck
+      server.middlewares.use('/api/status', (_req, res) => {
+        res.setHeader('Content-Type', 'application/json')
+        res.statusCode = 200
+        res.end(JSON.stringify({ status: 'ok', port: 5173 }))
+      })
+
       // 1. Spawn PTY session
       server.middlewares.use('/api/pty/spawn', (req, res) => {
         if (req.method !== 'POST') {
@@ -238,6 +250,327 @@ function ptyServerPlugin(): Plugin {
         req.on('close', () => {
           bridgeActionListeners.delete(actionListener)
         })
+      })
+
+      // Inicializar estruturas dos Vaults na inicialização
+      try {
+        vaultManager.ensureVaultStructure('project', process.cwd())
+        vaultManager.ensureVaultStructure('global', process.cwd())
+      } catch (_) {}
+
+      // 6. Memory write observation
+      server.middlewares.use('/api/memory/write', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          res.end()
+          return
+        }
+        let body = ''
+        req.on('data', chunk => (body += chunk))
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}')
+            const result = vaultManager.writeObservation(data)
+            res.setHeader('Content-Type', 'application/json')
+            res.statusCode = 200
+            res.end(JSON.stringify(result))
+          } catch (e: any) {
+            res.statusCode = 500
+            res.end(JSON.stringify({ success: false, error: e.message }))
+          }
+        })
+      })
+
+      // 7. Memory create note
+      server.middlewares.use('/api/memory/note', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          res.end()
+          return
+        }
+        let body = ''
+        req.on('data', chunk => (body += chunk))
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}')
+            const result = vaultManager.createNote(data)
+            res.setHeader('Content-Type', 'application/json')
+            res.statusCode = 200
+            res.end(JSON.stringify(result))
+          } catch (e: any) {
+            res.statusCode = 500
+            res.end(JSON.stringify({ success: false, error: e.message }))
+          }
+        })
+      })
+
+      // 7a. Memory update note (concorrência otimista com rev + etag)
+      server.middlewares.use('/api/memory/update', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          res.end()
+          return
+        }
+        let body = ''
+        req.on('data', chunk => (body += chunk))
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}')
+            const result = vaultManager.updateNote({ ...data, workspacePath: process.cwd() })
+            res.setHeader('Content-Type', 'application/json')
+            res.statusCode = result.conflict ? 409 : (result.success ? 200 : 400)
+            res.end(JSON.stringify(result))
+          } catch (e: any) {
+            res.statusCode = 500
+            res.end(JSON.stringify({ success: false, error: e.message }))
+          }
+        })
+      })
+
+      // 7b. Memory append to note
+      server.middlewares.use('/api/memory/append', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          res.end()
+          return
+        }
+        let body = ''
+        req.on('data', chunk => (body += chunk))
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}')
+            const result = vaultManager.appendToNote({ ...data, workspacePath: process.cwd() })
+            res.setHeader('Content-Type', 'application/json')
+            res.statusCode = result.success ? 200 : 400
+            res.end(JSON.stringify(result))
+          } catch (e: any) {
+            res.statusCode = 500
+            res.end(JSON.stringify({ success: false, error: e.message }))
+          }
+        })
+      })
+
+      // 7c. Memory context-file (geração atômica em .cgli/context/<childId>.md)
+      server.middlewares.use('/api/memory/context-file', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          res.end()
+          return
+        }
+        let body = ''
+        req.on('data', chunk => (body += chunk))
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}')
+            const result = vaultManager.generateContextFile({
+              ...data,
+              workspacePath: process.cwd()
+            })
+            res.setHeader('Content-Type', 'application/json')
+            res.statusCode = 200
+            res.end(JSON.stringify(result))
+          } catch (e: any) {
+            res.statusCode = 500
+            res.end(JSON.stringify({ success: false, error: e.message }))
+          }
+        })
+      })
+
+      // 7d. Memory drain outbox
+      server.middlewares.use('/api/memory/drain-outbox', (_req, res) => {
+        try {
+          const result = vaultManager.drainOutbox(process.cwd())
+          res.setHeader('Content-Type', 'application/json')
+          res.statusCode = 200
+          res.end(JSON.stringify(result))
+        } catch (e: any) {
+          res.statusCode = 500
+          res.end(JSON.stringify({ success: false, error: e.message }))
+        }
+      })
+
+      // 8. Memory list
+      server.middlewares.use('/api/memory/list', (req, res) => {
+        try {
+          const url = new URL(req.url || '', `http://${req.headers.host}`)
+          const scope = url.searchParams.get('scope') || 'project'
+          const type = url.searchParams.get('type') || null
+          const notes = vaultManager.listNotes({ scope, workspacePath: process.cwd(), type })
+          res.setHeader('Content-Type', 'application/json')
+          res.statusCode = 200
+          res.end(JSON.stringify({ success: true, scope, notes }))
+        } catch (e: any) {
+          res.statusCode = 500
+          res.end(JSON.stringify({ success: false, error: e.message }))
+        }
+      })
+
+      // 9. Memory get
+      server.middlewares.use('/api/memory/get', (req, res) => {
+        try {
+          const url = new URL(req.url || '', `http://${req.headers.host}`)
+          const scope = url.searchParams.get('scope') || 'project'
+          const id = url.searchParams.get('id') || ''
+          const result = vaultManager.getNote({ scope, workspacePath: process.cwd(), idOrPath: id })
+          res.setHeader('Content-Type', 'application/json')
+          res.statusCode = result.success ? 200 : 404
+          res.end(JSON.stringify(result))
+        } catch (e: any) {
+          res.statusCode = 500
+          res.end(JSON.stringify({ success: false, error: e.message }))
+        }
+      })
+
+      // 10. Memory open in Obsidian
+      server.middlewares.use('/api/memory/open', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          res.end()
+          return
+        }
+        let body = ''
+        req.on('data', chunk => (body += chunk))
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}')
+            const result = vaultManager.openInObsidian(data)
+            res.setHeader('Content-Type', 'application/json')
+            res.statusCode = 200
+            res.end(JSON.stringify(result))
+          } catch (e: any) {
+            res.statusCode = 500
+            res.end(JSON.stringify({ success: false, error: e.message }))
+          }
+        })
+      })
+
+      // 11. Memory search
+      server.middlewares.use('/api/memory/search', (req, res) => {
+        try {
+          const url = new URL(req.url || '', `http://${req.headers.host}`)
+          const query = url.searchParams.get('q') || ''
+          const scope = url.searchParams.get('scope') || 'all'
+          const limit = Number(url.searchParams.get('limit') || 20)
+          const results = vaultManager.searchNotes({
+            query,
+            scope,
+            limit,
+            workspacePath: process.cwd()
+          })
+          res.setHeader('Content-Type', 'application/json')
+          res.statusCode = 200
+          res.end(JSON.stringify({ success: true, query, results }))
+        } catch (e: any) {
+          res.statusCode = 500
+          res.end(JSON.stringify({ success: false, error: e.message }))
+        }
+      })
+
+      // 12. Memory context pack
+      server.middlewares.use('/api/memory/context', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          res.end()
+          return
+        }
+        let body = ''
+        req.on('data', chunk => (body += chunk))
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}')
+            const result = vaultManager.buildContextPack({
+              query: data.query || data.for || '',
+              budgetTokens: Number(data.budgetTokens || 3000),
+              scope: data.scope || 'all',
+              includeJournals: Boolean(data.includeJournals),
+              workspacePath: process.cwd()
+            })
+            res.setHeader('Content-Type', 'application/json')
+            res.statusCode = 200
+            res.end(JSON.stringify(result))
+          } catch (e: any) {
+            res.statusCode = 500
+            res.end(JSON.stringify({ success: false, error: e.message }))
+          }
+        })
+      })
+
+      // 13. Memory Doctor (Diagnóstico de integridade)
+      server.middlewares.use('/api/memory/doctor', (req, res) => {
+        try {
+          const url = new URL(req.url || '', `http://${req.headers.host}`)
+          const scope = url.searchParams.get('scope') || 'all'
+          const result = vaultManager.runDoctor({ scope, workspacePath: process.cwd() })
+          res.setHeader('Content-Type', 'application/json')
+          res.statusCode = 200
+          res.end(JSON.stringify(result))
+        } catch (e: any) {
+          res.statusCode = 500
+          res.end(JSON.stringify({ success: false, error: e.message }))
+        }
+      })
+
+      // 14. Memory Compact (Consolidação de journals)
+      server.middlewares.use('/api/memory/compact', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          res.end()
+          return
+        }
+        let body = ''
+        req.on('data', chunk => (body += chunk))
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}')
+            const result = vaultManager.compactJournals({
+              scope: data.scope || 'project',
+              dryRun: Boolean(data.dryRun),
+              olderThanDays: data.olderThanDays !== undefined ? Number(data.olderThanDays) : (data.days !== undefined ? Number(data.days) : 7),
+              workspacePath: process.cwd()
+            })
+            res.setHeader('Content-Type', 'application/json')
+            res.statusCode = 200
+            res.end(JSON.stringify(result))
+          } catch (e: any) {
+            res.statusCode = 500
+            res.end(JSON.stringify({ success: false, error: e.message }))
+          }
+        })
+      })
+
+      // 15. Memory MOC (Map of Content)
+      server.middlewares.use('/api/memory/moc', (req, res) => {
+        if (req.method === 'POST') {
+          let body = ''
+          req.on('data', chunk => (body += chunk))
+          req.on('end', () => {
+            try {
+              const data = JSON.parse(body || '{}')
+              const result = vaultManager.generateMOC({
+                scope: data.scope || 'project',
+                workspacePath: process.cwd()
+              })
+              res.setHeader('Content-Type', 'application/json')
+              res.statusCode = 200
+              res.end(JSON.stringify(result))
+            } catch (e: any) {
+              res.statusCode = 500
+              res.end(JSON.stringify({ success: false, error: e.message }))
+            }
+          })
+        } else {
+          try {
+            const url = new URL(req.url || '', `http://${req.headers.host}`)
+            const scope = url.searchParams.get('scope') || 'project'
+            const result = vaultManager.generateMOC({ scope, workspacePath: process.cwd() })
+            res.setHeader('Content-Type', 'application/json')
+            res.statusCode = 200
+            res.end(JSON.stringify(result))
+          } catch (e: any) {
+            res.statusCode = 500
+            res.end(JSON.stringify({ success: false, error: e.message }))
+          }
+        }
       })
     },
   }

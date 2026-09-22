@@ -1,5 +1,6 @@
 import {
   Archive,
+  Brain,
   Check,
   ChevronDown,
   FolderArchive,
@@ -36,6 +37,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
     stashItems,
     toggleStashOpen,
     openSettings,
+    openMemoryExplorer,
     addNode,
     nodes,
     clis,
@@ -347,6 +349,17 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
                 <ImageIcon className="w-3.5 h-3.5 text-rose-500" />
                 <span>Imagem / Captura</span>
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  openMemoryExplorer()
+                  setIsAddNodeOpen(false)
+                }}
+                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
+              >
+                <Brain className="w-3.5 h-3.5 text-purple-400" />
+                <span>Memória / Obsidian</span>
+              </button>
               <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
               <button
                 type="button"
@@ -371,6 +384,17 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
             <ZoomIn className="w-4 h-4" />
           </button>
         )}
+
+        {/* Memory Explorer Button */}
+        <button
+          type="button"
+          onClick={() => openMemoryExplorer()}
+          title="Explorar Memória Compartilhada do Obsidian"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium transition-colors"
+        >
+          <Brain className="w-4 h-4 text-purple-500" />
+          <span>Memória</span>
+        </button>
 
         {/* Stash Toggle Button */}
         <button

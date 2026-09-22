@@ -28,3 +28,35 @@ Sempre que concluir um plano de arquitetura, plano de implementação, especific
 
 - **Listar Pastas do Workspace:**
   `cgli list-folders`
+
+## 🧠 Memória Compartilhada no Obsidian (Vaults Local e Global)
+
+O CGLI possui memória persistente integrada ao Obsidian dividida em dois níveis:
+1. **Vault Local do Projeto (`.cgli/vault/`):** decisões de arquitetura (ADRs), especificações, tarefas e journal de sessões deste repositório.
+2. **Vault Global do Usuário (`~/.cgli/vault/`):** aprendizados gerais, preferências do desenvolvedor e convenções universais.
+
+### Comandos de Memória:
+- **Registrar observação no journal diário (append-only):**
+  `cgli memory write [--scope project|global] --text "Texto da observação" [--tags tag1,tag2]`
+- **Registrar decisão (ADR) ou aprendizado formal:**
+  `cgli memory note [--scope project|global] --type decision --title "Título" [--content "..." | --file doc.md]`
+  `cgli memory note --scope global --type learning --title "Convenção" --content "Conteúdo"`
+- **Listar notas de memória salvas:**
+  `cgli memory list [--scope project|global] [--type decision]`
+- **Recuperação Contextual e Busca Semântica:**
+  `cgli memory search "termo" [--scope all|project|global]`
+  `cgli memory context --for "tarefa a realizar" [--budget-tokens 3000]`
+- **Diagnóstico e Integridade do Cofre (Doctor):**
+  `cgli memory doctor [--scope all|project|global]`
+- **Compactação e Curadoria de Journals:**
+  `cgli memory compact [--scope project|global] [--dry-run]`
+- **Map of Content (MOC):**
+  `cgli memory moc [--scope project|global] [--update]`
+- **Proteção Anti-Vazamento (Secret Scanner):**
+  O CGLI intercepta e redige automaticamente chaves de API (`sk-...`, `AIzaSy...`, `ghp_...`), senhas e JWTs para `[REDACTED_SECRET]` antes da gravação em disco.
+- **Consultar conteúdo de uma nota:**
+  `cgli memory get <id_ou_nome>`
+- **Abrir o Vault no aplicativo Obsidian:**
+  `cgli memory open [--scope project|global]`
+
+
