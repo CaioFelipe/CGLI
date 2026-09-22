@@ -10,12 +10,14 @@ import {
 } from '@xyflow/react'
 import { create } from 'zustand'
 import { ptyService } from '../services/ptyService'
+import { saveAttachment } from '../services/mediaService'
 import type {
   ActionApproval,
   AgentViewMode,
   AnnotationItem,
   ArtifactComment,
   AttachedArtifactBadge,
+  AttachedImageBadge,
   ChatMessage,
   CliConfig,
   DiffLine,
@@ -114,7 +116,7 @@ interface CanvasState {
     anchor?: { quote: string; start: number; end: number }
   ) => void
   deleteArtifactComment: (nodeId: string, commentId: string) => void
-  attachImageToAgent: (nodeId: string, image: { id: string; url: string; name: string; nodeId?: string }) => void
+  attachImageToAgent: (nodeId: string, image: AttachedImageBadge) => void
   removeAttachedImage: (nodeId: string, imageId: string) => void
   attachArtifactToAgent: (agentId: string, artifact: AttachedArtifactBadge) => void
   removeAttachedArtifact: (agentId: string, artifactId: string) => void
@@ -1203,24 +1205,53 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
     if (imgNode && agentNode) {
       const imgData = imgNode.data as any
+      const workspace = (agentNode.data as any)?.workspacePath || get().getActiveWorkspacePath()
       if (imgData.images && Array.isArray(imgData.images) && imgData.images.length > 0) {
         imgData.images.forEach((img: any) => {
           if (img.url) {
-            get().attachImageToAgent(agentNode!.id, {
-              id: img.id,
-              url: img.url,
-              name: img.name || 'imagem.png',
-              nodeId: imgNode.id,
-            })
+            const filename = img.name || 'imagem.png'
+            if (img.url.startsWith('data:image') && !img.filePath) {
+              saveAttachment(workspace, filename, img.url).then((savedPath) => {
+                get().attachImageToAgent(agentNode!.id, {
+                  id: img.id,
+                  url: img.url,
+                  name: filename,
+                  nodeId: imgNode.id,
+                  filePath: savedPath || undefined,
+                })
+              })
+            } else {
+              get().attachImageToAgent(agentNode!.id, {
+                id: img.id,
+                url: img.url,
+                name: filename,
+                nodeId: imgNode.id,
+                filePath: img.filePath,
+              })
+            }
           }
         })
       } else if (imgData.url) {
-        get().attachImageToAgent(agentNode.id, {
-          id: imgNode.id,
-          url: imgData.url,
-          name: imgData.name || imgData.title || 'captura-de-tela.png',
-          nodeId: imgNode.id,
-        })
+        const filename = imgData.name || imgData.title || 'captura-de-tela.png'
+        if (imgData.url.startsWith('data:image') && !imgData.filePath) {
+          saveAttachment(workspace, filename, imgData.url).then((savedPath) => {
+            get().attachImageToAgent(agentNode.id, {
+              id: imgNode.id,
+              url: imgData.url,
+              name: filename,
+              nodeId: imgNode.id,
+              filePath: savedPath || undefined,
+            })
+          })
+        } else {
+          get().attachImageToAgent(agentNode.id, {
+            id: imgNode.id,
+            url: imgData.url,
+            name: filename,
+            nodeId: imgNode.id,
+            filePath: imgData.filePath,
+          })
+        }
       }
     }
 
@@ -1878,7 +1909,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   attachImageToAgent: (nodeId, image) => {
     const node = get().nodes.find((n) => n.id === nodeId)
     if (!node) return
-    const current = ((node.data as any).attachedImages || []) as Array<{ id: string; url: string; name: string; nodeId?: string }>
+    const current = ((node.data as any).attachedImages || []) as AttachedImageBadge[]
     if (!current.some((img) => img.id === image.id || (image.nodeId && img.nodeId === image.nodeId && img.url === image.url))) {
       get().updateNodeData(nodeId, { attachedImages: [...current, image] })
     }
@@ -2032,12 +2063,26 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         }
       })
     } else if (node.type === 'agentNode') {
-      const badge = {
-        id: `img-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        url: image.url,
-        name: image.name || 'captura.png',
+      const workspace = (node.data as any)?.workspacePath || get().getActiveWorkspacePath()
+      const filename = image.name || `captura_${Date.now()}.png`
+      if (image.url && image.url.startsWith('data:image')) {
+        saveAttachment(workspace, filename, image.url).then((savedPath) => {
+          const badge: AttachedImageBadge = {
+            id: `img-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            url: image.url,
+            name: filename,
+            filePath: savedPath || undefined,
+          }
+          get().attachImageToAgent(nodeId, badge)
+        })
+      } else {
+        const badge: AttachedImageBadge = {
+          id: `img-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          url: image.url,
+          name: filename,
+        }
+        get().attachImageToAgent(nodeId, badge)
       }
-      get().attachImageToAgent(nodeId, badge)
     }
   },
 
@@ -2336,7 +2381,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         workspacePath,
         sessionId: `pty-${childId}`,
         cliSessionId: crypto.randomUUID(),
-        hasStarted: false,
+        hasStarted: Boolean(task),
         initialTask: task,
       },
     }
@@ -2420,6 +2465,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       if (taskToSend) {
         setTimeout(() => {
           ptyService.writePty(`pty-${childId}`, `${taskToSend}\r`)
+          get().updateNodeData(childId, { hasStarted: true })
         }, 1200)
       }
     })()

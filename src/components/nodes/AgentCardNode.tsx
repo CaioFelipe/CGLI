@@ -21,24 +21,10 @@ import {
 } from 'lucide-react'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ptyService } from '../../services/ptyService'
+import { saveAttachment } from '../../services/mediaService'
 import { useCanvasStore } from '../../store/canvasStore'
 import type { AgentNodeData } from '../../types/canvas'
 import { MarkdownView } from '../common/MarkdownView'
-
-interface SlashCommand {
-  cmd: string
-  label: string
-  desc: string
-}
-
-const AVAILABLE_SLASH_COMMANDS: SlashCommand[] = [
-  { cmd: '/plan', label: '/plan', desc: 'Criar plano de arquitetura e implementação' },
-  { cmd: '/test', label: '/test', desc: 'Executar testes automatizados' },
-  { cmd: '/review', label: '/review', desc: 'Revisar código e auditar mudanças' },
-  { cmd: '/commit', label: '/commit', desc: 'Preparar mensagem e executar commit' },
-  { cmd: '/clear', label: '/clear', desc: 'Limpar a tela do terminal' },
-  { cmd: '/help', label: '/help', desc: 'Exibir comandos disponíveis' },
-]
 
 const TERMINAL_THEMES: Record<'dark' | 'light', ITheme> = {
   dark: {
@@ -112,12 +98,10 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     updateNodeData,
   } = useCanvasStore()
 
-  const [inputVal, setInputVal] = useState('')
   const [planDrawerOpen, setPlanDrawerOpen] = useState(false)
   const approvedPlans = (nodeData.attachedArtifacts || []).filter(
     (art) => art.type === 'artifact' && art.status === 'approved'
   )
-  const inputRef = useRef<HTMLInputElement>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
   const terminalInstance = useRef<Terminal | null>(null)
   const fitAddonInstance = useRef<FitAddon | null>(null)
@@ -180,16 +164,23 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       }
     } else if (isAgy) {
       const filtered = baseArgs.filter(
-        (a) => a !== '--continue' && a !== '-c' && a !== '--conversation'
+        (a, i, arr) =>
+          a !== '--continue' &&
+          a !== '-c' &&
+          a !== '--conversation' &&
+          arr[i - 1] !== '--conversation'
       )
       if (resume) {
+        if (nodeData.agyConversationId) {
+          return ['--conversation', nodeData.agyConversationId, ...filtered]
+        }
         return ['--continue', ...filtered]
       } else {
         return [...filtered]
       }
     }
     return baseArgs
-  }, [isClaude, isAgy])
+  }, [isClaude, isAgy, nodeData.agyConversationId])
 
   // `args` is rebuilt on every render, so it must never be an effect dependency. Everything the
   // spawn needs is read from this ref at call time instead; the terminal effect below only
@@ -318,15 +309,21 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       if (cached) {
         if (
           cached.includes('No conversation found with session ID') ||
-          (cached.includes('Session ID') && cached.includes('already in use'))
+          (cached.includes('Session ID') && cached.includes('already in use')) ||
+          (cached.includes('conversation') && cached.includes('not found'))
         ) {
           localStorage.removeItem(`cgli_term_${id}`)
           hasStartedRef.current = false
           cliSessionIdRef.current = generateUuid()
-          updateNodeData(id, { hasStarted: false, cliSessionId: cliSessionIdRef.current })
-        } else if (hasStartedRef.current) {
+          updateNodeData(id, {
+            hasStarted: false,
+            cliSessionId: cliSessionIdRef.current,
+            agyConversationId: undefined,
+          })
+        } else {
           term.write(cached)
           termOutputBufferRef.current = cached
+          hasStartedRef.current = true
         }
       }
     } catch (_) {}
@@ -357,23 +354,34 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       ptyService.writePty(sessionId, d).catch(() => {})
     })
 
+    const handleBeforeUnload = () => {
+      if (termOutputBufferRef.current) {
+        try {
+          localStorage.setItem(`cgli_term_${id}`, termOutputBufferRef.current)
+        } catch (_) {}
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
     void (async () => {
       // The listener must be registered (awaited) BEFORE spawning, otherwise the first
       // frames of output can be emitted before anyone is listening.
       const unlisten = await ptyService.onPtyOutput(sessionId, (chunk) => {
         if (!disposed) {
-          // Detect if Claude Code failed because the session was not found or already in use
+          // Detect if CLI failed because the session was not found or already in use
           if (
             chunk.includes('No conversation found with session ID') ||
-            (chunk.includes('Session ID') && chunk.includes('already in use'))
+            (chunk.includes('Session ID') && chunk.includes('already in use')) ||
+            (chunk.includes('conversation') && chunk.includes('not found'))
           ) {
-            console.warn('Session ID mismatch detected from Claude Code. Auto-recovering with fresh session...')
+            console.warn('Session ID mismatch detected. Auto-recovering with fresh session...')
             hasStartedRef.current = false
             const newUuid = generateUuid()
             cliSessionIdRef.current = newUuid
             updateNodeData(id, {
               cliSessionId: newUuid,
               hasStarted: false,
+              agyConversationId: undefined,
             })
             termOutputBufferRef.current = ''
             try {
@@ -389,6 +397,23 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             return
           }
 
+          if (!hasStartedRef.current && chunk.trim().length > 0) {
+            markSessionStarted()
+          }
+
+          // Detect and save AGY conversation ID from output stream
+          if (isAgy && !nodeData.agyConversationId) {
+            const match =
+              chunk.match(/conversation(?: ID is:?|[:=])\s*[`"]?([0-9a-fA-F-]{36})[`"]?/i) ||
+              chunk.match(/found conversation\s+([0-9a-fA-F-]{36})/i) ||
+              chunk.match(/stream for\s+([0-9a-fA-F-]{36})/i)
+            if (match && match[1]) {
+              const convId = match[1]
+              cliSessionIdRef.current = convId
+              updateNodeData(id, { agyConversationId: convId, cliSessionId: convId })
+            }
+          }
+
           term.write(chunk)
           termOutputBufferRef.current = (termOutputBufferRef.current + chunk).slice(-60000)
           if (saveTermTimeoutRef.current) clearTimeout(saveTermTimeoutRef.current)
@@ -396,7 +421,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             try {
               localStorage.setItem(`cgli_term_${id}`, termOutputBufferRef.current)
             } catch (_) {}
-          }, 1000)
+          }, 500)
         }
       })
       if (disposed) {
@@ -414,6 +439,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       ro.disconnect()
       dataSub.dispose()
       unlistenOutput?.()
+      window.removeEventListener('beforeunload', handleBeforeUnload)
       if (saveTermTimeoutRef.current) clearTimeout(saveTermTimeoutRef.current)
       try {
         if (termOutputBufferRef.current) {
@@ -424,7 +450,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       terminalInstance.current = null
       fitAddonInstance.current = null
     }
-  }, [id, sessionId, startPty])
+  }, [id, sessionId, startPty, isAgy, nodeData.agyConversationId, markSessionStarted, updateNodeData])
 
   // Theme changes update the live terminal instead of rebuilding it
   useEffect(() => {
@@ -466,6 +492,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     updateNodeData(id, {
       cliSessionId: newUuid,
       hasStarted: false,
+      agyConversationId: undefined,
     })
 
     if (terminalInstance.current) {
@@ -476,45 +503,60 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     await startPty(true)
   }
 
-  const handleSendMessage = () => {
-    if (!inputVal.trim()) return
-    markSessionStarted()
-    ptyService.writePty(sessionId, `${inputVal}\r`).catch(() => {})
-    setInputVal('')
-    terminalInstance.current?.focus()
-  }
+  const handleCardPaste = useCallback(
+    async (e: React.ClipboardEvent | ClipboardEvent) => {
+      const items = e.clipboardData?.items
+      if (!items) return
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSendMessage()
-    }
-  }
-
-  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    const items = e.clipboardData?.items
-    if (!items) return
-
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith('image/')) {
-        const file = items[i].getAsFile()
-        if (file) {
-          const reader = new FileReader()
-          reader.onload = (uploadEvent) => {
-            const base64 = uploadEvent.target?.result as string
-            if (base64) {
-              attachImageToAgent(id, {
-                id: `img-${Date.now()}`,
-                url: base64,
-                name: file.name || 'captura-de-tela.png',
-              })
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile()
+          if (file) {
+            e.preventDefault()
+            e.stopPropagation()
+            const reader = new FileReader()
+            reader.onload = async (uploadEvent) => {
+              const base64 = uploadEvent.target?.result as string
+              if (base64) {
+                const imgName = file.name || `captura_${Date.now()}.png`
+                const savedPath = await saveAttachment(workspacePath, imgName, base64)
+                attachImageToAgent(id, {
+                  id: `img-${Date.now()}`,
+                  url: base64,
+                  name: imgName,
+                  filePath: savedPath || undefined,
+                })
+                if (savedPath) {
+                  // Inserir caminho no stdin do PTY para referência no prompt do agente
+                  ptyService.writePty(sessionId, `"${savedPath}" `).catch(() => {})
+                  terminalInstance.current?.writeln(
+                    `\r\n\x1b[36m[CGLI] Imagem anexada e caminho inserido: ${imgName} (${savedPath})\x1b[0m\r\n`
+                  )
+                  terminalInstance.current?.focus()
+                }
+              }
             }
+            reader.readAsDataURL(file)
+            break
           }
-          reader.readAsDataURL(file)
         }
       }
+    },
+    [id, workspacePath, sessionId, attachImageToAgent]
+  )
+
+  useEffect(() => {
+    if (!selected) return
+
+    const onGlobalPaste = (e: ClipboardEvent) => {
+      const activeTag = (document.activeElement as HTMLElement)?.tagName?.toLowerCase()
+      if (activeTag === 'input' || activeTag === 'textarea') return
+      void handleCardPaste(e)
     }
-  }
+
+    window.addEventListener('paste', onGlobalPaste)
+    return () => window.removeEventListener('paste', onGlobalPaste)
+  }, [selected, handleCardPaste])
 
   return (
     <div
@@ -580,6 +622,7 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       />
 
       <div
+        onPaste={handleCardPaste}
         className={`w-full h-full rounded-xl border shadow-xl flex flex-col overflow-hidden transition-all duration-150 select-none ${
           theme === 'dark'
             ? 'bg-[#0D1117] border-[#30363D] text-[#C9D1D9]'
@@ -857,69 +900,49 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
       {/* Attached Images preview row (if any) */}
       {nodeData.attachedImages && nodeData.attachedImages.length > 0 && (
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-[#161B22] border-t border-slate-800 overflow-x-auto">
-          {nodeData.attachedImages.map((img) => (
-            <div key={img.id} className="relative group shrink-0">
-              <img
-                src={img.url}
-                alt={img.name}
-                className="w-10 h-10 object-cover rounded border border-slate-700"
-              />
-              <button
-                type="button"
-                onClick={() => removeAttachedImage(id, img.id)}
-                className="absolute -top-1 -right-1 p-0.5 bg-rose-600 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-[#161B22] border-t border-slate-800 overflow-x-auto shrink-0">
+          <span className="text-[10px] text-slate-400 font-medium shrink-0">Imagens:</span>
+          {nodeData.attachedImages.map((img) => {
+            const hasPath = Boolean(img.filePath)
+            const insertText = img.filePath ? `"${img.filePath}" ` : `"${img.name}" `
+            return (
+              <div
+                key={img.id}
+                className="relative group shrink-0 flex items-center gap-1.5 bg-[#0D1117] pl-1 pr-1.5 py-0.5 rounded border border-slate-700/80 hover:border-indigo-500/80 transition-colors"
               >
-                <X className="w-2.5 h-2.5" />
-              </button>
-            </div>
-          ))}
+                <img
+                  src={img.url}
+                  alt={img.name}
+                  className="w-7 h-7 object-cover rounded cursor-pointer hover:opacity-85 transition-opacity"
+                  title={hasPath ? `${img.name}\n${img.filePath}\n(Clique para inserir no prompt)` : `${img.name}\n(Clique para inserir)`}
+                  onClick={() => {
+                    ptyService.writePty(sessionId, insertText).catch(() => {})
+                    terminalInstance.current?.focus()
+                  }}
+                />
+                <span
+                  className="text-[10px] text-slate-300 font-mono truncate max-w-[110px] cursor-pointer hover:text-white select-none"
+                  title={hasPath ? `${img.name}\n${img.filePath}\n(Clique para inserir no prompt)` : `${img.name}\n(Clique para inserir)`}
+                  onClick={() => {
+                    ptyService.writePty(sessionId, insertText).catch(() => {})
+                    terminalInstance.current?.focus()
+                  }}
+                >
+                  {img.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeAttachedImage(id, img.id)}
+                  title="Remover imagem anexada"
+                  className="p-0.5 rounded hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 transition-colors cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )
+          })}
         </div>
       )}
-
-      {/* Footer: Quick Command Chips & Composer */}
-      <div className="border-t bg-[#161B22] border-[#30363D] p-2 flex flex-col gap-1.5 shrink-0">
-        {/* Quick Slash Command Chips */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-[10px]">
-          {AVAILABLE_SLASH_COMMANDS.map((sc) => (
-            <button
-              key={sc.cmd}
-              type="button"
-              onClick={() => {
-                setInputVal(sc.cmd + ' ')
-                inputRef.current?.focus()
-              }}
-              title={sc.desc}
-              className="px-2.5 py-0.5 rounded-full border border-slate-700 bg-slate-800/80 hover:bg-indigo-600/30 hover:border-indigo-500 text-slate-300 hover:text-white transition-all cursor-pointer shrink-0 font-mono shadow-xs"
-            >
-              {sc.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Input Composer */}
-        <div className="flex items-center gap-2 bg-[#0D1117] border border-slate-700/80 rounded-lg px-2.5 py-1.5 focus-within:border-indigo-500 transition-colors">
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputVal}
-            onChange={(e) => setInputVal(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            placeholder="Digite um comando para o agente ou clique nos atalhos acima..."
-            className="flex-1 bg-transparent text-xs text-slate-200 font-mono focus:outline-none placeholder:text-slate-500"
-          />
-          <button
-            type="button"
-            onClick={handleSendMessage}
-            disabled={!inputVal.trim()}
-            title="Enviar comando (Enter)"
-            className="p-1.5 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white transition-all cursor-pointer shadow-xs shrink-0"
-          >
-            <CornerDownLeft className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
     </div>
     </div>
   )

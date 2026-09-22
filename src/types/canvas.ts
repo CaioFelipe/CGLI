@@ -44,6 +44,7 @@ export interface AttachedImageBadge {
   url: string
   name: string
   nodeId?: string
+  filePath?: string
 }
 
 export interface ArtifactComment {
@@ -90,6 +91,7 @@ export interface AgentNodeData {
   customBinary?: string
   defaultArgs?: string
   initialTask?: string
+  agyConversationId?: string
 }
 
 export interface DiffLine {
