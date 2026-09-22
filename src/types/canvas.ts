@@ -46,12 +46,27 @@ export interface AttachedImageBadge {
   nodeId?: string
 }
 
+export interface ArtifactComment {
+  id: string
+  author: string
+  text: string
+  createdAt: string
+  /** Passage of the artifact this comment refers to (optional: a comment may be general). */
+  quote?: string
+  quoteStart?: number
+  quoteEnd?: number
+}
+
 export interface AttachedArtifactBadge {
   id: string
   type: 'artifact' | 'preview'
   title: string
   sourceNodeId: string
   contentSnippet?: string
+  status?: 'draft' | 'approved' | 'rejected'
+  approvedAt?: string
+  approvedMarkdown?: string
+  comments?: ArtifactComment[]
 }
 
 export interface AgentNodeData {
@@ -90,7 +105,8 @@ export interface ArtifactNodeData {
   status: 'draft' | 'approved' | 'rejected'
   parentAgentId?: string
   parentAgentTitle?: string
-  activeTab?: 'markdown' | 'preview' | 'diff'
+  activeTab?: 'markdown' | 'preview' | 'diff' | 'document' | 'comments' | 'split'
+  comments?: ArtifactComment[]
   htmlPreview?: string
   diffContent?: {
     filename: string
@@ -116,6 +132,14 @@ export interface DiffNodeData {
   }
   parentAgentId: string
   parentAgentTitle?: string
+}
+
+export interface TerminalNodeData {
+  title: string
+  shell: 'powershell'
+  sessionId: string
+  workspacePath?: string
+  isPtyActive?: boolean
 }
 
 export type AnnotationTool = 'circle' | 'arrow' | 'rect' | 'brush' | 'text'
@@ -197,7 +221,7 @@ export interface StashItem {
   id: string
   nodeId: string
   name: string
-  type: 'agent' | 'artifact' | 'preview' | 'diff' | 'image' | 'imageGroup' | 'group' | 'memory'
+  type: 'agent' | 'artifact' | 'preview' | 'diff' | 'image' | 'imageGroup' | 'group' | 'memory' | 'terminal'
   savedAt: string
   nodeData: any
   position: { x: number; y: number }

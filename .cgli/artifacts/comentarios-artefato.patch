@@ -1,0 +1,541 @@
+diff --git a/src/components/nodes/AgentCardNode.tsx b/src/components/nodes/AgentCardNode.tsx
+index d31f36f..b70ef9d 100644
+--- a/src/components/nodes/AgentCardNode.tsx
++++ b/src/components/nodes/AgentCardNode.tsx
+@@ -5,11 +5,13 @@ import { Handle, type NodeProps, Position, NodeResizer } from '@xyflow/react'
+ import {
+   Archive,
+   Brain,
++  CheckCircle2,
+   ChevronDown,
+   ChevronUp,
+   CornerDownLeft,
+   FolderSync,
+   GitCompare,
++  MessageSquare,
+   RotateCw,
+   Sparkles,
+   Terminal as TerminalIcon,
+@@ -21,6 +23,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
+ import { ptyService } from '../../services/ptyService'
+ import { useCanvasStore } from '../../store/canvasStore'
+ import type { AgentNodeData } from '../../types/canvas'
++import { MarkdownView } from '../common/MarkdownView'
+ 
+ interface SlashCommand {
+   cmd: string
+@@ -110,6 +113,10 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
+   } = useCanvasStore()
+ 
+   const [inputVal, setInputVal] = useState('')
++  const [planDrawerOpen, setPlanDrawerOpen] = useState(false)
++  const approvedPlans = (nodeData.attachedArtifacts || []).filter(
++    (art) => art.type === 'artifact' && art.status === 'approved'
++  )
+   const inputRef = useRef<HTMLInputElement>(null)
+   const terminalRef = useRef<HTMLDivElement>(null)
+   const terminalInstance = useRef<Terminal | null>(null)
+@@ -770,6 +777,67 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
+         </div>
+       </div>
+ 
++      {/* Approved plan banner + expandable drawer (plan and user comments sent to this agent) */}
++      {approvedPlans.length > 0 && (
++        <div className="shrink-0 border-b bg-[#11161F] border-[#21262D] flex flex-col min-h-0">
++          <button
++            type="button"
++            onClick={() => setPlanDrawerOpen((open) => !open)}
++            title={planDrawerOpen ? 'Recolher plano' : 'Ver plano aprovado e comentários'}
++            className="nodrag flex items-center gap-2 px-3 py-1.5 text-[11px] text-left hover:bg-slate-800/50 transition-colors cursor-pointer"
++          >
++            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
++            <span className="font-semibold text-emerald-300 truncate">
++              {approvedPlans.length === 1
++                ? `Plano aprovado: ${approvedPlans[0].title}`
++                : `${approvedPlans.length} planos aprovados`}
++            </span>
++            <span className="flex items-center gap-1 text-slate-400 shrink-0">
++              <MessageSquare className="w-3 h-3" />
++              {approvedPlans.reduce((sum, art) => sum + (art.comments?.length || 0), 0)}
++            </span>
++            <span className="ml-auto text-slate-400 shrink-0">
++              {planDrawerOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
++            </span>
++          </button>
++
++          {planDrawerOpen && (
++            <div
++              className="nodrag nowheel nopan max-h-[240px] overflow-y-auto overscroll-contain select-text px-3 pb-3 flex flex-col gap-3 border-t border-[#21262D]"
++              onWheel={(e) => e.stopPropagation()}
++              onMouseDown={(e) => e.stopPropagation()}
++              onPointerDown={(e) => e.stopPropagation()}
++              onKeyDown={(e) => e.stopPropagation()}
++            >
++              {approvedPlans.map((art) => (
++                <div key={art.id} className="pt-2 flex flex-col gap-2">
++                  {approvedPlans.length > 1 && (
++                    <div className="text-[11px] font-semibold text-slate-200">{art.title}</div>
++                  )}
++                  <MarkdownView source={art.approvedMarkdown || art.contentSnippet || 'Sem conteúdo.'} />
++                  {(art.comments?.length || 0) > 0 && (
++                    <div className="flex flex-col gap-1.5">
++                      <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">
++                        Comentários do usuário ({art.comments?.length})
++                      </div>
++                      {art.comments?.map((c, i) => (
++                        <div
++                          key={c.id}
++                          className="rounded-md border border-slate-700/60 bg-[#161B22] px-2.5 py-1.5 text-xs text-slate-200 whitespace-pre-wrap break-words"
++                        >
++                          <span className="text-slate-500 font-mono mr-1.5">{i + 1}.</span>
++                          {c.text}
++                        </div>
++                      ))}
++                    </div>
++                  )}
++                </div>
++              ))}
++            </div>
++          )}
++        </div>
++      )}
++
+       {/* Native xterm.js Viewport (100% visible, fully isolated from React Flow events) */}
+       <div
+         className="nodrag nowheel nopan flex-1 min-h-[220px] bg-[#0D1117] p-1.5 overflow-hidden flex flex-col relative"
+diff --git a/src/components/nodes/ArtifactNode.tsx b/src/components/nodes/ArtifactNode.tsx
+index 367d75e..900e904 100644
+--- a/src/components/nodes/ArtifactNode.tsx
++++ b/src/components/nodes/ArtifactNode.tsx
+@@ -1,25 +1,52 @@
+ import { Handle, NodeResizer, type NodeProps, Position } from '@xyflow/react'
+ import {
+   Check,
++  Columns2,
+   Copy,
+   Edit3,
+   Eye,
+   FileText,
++  MessageSquare,
+   Play,
++  Send,
+   Sparkles,
+   Trash2,
++  X,
+ } from 'lucide-react'
+ import React, { useState } from 'react'
+ import { useCanvasStore } from '../../store/canvasStore'
+-import type { ArtifactNodeData } from '../../types/canvas'
++import type { ArtifactComment, ArtifactNodeData } from '../../types/canvas'
+ import { MarkdownView } from '../common/MarkdownView'
+ 
++type ArtifactTab = 'document' | 'comments' | 'split'
++
++const formatCommentTime = (iso: string) => {
++  const d = new Date(iso)
++  return Number.isNaN(d.getTime())
++    ? ''
++    : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
++}
++
+ export const ArtifactNode: React.FC<NodeProps> = ({ id, data, selected }) => {
+   const nodeData = data as unknown as ArtifactNodeData
+-  const { theme, approveArtifact, deleteNode } = useCanvasStore()
++  const { theme, approveArtifact, deleteNode, addArtifactComment, deleteArtifactComment, updateNodeData } =
++    useCanvasStore()
+   const [copied, setCopied] = useState(false)
+   const [isEditing, setIsEditing] = useState(false)
+   const [editContent, setEditContent] = useState(nodeData.markdownContent || '')
++  const [commentText, setCommentText] = useState('')
++
++  const comments: ArtifactComment[] = nodeData.comments || []
++  const isApproved = nodeData.status === 'approved'
++  const activeTab: ArtifactTab =
++    nodeData.activeTab === 'comments' || nodeData.activeTab === 'split' ? nodeData.activeTab : 'document'
++  const setActiveTab = (tab: ArtifactTab) => updateNodeData(id, { activeTab: tab })
++
++  const submitComment = () => {
++    if (!commentText.trim()) return
++    addArtifactComment(id, commentText)
++    setCommentText('')
++  }
+ 
+   const accentColor = '#6366F1'
+ 
+@@ -172,25 +199,147 @@ export const ArtifactNode: React.FC<NodeProps> = ({ id, data, selected }) => {
+         </div>
+       </div>
+ 
++      {/* Tab selector: Documento / Comentários / Dividido */}
++      <div
++        className={`nodrag flex items-center gap-1 px-3 py-1.5 border-b shrink-0 ${
++          theme === 'dark' ? 'bg-[#11161F] border-[#21262D]' : 'bg-slate-50 border-slate-200'
++        }`}
++      >
++        {(
++          [
++            { key: 'document', label: 'Documento', icon: <FileText className="w-3 h-3" /> },
++            {
++              key: 'comments',
++              label: `Comentários (${comments.length})`,
++              icon: <MessageSquare className="w-3 h-3" />,
++            },
++            { key: 'split', label: 'Dividido', icon: <Columns2 className="w-3 h-3" /> },
++          ] as Array<{ key: ArtifactTab; label: string; icon: React.ReactNode }>
++        ).map((tab) => (
++          <button
++            key={tab.key}
++            type="button"
++            onClick={() => setActiveTab(tab.key)}
++            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
++              activeTab === tab.key
++                ? 'bg-indigo-600/25 text-indigo-300 border border-indigo-500/50'
++                : 'text-slate-400 border border-transparent hover:text-slate-200 hover:bg-slate-800/70'
++            }`}
++          >
++            {tab.icon}
++            {tab.label}
++          </button>
++        ))}
++      </div>
++
+       {/* Content Area with Complete Event Isolation for Mouse Scroll & Text Selection */}
+       <div
+-        className="nodrag nowheel nopan flex-1 min-h-0 overflow-y-auto overscroll-contain select-text cursor-text p-4 bg-[#0D1117]"
+-        onWheel={(e) => e.stopPropagation()}
+-        onMouseDown={(e) => e.stopPropagation()}
+-        onPointerDown={(e) => e.stopPropagation()}
+-        onKeyDown={(e) => e.stopPropagation()}
++        className={`flex-1 min-h-0 flex ${activeTab === 'split' ? 'flex-row' : 'flex-col'}`}
+       >
+-        {isEditing ? (
+-          <textarea
+-            value={editContent}
+-            onChange={(e) => setEditContent(e.target.value)}
+-            className="nodrag nowheel nopan w-full h-full min-h-[220px] bg-[#090D13] text-slate-200 font-mono text-xs p-3 rounded-lg border border-slate-700/80 resize-none focus:outline-none focus:border-indigo-500 leading-relaxed"
+-            placeholder="Edite o conteúdo em Markdown..."
++        {activeTab !== 'comments' && (
++          <div
++            className={`nodrag nowheel nopan min-h-0 overflow-y-auto overscroll-contain select-text cursor-text p-4 bg-[#0D1117] ${
++              activeTab === 'split' ? 'flex-1 min-w-0 border-r border-[#21262D]' : 'flex-1'
++            }`}
++            onWheel={(e) => e.stopPropagation()}
++            onMouseDown={(e) => e.stopPropagation()}
++            onPointerDown={(e) => e.stopPropagation()}
++            onKeyDown={(e) => e.stopPropagation()}
++          >
++            {isEditing ? (
++              <textarea
++                value={editContent}
++                onChange={(e) => setEditContent(e.target.value)}
++                className="nodrag nowheel nopan w-full h-full min-h-[220px] bg-[#090D13] text-slate-200 font-mono text-xs p-3 rounded-lg border border-slate-700/80 resize-none focus:outline-none focus:border-indigo-500 leading-relaxed"
++                placeholder="Edite o conteúdo em Markdown..."
++                onWheel={(e) => e.stopPropagation()}
++                onMouseDown={(e) => e.stopPropagation()}
++              />
++            ) : (
++              <MarkdownView source={nodeData.markdownContent || 'Nenhum documento gerado.'} />
++            )}
++          </div>
++        )}
++
++        {activeTab !== 'document' && (
++          <div
++            className={`nodrag nowheel nopan min-h-0 flex flex-col bg-[#0D1117] ${
++              activeTab === 'split' ? 'w-[42%] min-w-[180px] shrink-0' : 'flex-1'
++            }`}
+             onWheel={(e) => e.stopPropagation()}
+             onMouseDown={(e) => e.stopPropagation()}
+-          />
+-        ) : (
+-          <MarkdownView source={nodeData.markdownContent || 'Nenhum documento gerado.'} />
++            onPointerDown={(e) => e.stopPropagation()}
++            onKeyDown={(e) => e.stopPropagation()}
++          >
++            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain select-text p-3 flex flex-col gap-2">
++              {comments.length === 0 ? (
++                <div className="text-[11px] text-slate-500 text-center py-6">
++                  Nenhum comentário ainda. Adicione diretrizes para o agente seguir ao executar o plano.
++                </div>
++              ) : (
++                comments.map((c) => (
++                  <div
++                    key={c.id}
++                    className="group/comment flex gap-2 rounded-lg border border-slate-700/60 bg-[#161B22] p-2.5"
++                  >
++                    <div className="w-6 h-6 shrink-0 rounded-full bg-indigo-500/20 text-indigo-300 flex items-center justify-center text-[10px] font-bold uppercase">
++                      {c.author.charAt(0) || '?'}
++                    </div>
++                    <div className="min-w-0 flex-1">
++                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
++                        <span className="font-semibold text-slate-200">{c.author}</span>
++                        <span>{formatCommentTime(c.createdAt)}</span>
++                      </div>
++                      <p className="mt-0.5 text-xs text-slate-200 whitespace-pre-wrap break-words leading-relaxed">
++                        {c.text}
++                      </p>
++                    </div>
++                    {!isApproved && (
++                      <button
++                        type="button"
++                        onClick={() => deleteArtifactComment(id, c.id)}
++                        title="Excluir comentário"
++                        className="self-start p-1 rounded text-slate-500 opacity-0 group-hover/comment:opacity-100 hover:text-rose-400 hover:bg-rose-950/40 transition-all cursor-pointer"
++                      >
++                        <X className="w-3 h-3" />
++                      </button>
++                    )}
++                  </div>
++                ))
++              )}
++            </div>
++
++            {isApproved ? (
++              <div className="px-3 py-2 border-t border-[#21262D] text-[10px] text-slate-500">
++                Plano aprovado — comentários enviados ao agente e travados.
++              </div>
++            ) : (
++              <div className="flex items-end gap-2 p-2.5 border-t border-[#21262D]">
++                <textarea
++                  value={commentText}
++                  onChange={(e) => setCommentText(e.target.value)}
++                  onKeyDown={(e) => {
++                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
++                      e.preventDefault()
++                      submitComment()
++                    }
++                  }}
++                  rows={2}
++                  placeholder="Escreva um comentário ou diretriz... (Ctrl+Enter envia)"
++                  className="flex-1 bg-[#090D13] text-slate-200 text-xs p-2 rounded-lg border border-slate-700/80 resize-none focus:outline-none focus:border-indigo-500 placeholder:text-slate-500"
++                />
++                <button
++                  type="button"
++                  onClick={submitComment}
++                  disabled={!commentText.trim()}
++                  title="Adicionar comentário"
++                  className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-40 transition-all cursor-pointer"
++                >
++                  <Send className="w-3.5 h-3.5" />
++                </button>
++              </div>
++            )}
++          </div>
+         )}
+       </div>
+ 
+@@ -206,7 +355,9 @@ export const ArtifactNode: React.FC<NodeProps> = ({ id, data, selected }) => {
+               <Check className="w-3.5 h-3.5" /> Aprovado e pronto para execução
+             </span>
+           ) : (
+-            'Revise o documento antes de avançar'
++            comments.length > 0
++              ? `${comments.length} comentário${comments.length === 1 ? '' : 's'} será${comments.length === 1 ? '' : 'ão'} enviado${comments.length === 1 ? '' : 's'} ao agente`
++              : 'Revise o documento antes de avançar'
+           )}
+         </div>
+ 
+@@ -224,7 +375,7 @@ export const ArtifactNode: React.FC<NodeProps> = ({ id, data, selected }) => {
+           ) : (
+             <>
+               <Play className="w-3 h-3 fill-current" />
+-              Aprovar e Executar
++              Aprovar e Executar{comments.length > 0 ? ` (+${comments.length})` : ''}
+             </>
+           )}
+         </button>
+diff --git a/src/store/canvasStore.ts b/src/store/canvasStore.ts
+index 914047b..97e3493 100644
+--- a/src/store/canvasStore.ts
++++ b/src/store/canvasStore.ts
+@@ -14,6 +14,7 @@ import type {
+   ActionApproval,
+   AgentViewMode,
+   AnnotationItem,
++  ArtifactComment,
+   AttachedArtifactBadge,
+   ChatMessage,
+   CliConfig,
+@@ -99,6 +100,8 @@ interface CanvasState {
+   clearAgentMessages: (nodeId: string) => void
+   handleApproval: (nodeId: string, approvalId: string, action: 'approved' | 'rejected') => void
+   approveArtifact: (nodeId: string) => void
++  addArtifactComment: (nodeId: string, text: string, author?: string) => void
++  deleteArtifactComment: (nodeId: string, commentId: string) => void
+   attachImageToAgent: (nodeId: string, image: { id: string; url: string; name: string; nodeId?: string }) => void
+   removeAttachedImage: (nodeId: string, imageId: string) => void
+   attachArtifactToAgent: (agentId: string, artifact: AttachedArtifactBadge) => void
+@@ -624,6 +627,43 @@ export const detachArtifactsIfNoRemainingEdge = (
+   }
+ }
+ 
++// The PTY backends differ (real PTY in Tauri, piped stdin in the Vite dev bridge), so the prompt is
++// sent as ONE line: raw newlines would submit the message early and bracketed-paste escapes are not
++// understood by every backend/CLI. Control characters are dropped so text can't act as key input.
++const flattenForPty = (text: string): string =>
++  text
++    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
++    .replace(/(?:\r?\n)+/g, ' ⏎ ')
++    .replace(/[ \t]+/g, ' ')
++    .trim()
++
++export const buildApprovalPrompt = (
++  title: string,
++  markdown: string,
++  comments: ArtifactComment[]
++): string => {
++  const lines = [
++    `Plano [${title}] aprovado pelo usuário. Prossiga com a execução imediata. (Plano e comentários abaixo em uma única linha; "⏎" marca quebra de linha.)`,
++  ]
++  if (markdown.trim()) {
++    lines.push('## Plano aprovado', markdown.trim())
++  }
++  if (comments.length > 0) {
++    lines.push(`## Comentários e diretrizes do usuário (${comments.length})`)
++    comments.forEach((c, i) => {
++      const when = new Date(c.createdAt).toLocaleString('pt-BR', {
++        day: '2-digit',
++        month: '2-digit',
++        hour: '2-digit',
++        minute: '2-digit',
++      })
++      lines.push(`${i + 1}. [${c.author} · ${when}] ${c.text}`)
++    })
++    lines.push('Considere todos os comentários acima como requisitos obrigatórios ao executar o plano.')
++  }
++  return flattenForPty(lines.join('\n'))
++}
++
+ export const useCanvasStore = create<CanvasState>((set, get) => ({
+   theme: 'dark',
+   setTheme: (theme) => {
+@@ -1552,7 +1592,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
+         const artDetails = attachedArtifacts.map((art) => {
+           const artNode = nodes.find((n) => n.id === art.sourceNodeId)
+           if (artNode?.type === 'artifactNode') {
+-            return `[Documento Anexado "${art.title}"]: ${((artNode.data as any).markdownContent || '').slice(0, 1000)}`
++            const artComments = ((artNode.data as any).comments || []) as ArtifactComment[]
++            const commentsCtx =
++              artComments.length > 0
++                ? ` [Comentários do usuário: ${artComments.map((c, i) => `${i + 1}) ${c.text}`).join(' ')}]`
++                : ''
++            return `[Documento Anexado "${art.title}"]: ${((artNode.data as any).markdownContent || '').slice(0, 1000)}${commentsCtx}`
+           }
+           if (artNode?.type === 'previewNode') {
+             return `[Web Preview Anexado "${art.title}"]`
+@@ -1649,27 +1694,71 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
+     }
+ 
+     const title = (artNode?.data as any)?.title || 'Artefato'
++    const markdown = ((artNode?.data as any)?.markdownContent || '') as string
++    const comments = (((artNode?.data as any)?.comments || []) as ArtifactComment[]).slice()
++    const approvedAt = new Date().toISOString()
++    const prompt = buildApprovalPrompt(title, markdown, comments)
++
+     for (const agentId of candidateAgentIds) {
+       const targetNode = get().nodes.find((n) => n.id === agentId)
+       if (targetNode) {
+         const sessionId = (targetNode.data as any)?.sessionId || `pty-${agentId}`
+-        ptyService.writePty(
+-          sessionId,
+-          `Plano [${title}] aprovado pelo usuário. Prossiga com a execução imediata.\r`
+-        )
++        ptyService
++          .writePty(sessionId, `${prompt}\r`)
++          .catch((err) => console.error('Falha ao injetar plano aprovado no PTY:', err))
++
++        const badge: AttachedArtifactBadge = {
++          id: `art-${nodeId}`,
++          type: 'artifact',
++          title,
++          sourceNodeId: nodeId,
++          contentSnippet: markdown.slice(0, 100),
++          status: 'approved',
++          approvedAt,
++          approvedMarkdown: markdown,
++          comments,
++        }
++        const attached = ((targetNode.data as any).attachedArtifacts || []) as AttachedArtifactBadge[]
++        const alreadyAttached = attached.some((a) => a.sourceNodeId === nodeId)
++        const updatedAttached = alreadyAttached
++          ? attached.map((a) => (a.sourceNodeId === nodeId ? { ...a, ...badge } : a))
++          : [...attached, badge]
+ 
+         get().updateNodeData(targetNode.id, {
+           status: 'running',
++          attachedArtifacts: updatedAttached,
+           terminalLogs: [
+             ...((targetNode.data as any).terminalLogs || []),
+-            `> Notificação recebida do artefato [${title}]: Aprovado pelo usuário`,
+-            `> Notificação injetada na sessão PTY`,
++            `> Notificação recebida do artefato [${title}]: Aprovado pelo usuário (${comments.length} comentário${comments.length === 1 ? '' : 's'})`,
++            `> Plano e comentários injetados na sessão PTY`,
+           ],
+         })
+       }
+     }
+   },
+ 
++  addArtifactComment: (nodeId, text, author = 'Você') => {
++    const trimmed = text.trim()
++    if (!trimmed) return
++    const node = get().nodes.find((n) => n.id === nodeId)
++    if (!node) return
++    const current = ((node.data as any).comments || []) as ArtifactComment[]
++    const comment: ArtifactComment = {
++      id: `cmt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
++      author,
++      text: trimmed,
++      createdAt: new Date().toISOString(),
++    }
++    get().updateNodeData(nodeId, { comments: [...current, comment] })
++  },
++
++  deleteArtifactComment: (nodeId, commentId) => {
++    const node = get().nodes.find((n) => n.id === nodeId)
++    if (!node) return
++    const current = ((node.data as any).comments || []) as ArtifactComment[]
++    get().updateNodeData(nodeId, { comments: current.filter((c) => c.id !== commentId) })
++  },
++
+   attachImageToAgent: (nodeId, image) => {
+     const node = get().nodes.find((n) => n.id === nodeId)
+     if (!node) return
+diff --git a/src/types/canvas.ts b/src/types/canvas.ts
+index e8688a4..2d00707 100644
+--- a/src/types/canvas.ts
++++ b/src/types/canvas.ts
+@@ -46,12 +46,23 @@ export interface AttachedImageBadge {
+   nodeId?: string
+ }
+ 
++export interface ArtifactComment {
++  id: string
++  author: string
++  text: string
++  createdAt: string
++}
++
+ export interface AttachedArtifactBadge {
+   id: string
+   type: 'artifact' | 'preview'
+   title: string
+   sourceNodeId: string
+   contentSnippet?: string
++  status?: 'draft' | 'approved' | 'rejected'
++  approvedAt?: string
++  approvedMarkdown?: string
++  comments?: ArtifactComment[]
+ }
+ 
+ export interface AgentNodeData {
+@@ -90,7 +101,8 @@ export interface ArtifactNodeData {
+   status: 'draft' | 'approved' | 'rejected'
+   parentAgentId?: string
+   parentAgentTitle?: string
+-  activeTab?: 'markdown' | 'preview' | 'diff'
++  activeTab?: 'markdown' | 'preview' | 'diff' | 'document' | 'comments' | 'split'
++  comments?: ArtifactComment[]
+   htmlPreview?: string
+   diffContent?: {
+     filename: string

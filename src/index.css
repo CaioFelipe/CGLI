@@ -5,6 +5,17 @@
 /* Tailwind CSS v4 class-based dark mode variant */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Passages of an artifact that carry a comment (CSS Custom Highlight API, see utils/textAnchors.ts) */
+::highlight(artifact-comment) {
+  background-color: rgba(250, 204, 21, 0.28);
+}
+::highlight(artifact-comment-active) {
+  background-color: rgba(250, 204, 21, 0.6);
+}
+::highlight(artifact-comment-pending) {
+  background-color: rgba(99, 102, 241, 0.5);
+}
+
 @layer base {
   :root {
     --canvas-bg: #EEF2F6;

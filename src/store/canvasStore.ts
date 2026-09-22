@@ -14,6 +14,7 @@ import type {
   ActionApproval,
   AgentViewMode,
   AnnotationItem,
+  ArtifactComment,
   AttachedArtifactBadge,
   ChatMessage,
   CliConfig,
@@ -106,6 +107,13 @@ interface CanvasState {
   clearAgentMessages: (nodeId: string) => void
   handleApproval: (nodeId: string, approvalId: string, action: 'approved' | 'rejected') => void
   approveArtifact: (nodeId: string) => void
+  addArtifactComment: (
+    nodeId: string,
+    text: string,
+    author?: string,
+    anchor?: { quote: string; start: number; end: number }
+  ) => void
+  deleteArtifactComment: (nodeId: string, commentId: string) => void
   attachImageToAgent: (nodeId: string, image: { id: string; url: string; name: string; nodeId?: string }) => void
   removeAttachedImage: (nodeId: string, imageId: string) => void
   attachArtifactToAgent: (agentId: string, artifact: AttachedArtifactBadge) => void
@@ -288,6 +296,22 @@ const getInitialCanvasState = (projectId: string): { nodes: Node[]; edges: Edge[
                   },
                 }
               }
+              if (n.type === 'terminalNode') {
+                // The shell does not survive an app restart: the node reopens with a fresh PowerShell
+                return {
+                  ...n,
+                  style: {
+                    width: n.style?.width || 640,
+                    height: n.style?.height || 400,
+                    ...n.style,
+                  },
+                  data: {
+                    ...n.data,
+                    sessionId: n.data?.sessionId || `pty-${n.id}`,
+                    isPtyActive: true,
+                  },
+                }
+              }
               return n
             })
           const cleanEdges = parsed.edges.filter(
@@ -411,6 +435,13 @@ const initialStash = getInitialStashItems()
 const initialClisList = getInitialClis()
 const initialSkillsList = getInitialSkills()
 
+// A terminal node owns a live PTY that outlives its React component (unmounting does not kill it),
+// so every path that takes the node off the canvas has to kill the shell explicitly.
+const killTerminalSession = (node: Node | undefined) => {
+  if (node?.type !== 'terminalNode') return
+  ptyService.killPty((node.data as any)?.sessionId || `pty-${node.id}`)
+}
+
 export const getNodeDimensions = (node: Node): { width: number; height: number } => {
   const measuredW = Number(node.measured?.width)
   const measuredH = Number(node.measured?.height)
@@ -453,6 +484,8 @@ export const getNodeDimensions = (node: Node): { width: number; height: number }
       return { width: 560, height: 420 }
     case 'memoryNode':
       return { width: 440, height: 380 }
+    case 'terminalNode':
+      return { width: 640, height: 400 }
     default:
       return { width: 380, height: 320 }
   }
@@ -631,6 +664,48 @@ export const detachArtifactsIfNoRemainingEdge = (
     const updatedAttached = currentAttached.filter((art) => art.sourceNodeId !== artNodeId)
     updateNodeData(agentNode.id, { attachedArtifacts: updatedAttached })
   }
+}
+
+// The PTY backends differ (real PTY in Tauri, piped stdin in the Vite dev bridge), so the prompt is
+// sent as ONE line: raw newlines would submit the message early and bracketed-paste escapes are not
+// understood by every backend/CLI. Control characters are dropped so text can't act as key input.
+const flattenForPty = (text: string): string =>
+  text
+    // oxlint-disable-next-line no-control-regex -- stripping control characters is the point
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
+    .replace(/(?:\r?\n)+/g, ' ⏎ ')
+    .replace(/[ \t]+/g, ' ')
+    .trim()
+
+const shortenQuote = (quote: string, max: number): string =>
+  quote.length > max ? `${quote.slice(0, max)}…` : quote
+
+export const buildApprovalPrompt = (
+  title: string,
+  markdown: string,
+  comments: ArtifactComment[]
+): string => {
+  const lines = [
+    `Plano [${title}] aprovado pelo usuário. Prossiga com a execução imediata. (Plano e comentários abaixo em uma única linha; "⏎" marca quebra de linha.)`,
+  ]
+  if (markdown.trim()) {
+    lines.push('## Plano aprovado', markdown.trim())
+  }
+  if (comments.length > 0) {
+    lines.push(`## Comentários e diretrizes do usuário (${comments.length})`)
+    comments.forEach((c, i) => {
+      const when = new Date(c.createdAt).toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+      const about = c.quote ? ` (sobre o trecho do plano: "${shortenQuote(c.quote, 240)}")` : ''
+      lines.push(`${i + 1}. [${c.author} · ${when}]${about} ${c.text}`)
+    })
+    lines.push('Considere todos os comentários acima como requisitos obrigatórios ao executar o plano.')
+  }
+  return flattenForPty(lines.join('\n'))
 }
 
 export const useCanvasStore = create<CanvasState>((set, get) => ({
@@ -1196,6 +1271,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       ptyService.killPty(sessionId)
     }
 
+    killTerminalSession(nodeToDelete)
+
     if (nodeToDelete && (nodeToDelete.type === 'imageNode' || nodeToDelete.type === 'imageGroupNode')) {
       detachImagesForNode(id, nodeToDelete.data, get().edges, () => get().nodes, get().updateNodeData)
     }
@@ -1302,8 +1379,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       return
     }
 
+    killTerminalSession(node)
+
     let type: StashItem['type'] = 'agent'
-    if (node.type === 'artifactNode') type = 'artifact'
+    if (node.type === 'terminalNode') type = 'terminal'
+    else if (node.type === 'artifactNode') type = 'artifact'
     else if (node.type === 'previewNode') type = 'preview'
     else if (node.type === 'diffNode') type = 'diff'
     else if (node.type === 'imageNode') type = 'image'
@@ -1395,22 +1475,34 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }
 
     let nodeType = 'agentNode'
-    if (item.type === 'artifact') nodeType = 'artifactNode'
+    if (item.type === 'terminal') nodeType = 'terminalNode'
+    else if (item.type === 'artifact') nodeType = 'artifactNode'
     else if (item.type === 'preview') nodeType = 'previewNode'
     else if (item.type === 'diff') nodeType = 'diffNode'
     else if (item.type === 'image') nodeType = 'imageNode'
     else if (item.type === 'imageGroup') nodeType = 'imageGroupNode'
     else if (item.type === 'memory') nodeType = 'memoryNode'
 
+    const restoredId = `${item.nodeId}-restored-${Date.now()}`
+    const isTerminal = nodeType === 'terminalNode'
     const restoredNode: Node = {
-      id: `${item.nodeId}-restored-${Date.now()}`,
+      id: restoredId,
       type: nodeType,
       position: {
         x: item.position.x + 40,
         y: item.position.y + 40,
       },
-      style: item.style || (nodeType === 'agentNode' ? { width: 600, height: 520 } : undefined),
-      data: item.nodeData,
+      style:
+        item.style ||
+        (nodeType === 'agentNode'
+          ? { width: 600, height: 520 }
+          : isTerminal
+            ? { width: 640, height: 400 }
+            : undefined),
+      // The id changes on restore, so a terminal needs its own fresh PTY session id
+      data: isTerminal
+        ? { ...item.nodeData, sessionId: `pty-${restoredId}`, isPtyActive: true }
+        : item.nodeData,
     }
 
     const updatedStash = get().stashItems.filter((s) => s.id !== stashId)
@@ -1615,7 +1707,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         const artDetails = attachedArtifacts.map((art) => {
           const artNode = nodes.find((n) => n.id === art.sourceNodeId)
           if (artNode?.type === 'artifactNode') {
-            return `[Documento Anexado "${art.title}"]: ${((artNode.data as any).markdownContent || '').slice(0, 1000)}`
+            const artComments = ((artNode.data as any).comments || []) as ArtifactComment[]
+            const commentsCtx =
+              artComments.length > 0
+                ? ` [Comentários do usuário: ${artComments.map((c, i) => `${i + 1}) ${c.quote ? `(sobre "${shortenQuote(c.quote, 120)}") ` : ''}${c.text}`).join(' ')}]`
+                : ''
+            return `[Documento Anexado "${art.title}"]: ${((artNode.data as any).markdownContent || '').slice(0, 1000)}${commentsCtx}`
           }
           if (artNode?.type === 'previewNode') {
             return `[Web Preview Anexado "${art.title}"]`
@@ -1712,25 +1809,70 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }
 
     const title = (artNode?.data as any)?.title || 'Artefato'
+    const markdown = ((artNode?.data as any)?.markdownContent || '') as string
+    const comments = (((artNode?.data as any)?.comments || []) as ArtifactComment[]).slice()
+    const approvedAt = new Date().toISOString()
+    const prompt = buildApprovalPrompt(title, markdown, comments)
+
     for (const agentId of candidateAgentIds) {
       const targetNode = get().nodes.find((n) => n.id === agentId)
       if (targetNode) {
         const sessionId = (targetNode.data as any)?.sessionId || `pty-${agentId}`
-        ptyService.writePty(
-          sessionId,
-          `Plano [${title}] aprovado pelo usuário. Prossiga com a execução imediata.\r`
-        )
+        ptyService
+          .writePty(sessionId, `${prompt}\r`)
+          .catch((err) => console.error('Falha ao injetar plano aprovado no PTY:', err))
+
+        const badge: AttachedArtifactBadge = {
+          id: `art-${nodeId}`,
+          type: 'artifact',
+          title,
+          sourceNodeId: nodeId,
+          contentSnippet: markdown.slice(0, 100),
+          status: 'approved',
+          approvedAt,
+          approvedMarkdown: markdown,
+          comments,
+        }
+        const attached = ((targetNode.data as any).attachedArtifacts || []) as AttachedArtifactBadge[]
+        const alreadyAttached = attached.some((a) => a.sourceNodeId === nodeId)
+        const updatedAttached = alreadyAttached
+          ? attached.map((a) => (a.sourceNodeId === nodeId ? { ...a, ...badge } : a))
+          : [...attached, badge]
 
         get().updateNodeData(targetNode.id, {
           status: 'running',
+          attachedArtifacts: updatedAttached,
           terminalLogs: [
             ...((targetNode.data as any).terminalLogs || []),
-            `> Notificação recebida do artefato [${title}]: Aprovado pelo usuário`,
-            `> Notificação injetada na sessão PTY`,
+            `> Notificação recebida do artefato [${title}]: Aprovado pelo usuário (${comments.length} comentário${comments.length === 1 ? '' : 's'})`,
+            `> Plano e comentários injetados na sessão PTY`,
           ],
         })
       }
     }
+  },
+
+  addArtifactComment: (nodeId, text, author = 'Você', anchor) => {
+    const trimmed = text.trim()
+    if (!trimmed) return
+    const node = get().nodes.find((n) => n.id === nodeId)
+    if (!node) return
+    const current = ((node.data as any).comments || []) as ArtifactComment[]
+    const comment: ArtifactComment = {
+      id: `cmt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      author,
+      text: trimmed,
+      createdAt: new Date().toISOString(),
+      ...(anchor ? { quote: anchor.quote, quoteStart: anchor.start, quoteEnd: anchor.end } : {}),
+    }
+    get().updateNodeData(nodeId, { comments: [...current, comment] })
+  },
+
+  deleteArtifactComment: (nodeId, commentId) => {
+    const node = get().nodes.find((n) => n.id === nodeId)
+    if (!node) return
+    const current = ((node.data as any).comments || []) as ArtifactComment[]
+    get().updateNodeData(nodeId, { comments: current.filter((c) => c.id !== commentId) })
   },
 
   attachImageToAgent: (nodeId, image) => {
@@ -2627,6 +2769,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const allNodeIdsToStash = [groupId, ...memberNodeIds]
 
     const memberNodes = get().nodes.filter((n) => memberNodeIds.includes(n.id))
+    memberNodes.forEach(killTerminalSession)
     const memberEdges = get().edges.filter(
       (e) => allNodeIdsToStash.includes(e.source) || allNodeIdsToStash.includes(e.target)
     )

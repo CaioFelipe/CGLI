@@ -16,6 +16,7 @@ import {
   Brain,
   Sparkles,
   Image as ImageIcon,
+  SquareTerminal,
 } from 'lucide-react'
 import { Topbar } from './components/layout/Topbar'
 import { ImageAnnotationModal } from './components/modais/ImageAnnotationModal'
@@ -31,6 +32,7 @@ import { GroupNode } from './components/nodes/GroupNode'
 import { ImageGroupNode } from './components/nodes/ImageGroupNode'
 import { ImageNode } from './components/nodes/ImageNode'
 import { MemoryNode } from './components/nodes/MemoryNode'
+import { TerminalNode } from './components/nodes/TerminalNode'
 import { RemovableEdge } from './components/edges/RemovableEdge'
 import { StashDrawer } from './components/panels/StashDrawer'
 import { useCanvasStore, getNodeDimensions } from './store/canvasStore'
@@ -45,6 +47,7 @@ const nodeTypes: NodeTypes = {
   imageGroupNode: ImageGroupNode,
   groupNode: GroupNode,
   memoryNode: MemoryNode,
+  terminalNode: TerminalNode,
 }
 
 // Register custom edge types
@@ -68,6 +71,7 @@ const CanvasInner: React.FC = () => {
     theme,
     groupSelectedNodes,
     openMemoryExplorer,
+    getActiveWorkspacePath,
   } = useCanvasStore()
 
   const { screenToFlowPosition, fitView } = useReactFlow()
@@ -271,6 +275,25 @@ const CanvasInner: React.FC = () => {
     addNode(newNode)
     setContextMenu(null)
   }, [addNode])
+
+  const spawnTerminal = useCallback((pos: { x: number; y: number }) => {
+    const nodeId = `node-terminal-${Date.now()}`
+    const newNode: Node = {
+      id: nodeId,
+      type: 'terminalNode',
+      position: { x: pos.x - 200, y: pos.y - 120 },
+      style: { width: 640, height: 400 },
+      data: {
+        title: 'PowerShell',
+        shell: 'powershell',
+        sessionId: `pty-${nodeId}`,
+        workspacePath: getActiveWorkspacePath(),
+        isPtyActive: true,
+      },
+    }
+    addNode(newNode)
+    setContextMenu(null)
+  }, [addNode, getActiveWorkspacePath])
 
   const spawnImage = useCallback((pos: { x: number; y: number }) => {
     const newNode: Node = {
@@ -532,6 +555,7 @@ const CanvasInner: React.FC = () => {
               }
               if (n.type === 'artifactNode') return '#6366F1'
               if (n.type === 'previewNode') return '#06B6D4'
+              if (n.type === 'terminalNode') return '#0078D4'
               if (n.type === 'diffNode') return '#10B981'
               if (n.type === 'imageNode' || n.type === 'imageGroupNode') return '#F43F5E'
               if (n.type === 'groupNode') return 'rgba(99, 102, 241, 0.3)'
@@ -555,7 +579,7 @@ const CanvasInner: React.FC = () => {
                 : 'bg-white/95 border-slate-300 text-slate-900 shadow-slate-400/40'
             }`}
             style={{
-              top: Math.min(contextMenu.y, window.innerHeight - 340),
+              top: Math.min(contextMenu.y, window.innerHeight - 380),
               left: Math.min(contextMenu.x, window.innerWidth - 240),
             }}
             onClick={(e) => e.stopPropagation()}
@@ -598,6 +622,24 @@ const CanvasInner: React.FC = () => {
               <div className="flex flex-col flex-1 min-w-0">
                 <span className="font-semibold text-xs leading-tight">Antigravity AGY</span>
                 <span className="text-[10px] text-slate-400 leading-tight">Executor CLI</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => spawnTerminal({ x: contextMenu.flowX, y: contextMenu.flowY })}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left transition-colors ${
+                theme === 'dark'
+                  ? 'hover:bg-[#21262D] text-slate-200'
+                  : 'hover:bg-slate-100 text-slate-800'
+              }`}
+            >
+              <div className="w-6 h-6 rounded-md bg-blue-500/15 flex items-center justify-center text-blue-500 shrink-0">
+                <SquareTerminal className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex flex-col flex-1 min-w-0">
+                <span className="font-semibold text-xs leading-tight">Terminal PowerShell</span>
+                <span className="text-[10px] text-slate-400 leading-tight">Shell local PTY</span>
               </div>
             </button>
 

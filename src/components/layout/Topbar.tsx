@@ -11,6 +11,7 @@ import {
   Moon,
   Plus,
   Settings,
+  SquareTerminal,
   Sun,
   Trash2,
   ZoomIn,
@@ -101,6 +102,25 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
         images: [],
         activeImageIndex: 0,
         annotations: [],
+      },
+    }
+    addNode(newNode)
+    setIsAddNodeOpen(false)
+  }
+
+  const handleAddTerminal = () => {
+    const nodeId = `node-terminal-${Date.now()}`
+    const newNode = {
+      id: nodeId,
+      type: 'terminalNode',
+      position: { x: 200 + nodes.length * 30, y: 150 + nodes.length * 20 },
+      style: { width: 640, height: 400 },
+      data: {
+        title: 'PowerShell',
+        shell: 'powershell',
+        sessionId: `pty-${nodeId}`,
+        workspacePath: getActiveWorkspacePath(),
+        isPtyActive: true,
       },
     }
     addNode(newNode)
@@ -348,6 +368,14 @@ export const Topbar: React.FC<TopbarProps> = ({ onFitView }) => {
               >
                 <ImageIcon className="w-3.5 h-3.5 text-rose-500" />
                 <span>Imagem / Captura</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleAddTerminal}
+                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2"
+              >
+                <SquareTerminal className="w-3.5 h-3.5 text-blue-500" />
+                <span>Terminal PowerShell</span>
               </button>
               <button
                 type="button"

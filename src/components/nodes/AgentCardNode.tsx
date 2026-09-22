@@ -5,11 +5,13 @@ import { Handle, type NodeProps, Position, NodeResizer } from '@xyflow/react'
 import {
   Archive,
   Brain,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   CornerDownLeft,
   FolderSync,
   GitCompare,
+  MessageSquare,
   RotateCw,
   Sparkles,
   Terminal as TerminalIcon,
@@ -21,6 +23,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ptyService } from '../../services/ptyService'
 import { useCanvasStore } from '../../store/canvasStore'
 import type { AgentNodeData } from '../../types/canvas'
+import { MarkdownView } from '../common/MarkdownView'
 
 interface SlashCommand {
   cmd: string
@@ -110,6 +113,10 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   } = useCanvasStore()
 
   const [inputVal, setInputVal] = useState('')
+  const [planDrawerOpen, setPlanDrawerOpen] = useState(false)
+  const approvedPlans = (nodeData.attachedArtifacts || []).filter(
+    (art) => art.type === 'artifact' && art.status === 'approved'
+  )
   const inputRef = useRef<HTMLInputElement>(null)
   const terminalRef = useRef<HTMLDivElement>(null)
   const terminalInstance = useRef<Terminal | null>(null)
@@ -769,6 +776,72 @@ export const AgentCardNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           </button>
         </div>
       </div>
+
+      {/* Approved plan banner + expandable drawer (plan and user comments sent to this agent) */}
+      {approvedPlans.length > 0 && (
+        <div className="shrink-0 border-b bg-[#11161F] border-[#21262D] flex flex-col min-h-0">
+          <button
+            type="button"
+            onClick={() => setPlanDrawerOpen((open) => !open)}
+            title={planDrawerOpen ? 'Recolher plano' : 'Ver plano aprovado e comentários'}
+            className="nodrag flex items-center gap-2 px-3 py-1.5 text-[11px] text-left hover:bg-slate-800/50 transition-colors cursor-pointer"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="font-semibold text-emerald-300 truncate">
+              {approvedPlans.length === 1
+                ? `Plano aprovado: ${approvedPlans[0].title}`
+                : `${approvedPlans.length} planos aprovados`}
+            </span>
+            <span className="flex items-center gap-1 text-slate-400 shrink-0">
+              <MessageSquare className="w-3 h-3" />
+              {approvedPlans.reduce((sum, art) => sum + (art.comments?.length || 0), 0)}
+            </span>
+            <span className="ml-auto text-slate-400 shrink-0">
+              {planDrawerOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </span>
+          </button>
+
+          {planDrawerOpen && (
+            <div
+              className="nodrag nowheel nopan max-h-[240px] overflow-y-auto overscroll-contain select-text px-3 pb-3 flex flex-col gap-3 border-t border-[#21262D]"
+              onWheel={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              {approvedPlans.map((art) => (
+                <div key={art.id} className="pt-2 flex flex-col gap-2">
+                  {approvedPlans.length > 1 && (
+                    <div className="text-[11px] font-semibold text-slate-200">{art.title}</div>
+                  )}
+                  <MarkdownView source={art.approvedMarkdown || art.contentSnippet || 'Sem conteúdo.'} />
+                  {(art.comments?.length || 0) > 0 && (
+                    <div className="flex flex-col gap-1.5">
+                      <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">
+                        Comentários do usuário ({art.comments?.length})
+                      </div>
+                      {art.comments?.map((c, i) => (
+                        <div
+                          key={c.id}
+                          className="rounded-md border border-slate-700/60 bg-[#161B22] px-2.5 py-1.5 text-xs text-slate-200 whitespace-pre-wrap break-words"
+                        >
+                          {c.quote && (
+                            <div className="mb-1 border-l-2 border-amber-400/70 pl-2 text-[11px] italic text-slate-400 line-clamp-3 break-words">
+                              “{c.quote}”
+                            </div>
+                          )}
+                          <span className="text-slate-500 font-mono mr-1.5">{i + 1}.</span>
+                          {c.text}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Native xterm.js Viewport (100% visible, fully isolated from React Flow events) */}
       <div
