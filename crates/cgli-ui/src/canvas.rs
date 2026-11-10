@@ -598,7 +598,7 @@ pub fn CanvasApp() -> impl IntoView {
                             if item.kind() == "file" && item.type_().starts_with("image/") {
                                 if let Ok(Some(file)) = item.get_as_file() {
                                     e.prevent_default();
-                                    let store_post = store_c;
+                                    let _store_post = store_c;
                                     let filename = file.name();
                                     let (mx, my) = mouse_pos.get();
                                     let (flow_x, flow_y) = screen_to_canvas(mx, my);

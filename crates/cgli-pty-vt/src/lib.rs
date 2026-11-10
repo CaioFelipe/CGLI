@@ -732,7 +732,7 @@ pub fn TerminalScreenView(
     // Subscribe to PTY stream
     create_effect(move |_| {
         let sid = sess_id.clone();
-        if let Some(win) = web_sys::window() {
+        if let Some(_win) = web_sys::window() {
             let url = format!("{}/api/pty/stream?sessionId={}", "http://127.0.0.1:41732", sid);
             if let Ok(es) = web_sys::EventSource::new(&url) {
                 let cb = wasm_bindgen::closure::Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |e: web_sys::MessageEvent| {
@@ -801,5 +801,35 @@ pub fn TerminalScreenView(
             style=format!("background-color: {}; color: {};", background, foreground)
             inner_html=move || vt_state.get().render_lines_html()
         />
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_terminal_themes() {
+        assert_eq!(TerminalTheme::dark().background, "#0D1117");
+        assert_eq!(TerminalTheme::light().background, "#F8FAFC");
+        assert_eq!(TerminalTheme::powershell().background, "#012456");
+    }
+
+    #[test]
+    fn test_sgr_colors_and_render_html() {
+        let mut screen = TerminalScreen::new(40, 10);
+        screen.feed_str("\x1b[1;31mErro:\x1b[0m \x1b[38;2;10;200;30mOK\x1b[0m");
+        let html = screen.render_lines_html();
+        assert!(html.contains("Erro:"));
+        assert!(html.contains("OK"));
+    }
+
+    #[test]
+    fn test_extract_cgli_markers() {
+        let stream = " texto antes <<<CGLI:CREATE_ARTIFACT {\"title\":\"Plano Rust\",\"content\":\"# H1\"}>>> texto depois ";
+        let markers = extract_cgli_markers(stream);
+        assert_eq!(markers.len(), 1);
+        assert_eq!(markers[0].action_type, "create_artifact");
+        assert_eq!(markers[0].title.as_deref(), Some("Plano Rust"));
     }
 }

@@ -1,6 +1,5 @@
 use cgli_core::*;
 use leptos::*;
-use std::collections::HashMap;
 
 pub const DEFAULT_PROJECT_ID: &str = "proj-default";
 pub const DEFAULT_PROJECT_NAME: &str = "CGLI Workspace";
@@ -433,7 +432,7 @@ impl CanvasStore {
         }
 
         // Color coding
-        let stroke_color = if let Some(s) = source_node {
+        let _stroke_color = if let Some(s) = source_node {
             if s.node_type == "imageNode" || s.node_type == "imageGroupNode" {
                 "#F43F5E"
             } else if s.node_type == "agentNode" {
@@ -1086,7 +1085,7 @@ impl CanvasStore {
                 };
 
                 let child_id = format!("node-{}-sub-{}", child_type, timestamp);
-                let (title, binary, color) = if child_type == "claude" {
+                let (title, binary, _color) = if child_type == "claude" {
                     ("Claude Code (Subagente)", "claude", "#EA580C")
                 } else {
                     ("Antigravity (Executor)", "agy", "#0284C7")
@@ -1345,7 +1344,7 @@ impl CanvasStore {
         }
 
         // Sync with bridge
-        let path = self.get_active_workspace_path();
+        let _path = self.get_active_workspace_path();
         let name = self.projects.get().into_iter().find(|p| p.id == project_id).map(|p| p.name).unwrap_or_default();
         let projs = self.projects.get();
         let folders = projs.iter().find(|p| p.id == project_id).map(|p| p.folders.clone()).unwrap_or_default();

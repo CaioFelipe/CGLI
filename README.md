@@ -1,95 +1,84 @@
-# CGLI (Canvas Agent Orchestrator)
+# CGLI (Canvas Agent Orchestrator — 100% Rust Edition)
 
-Aplicação desktop nativa desenvolvida com **Tauri v2 + React 19 + TypeScript + Vite + Tailwind CSS**, inspirada na estética e ergonomia visual do **n8n**.
+Aplicação desktop nativa desenvolvida **100% em Rust** com **Tauri v2 + Leptos (CSR/WASM) + Axum + portable-pty + Tailwind CSS**, inspirada na estética e ergonomia visual do **n8n** (*Studio Clean*) e extensões do **VS Code**.
 
-O **CGLI** oferece uma tela infinita (canvas) para supervisão, interação e orquestração de múltiplos agentes de inteligência artificial (com terminais e interfaces ricas para **Claude Code** e **AGY**, além de suporte a qualquer CLI customizado).
+O **CGLI** oferece uma tela infinita (canvas) para supervisão, interação e orquestração de múltiplos agentes de inteligência artificial (com terminais ConPTY/PTY nativos e interfaces ricas para **Claude Code** e **Antigravity / AGY**, além de suporte a qualquer CLI customizado).
+
+---
+
+## 🦀 Arquitetura do Cargo Workspace (100% Rust)
+
+```text
+CGLI/
+├── Cargo.toml                  # Workspace Cargo unificado
+├── Trunk.toml                  # Configuração de empacotamento WASM (Leptos CSR)
+├── index.html                  # Entrypoint WebAssembly
+├── styles/
+│   └── index.css               # Design System Studio Clean (Claro & Escuro)
+├── crates/
+│   ├── cgli-core/              # Modelos de domínio, grafo, parser de diff e DTOs Serde
+│   ├── cgli-vault/             # Motor nativo de Memória Obsidian (ULID, SHA-256 ETag/Rev, Sanitizador, BM25, Doctor, MOC)
+│   ├── cgli-cli/               # Binário nativo `cgli` (substitui cgli.cjs — zero Node.js)
+│   ├── cgli-pty-vt/            # Emulador e parser de terminal ANSI/VT100 + extrator de stream markers
+│   ├── cgli-desktop/           # Servidor Axum HTTP/SSE Bridge (:41732), Fila FIFO Single-Writer e SessionManager PTY
+│   └── cgli-ui/                # Frontend reativo em Rust (Leptos CSR/WASM) com Canvas Infinito, 9 Nós e 5 Modais
+└── src-tauri/                  # Host Desktop Tauri v2 integrado aos crates do workspace
+```
 
 ---
 
 ## 🚀 Principais Recursos
 
-### 1. Canvas Infinito com Estética n8n (Opção 1: Studio Clean)
-- **Navegação Fluida**: Pan & zoom suaves, minimap integrado, fit-view e controles interativos (`@xyflow/react`).
-- **Modo Claro & Modo Escuro**: Alternador dinâmico de tema com paletas adaptadas (off-white `#F8FAFC` no claro / charcoal profundo `#0B0F17` no escuro).
+### 1. Canvas Infinito com Estética n8n (Studio Clean)
+- **Navegação Fluida**: Pan & zoom centrados no cursor, minimap em tempo real, fit-view e controles interativos em Rust/WASM (`crates/cgli-ui/src/canvas.rs`).
+- **Modo Claro & Modo Escuro**: Alternador dinâmico de tema com paletas adaptadas (`#EEF2F6` no claro / `#06090E` no escuro).
 - **Acentos Visuais Oficiais**:
   - **Claude Code**: Terracota / Âmbar Anthropic (`#EA580C`).
   - **AGY (Gemini)**: Azul Elétrico / Ciano (`#0284C7`).
   - **Nó de Imagem**: Rosa Choque (`#F43F5E`).
   - **Nó Visualizador de Artefatos**: Índigo Real (`#6366F1`).
 
-### 2. Nós com Estética de Extensão do VS Code (Chat Rico & Terminais)
-- **Mensagens Formatadas**: Renderização completa em Markdown, code blocks com sintaxe destacada e botão de cópia.
+### 2. Nós com Estética de Extensão do VS Code (Chat Rico & Terminais VT100)
+- **Mensagens Formatadas**: Renderização completa em Markdown GFM (`pulldown-cmark`), alertas GitHub (`[!IMPORTANT]`, `[!NOTE]`, `[!TIP]`, `[!WARNING]`, `[!CAUTION]`) e blocos de código com botão de cópia.
 - **Raciocínio Colapsável (*Thinking Accordion*)**: Bloco para inspecionar o processo cognitivo do modelo sem poluir o canvas.
-- **Aprovação Visual de Ações**: Cards interativos de diff colorido (verde/vermelho) com botões `[✓ Aprovar]` e `[✕ Rejeitar]`.
-- **Modo Híbrido (Dual-View)**: Botão no cabeçalho para alternar instantaneamente entre a interface rica de extensão e o terminal nativo xterm.js (`@xterm/xterm`).
-- **Paridade Total**: Claude Code e AGY compartilham rigorosamente os mesmos recursos visuais e ergonomia.
+- **Aprovação Visual de Ações**: Cards interativos de comando/diff colorido com botões `[✓ Aprovar]` e `[✕ Rejeitar]`.
+- **Modo Híbrido (Dual-View)**: Alternância instantânea entre a interface rica de extensão e o emulador de terminal ANSI/VT100 (`cgli-pty-vt`).
 
-### 3. Nós de Imagem & Editor de Anotações Integrado
-- **Colar Direto no Canvas (`Ctrl+V`)**: Ao pressionar `Ctrl+V` sobre a tela infinita, o CGLI mapeia a coordenada do mouse e cria um nó de imagem (`ImageNode`) imediatamente naquele ponto.
-- **Editor de Anotações Vetoriais**: Modal completo para desenhar sobre a imagem:
-  - ⭕ **Círculos e Elipses** para circular erros na tela.
-  - ➡️ **Setas** para apontar elementos exatos da interface.
-  - 🔲 **Retângulos** e ✏️ **Desenho Livre**.
-  - 🔤 **Texto** e paleta de cores destacadas (Vermelho, Âmbar, Verde, Azul).
-- **Grupos de Imagens**: Agrupador de múltiplos prints em um cluster visual de evidências.
-- **Entrada Multimodal**: Fios conectados da imagem para o agente injetam o print anotado diretamente no prompt do LLM.
+### 3. Nós de Imagem & Editor de Anotações Vetoriais
+- **Colar Direto no Canvas (`Ctrl+V`)**: Mapeia a coordenada do mouse e cria um `ImageNode` imediatamente naquele ponto.
+- **Editor de Anotações Vetoriais (`ImageAnnotationModal`)**: Modal SVG `800x480` para desenhar círculos, setas, retângulos, pincel livre e textos sobre prints.
+- **Grupos de Imagens (`ImageGroupNode`)**: Agrupador de múltiplos prints em um cluster visual de evidências.
 
-### 4. Nó Visualizador de Artefatos & Resultados (`ArtifactViewerNode`)
-- Nós spawnados dinamicamente pelos agentes no canvas com 3 abas:
-  1. **Documento / Plano**: Markdown rico com alertas GitHub (`[!IMPORTANT]`, `[!NOTE]`, `[!TIP]`), tabelas e checklists.
-  2. **Preview Web Interativo**: Sandbox iframe seguro renderizando protótipos HTML/JS criados pela IA.
-  3. **Diff de Código**: Visualização de alterações em arquivos locais.
-- Botão integrado no nó para aprovar o plano e liberar a execução imediata para o nó AGY conectado.
+### 4. Nó Visualizador de Artefatos (`ArtifactNode`) com Comentários Ancorados
+- Renderização de planos Markdown com **3 abas** (*Documento*, *Comentários* e *Dividido Lado a Lado*).
+- **Comentários por Trecho**: Seleção direta no texto via `web-sys` + **CSS Custom Highlight API** (`::highlight(artifact-comment)`).
+- Botão **"Aprovar e Executar"** que sincroniza e injeta o plano + todos os comentários diretamente no PTY do agente executor conectado.
 
-### 5. Gaveta de Nós Guardados (Stash)
-- Painel lateral retrátil à direita para arquivar nós ou grupos de nós, limpando o espaço de trabalho sem perder histórico de mensagens, variáveis ou estado de execução.
-- Restauração com 1 clique diretamente de volta ao canvas.
-
-### 6. Central de Configurações, Contas & Hub de Skills
-- **Papéis Customizáveis**: Alterne quem é o planejador e quem é o executor.
-- **Chaves de Ativação**: Ative ou desative CLIs caso você só possua Claude ou só possua AGY.
-- **Cadastro de Novos CLIs**: Registre ferramentas externas (Aider, Goose, scripts locais).
-- **Contas & Credenciais**: Conecte, desconecte e alterne logins.
-- **Hub Compartilhado de Skills**: Repositório centralizado sincronizado para todos os agentes.
+### 5. Memória Compartilhada no Obsidian (`cgli-vault` + `MemoryNode` + `MemoryExplorerModal`)
+- Cofre dual (**Local do Projeto** em `.cgli/vault/` e **Global do Usuário** em `~/.cgli/vault/`).
+- **Fila FIFO Single-Writer (`writer.rs`)**, ULID monotônico Crockford Base32 de 26 caracteres, concorrência otimista (`rev` + `etag` SHA-256 + geração de `.conflict-*`) e sanitização automática de segredos.
 
 ---
 
-## 🛠️ Tecnologias Utilizadas
-
-- **Desktop Core**: [Tauri v2](https://tauri.app/) (Rust) com ConPTY nativo via `portable-pty`.
-- **Frontend**: [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Vite](https://vite.dev/), [Tailwind CSS v4](https://tailwindcss.com/).
-- **Canvas Engine**: [@xyflow/react](https://reactflow.dev/) (React Flow).
-- **Terminal Emulator**: [@xterm/xterm](https://xtermjs.org/) + FitAddon.
-- **State Management**: [Zustand](https://zustand-demo.pmnd.rs/).
-- **Ícones**: [Lucide React](https://lucide.dev/).
-
----
-
-## 💻 Como Rodar o Projeto Localmente
+## 💻 Como Compilar e Testar
 
 ### Pré-requisitos
-- [Node.js](https://nodejs.org/) (versão 20+)
-- [Rust & Cargo](https://rustup.rs/)
+- [Rust & Cargo](https://rustup.rs/) (1.77+)
+- [Trunk](https://trunkrs.dev/) (`cargo install trunk`) e target WASM (`rustup target add wasm32-unknown-unknown`) para empacotamento web/Tauri.
 
-### Passos
+### Comandos
 
-1. **Instalar dependências**:
+1. **Executar toda a suíte de testes do Workspace Rust**:
    ```bash
-   npm install
+   cargo test --workspace
    ```
 
-2. **Rodar em modo web/desenvolvimento rápido**:
+2. **Compilar a CLI nativa (`cgli`) e o servidor Desktop Bridge (`cgli-desktop`)**:
    ```bash
-   npm run dev
+   cargo build --release -p cgli-cli -p cgli-desktop
    ```
 
-3. **Compilar e rodar a aplicação desktop nativa (Tauri)**:
+3. **Rodar o frontend Leptos/WASM em desenvolvimento**:
    ```bash
-   npx @tauri-apps/cli dev
-   ```
-
-4. **Gerar build de produção**:
-   ```bash
-   npm run build
-   npx @tauri-apps/cli build
+   trunk serve
    ```

@@ -20,9 +20,9 @@ pub fn AgentCardNodeView(node: CanvasNode) -> impl IntoView {
     let node_id = node.id.clone();
     let node_id_del = node.id.clone();
     let node_id_toggle_view = node.id.clone();
-    let node_id_clear = node.id.clone();
+    let _node_id_clear = node.id.clone();
     let node_id_send = node.id.clone();
-    let node_id_key = node.id.clone();
+    let _node_id_key = node.id.clone();
 
     let node_data: AgentNodeData = serde_json::from_value(node.data.clone()).unwrap_or_default();
     let title = node_data.title.clone();
@@ -678,7 +678,7 @@ pub fn ArtifactNodeView(node: CanvasNode) -> impl IntoView {
 #[component]
 pub fn TerminalNodeView(node: CanvasNode) -> impl IntoView {
     let store = use_canvas_store();
-    let node_id = node.id.clone();
+    let _node_id = node.id.clone();
     let node_id_del = node.id.clone();
     let node_data: TerminalNodeData = serde_json::from_value(node.data.clone()).unwrap_or_default();
     let title = node_data.title.clone();

@@ -1,3 +1,11 @@
 #!/usr/bin/env sh
 DIR="$(cd "$(dirname "$0")" && pwd)"
-node "$DIR/cgli.cjs" "$@"
+if [ -x "$DIR/cgli-bin" ]; then
+  exec "$DIR/cgli-bin" "$@"
+elif [ -x "$DIR/../../target/release/cgli" ]; then
+  exec "$DIR/../../target/release/cgli" "$@"
+elif [ -x "$DIR/../../target/debug/cgli" ]; then
+  exec "$DIR/../../target/debug/cgli" "$@"
+else
+  exec cargo run --quiet --manifest-path "$DIR/../../Cargo.toml" --bin cgli -- "$@"
+fi

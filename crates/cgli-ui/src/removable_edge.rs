@@ -17,7 +17,7 @@ pub fn RemovableEdgeView(
 ) -> impl IntoView {
     let store = use_canvas_store();
     let is_hovered = create_rw_signal(false);
-    let edge_id = edge.id.clone();
+    let _edge_id = edge.id.clone();
     let edge_id_del = edge.id.clone();
 
     // Calculate Cubic Bezier path and midpoint
@@ -67,8 +67,8 @@ pub fn RemovableEdgeView(
             {if !is_locked {
                 view! {
                     <foreignObject
-                        x=(mid_x - 12.0)
-                        y=(mid_y - 12.0)
+                        x=mid_x - 12.0
+                        y=mid_y - 12.0
                         width="24"
                         height="24"
                         class="overflow-visible"

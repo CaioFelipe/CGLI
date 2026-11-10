@@ -438,38 +438,9 @@ fn call_vault_rpc(
     ws_override: Option<&str>,
 ) -> Result<serde_json::Value, String> {
     let ws_path = get_workspace_dir(ws_override);
-    let script_path = ws_path.join(".cgli").join("bin").join("vaultManager.cjs");
-
-    let mut cmd = std::process::Command::new("node");
-    if script_path.exists() {
-        cmd.arg(&script_path);
-    } else {
-        cmd.arg(".cgli/bin/vaultManager.cjs");
-    }
-
-    if ws_path.exists() {
-        cmd.current_dir(&ws_path);
-        cmd.env("CGLI_WORKSPACE_PATH", &ws_path);
-    }
-
-    cmd.arg("rpc").arg(method).arg(endpoint);
-
-    if let Some(b) = body {
-        cmd.arg(serde_json::to_string(b).unwrap_or_default());
-    }
-
-    let out = cmd
-        .output()
-        .map_err(|e| format!("Falha ao executar Node.js para vaultManager: {}", e))?;
-
-    let out_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if out.status.success() && !out_str.is_empty() {
-        serde_json::from_str::<serde_json::Value>(&out_str)
-            .map_err(|e| format!("Resposta JSON inválida do vaultManager: {}", e))
-    } else {
-        let err_msg = String::from_utf8_lossy(&out.stderr);
-        Err(format!("VaultManager RPC erro: {}", err_msg))
-    }
+    let empty_body = serde_json::json!({});
+    let payload = body.unwrap_or(&empty_body);
+    cgli_vault::handle_rpc(method, endpoint, payload, Some(&ws_path))
 }
 
 // Memory Mutation Handlers (Routed through Single-Writer Queue)
@@ -859,275 +830,47 @@ pub fn ensure_cgli_environment(workspace_path: &Path, port: u16) {
     let _ = fs::create_dir_all(&bin_dir);
     let _ = fs::create_dir_all(&artifacts_dir);
     let _ = fs::create_dir_all(&gemini_dir);
+    let _ = cgli_vault::ensure_vault_structure("project", Some(workspace_path));
+    let _ = cgli_vault::ensure_vault_structure("global", Some(workspace_path));
 
-    // Create cgli.cjs (universal Node.js CLI runner)
-    let cgli_js_path = bin_dir.join("cgli.cjs");
-    let cgli_js_content = format!(
-r#"#!/usr/bin/env node
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
-const {{ execSync }} = require('child_process');
-
-const port = process.env.CGLI_BRIDGE_PORT || {port};
-const nodeId = process.env.CGLI_NODE_ID || '';
-const workspacePath = process.env.CGLI_WORKSPACE_PATH || process.cwd();
-
-const args = process.argv.slice(2);
-const command = args[0];
-
-function parseArgs(argsList) {{
-  const flags = {{}};
-  for (let i = 0; i < argsList.length; i++) {{
-    const item = argsList[i];
-    if (/^--[a-zA-Z][\w-]*=/.test(item)) {{
-      const idx = item.indexOf('=');
-      flags[item.slice(2, idx)] = item.slice(idx + 1);
-    }} else if (/^--[a-zA-Z][\w-]*$/.test(item)) {{
-      const key = item.slice(2);
-      const next = argsList[i + 1];
-      if (next !== undefined && !/^--[a-zA-Z][\w-]*(=|$)/.test(next)) {{
-        flags[key] = argsList[++i];
-      }} else {{
-        flags[key] = true;
-      }}
-    }}
-  }}
-  return flags;
-}}
-
-function readStdin() {{
-  return new Promise((resolve) => {{
-    let data = '';
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('readable', () => {{
-      let chunk;
-      while ((chunk = process.stdin.read()) !== null) {{
-        data += chunk;
-      }}
-    }});
-    process.stdin.on('end', () => resolve(data));
-  }});
-}}
-
-function post(endpoint, data) {{
-  return new Promise((resolve, reject) => {{
-    const payload = JSON.stringify(data);
-    const req = http.request({{
-      hostname: '127.0.0.1',
-      port: Number(port),
-      path: endpoint,
-      method: 'POST',
-      headers: {{
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload)
-      }}
-    }}, (res) => {{
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => {{
-        try {{
-          resolve(JSON.parse(body));
-        }} catch (_) {{
-          resolve({{ raw: body }});
-        }}
-      }});
-    }});
-    req.on('error', reject);
-    req.write(payload);
-    req.end();
-  }});
-}}
-
-function get(endpoint) {{
-  return new Promise((resolve, reject) => {{
-    http.get(`http://127.0.0.1:${{port}}${{endpoint}}`, (res) => {{
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => {{
-        try {{
-          resolve(JSON.parse(body));
-        }} catch (_) {{
-          resolve({{ raw: body }});
-        }}
-      }});
-    }}).on('error', reject);
-  }});
-}}
-
-async function run() {{
-  const flags = parseArgs(args.slice(1));
-
-  switch (command) {{
-    case 'spawn-subagent': {{
-      const childType = flags.type || 'agy';
-      const role = flags.role || (childType === 'claude' ? 'planner' : 'executor');
-      const task = flags.task || '';
-      try {{
-        await post('/api/spawn-subagent', {{
-          parent_node_id: nodeId,
-          child_type: childType,
-          role,
-          task
-        }});
-        console.log(`[CGLI] Subagente ${{childType.toUpperCase()}} invocado com sucesso no canvas.`);
-      }} catch (err) {{
-        console.error(`[CGLI Erro] Falha ao invocar subagente:`, err.message);
-        process.exit(1);
-      }}
-      break;
-    }}
-
-    case 'create-artifact': {{
-      const title = flags.title || 'Documento de Artefato';
-      let content = flags.content || '';
-      if (flags.stdin) {{
-        content = await readStdin();
-      }} else if (flags.file) {{
-        const filePath = path.resolve(workspacePath, String(flags.file));
-        if (fs.existsSync(filePath)) {{
-          content = fs.readFileSync(filePath, 'utf8');
-        }} else {{
-          console.error(`[CGLI Erro] Arquivo '${{flags.file}}' não foi encontrado no workspace.`);
-          process.exit(1);
-        }}
-      }}
-      try {{
-        await post('/api/create-artifact', {{
-          parent_node_id: nodeId,
-          title,
-          content
-        }});
-        console.log(`[CGLI] Nó de artefato '${{title}}' criado com sucesso no canvas.`);
-      }} catch (err) {{
-        console.error(`[CGLI Erro] Falha ao criar artefato:`, err.message);
-        process.exit(1);
-      }}
-      break;
-    }}
-
-    case 'create-preview': {{
-      const title = flags.title || 'Preview Web';
-      let html = flags.html || '';
-      if (flags.file) {{
-        const filePath = path.resolve(workspacePath, String(flags.file));
-        if (fs.existsSync(filePath)) {{
-          html = fs.readFileSync(filePath, 'utf8');
-        }}
-      }}
-      try {{
-        await post('/api/create-preview', {{
-          parent_node_id: nodeId,
-          title,
-          html
-        }});
-        console.log(`[CGLI] Nó de preview '${{title}}' criado no canvas.`);
-      }} catch (err) {{
-        console.error(`[CGLI Erro] Falha ao criar preview:`, err.message);
-      }}
-      break;
-    }}
-
-    case 'create-diff': {{
-      const title = flags.title || 'Alterações de Código';
-      const filename = flags.file || '';
-      let diffContent = flags.content || '';
-      if (!diffContent) {{
-        try {{
-          const target = filename ? `"${{filename}}"` : '';
-          diffContent = execSync(`git diff ${{target}}`, {{ cwd: workspacePath, encoding: 'utf8' }});
-          if (!diffContent.trim() && filename) {{
-            diffContent = execSync(`git diff HEAD ${{target}}`, {{ cwd: workspacePath, encoding: 'utf8' }});
-          }}
-        }} catch (_) {{}}
-      }}
-      try {{
-        await post('/api/create-diff', {{
-          parent_node_id: nodeId,
-          title,
-          filename: filename || 'diff.patch',
-          content: diffContent
-        }});
-        console.log(`[CGLI] Nó de diff '${{title}}' criado no canvas.`);
-      }} catch (err) {{
-        console.error(`[CGLI Erro] Falha ao criar diff:`, err.message);
-      }}
-      break;
-    }}
-
-    case 'list-folders':
-    case 'folders': {{
-      try {{
-        const info = await get('/api/workspace-info');
-        console.log(`=== CGLI Workspace Info ===`);
-        console.log(`Projeto: ${{info.projectName || info.project_name || 'Projeto Atual'}}`);
-        console.log(`Diretório deste Nó: ${{workspacePath}}`);
-        if (info.folders && Array.isArray(info.folders) && info.folders.length > 0) {{
-          console.log(`Pastas do Projeto (${{info.folders.length}}):`);
-          info.folders.forEach(f => {{
-            console.log(`  • ${{f.name}}: ${{f.path}}`);
-          }});
-        }} else {{
-          console.log(`Pastas do Projeto: ${{workspacePath}}`);
-        }}
-      }} catch (err) {{
-        console.log(`Diretório deste Nó: ${{workspacePath}}`);
-      }}
-      break;
-    }}
-
-    case 'status': {{
-      try {{
-        const st = await get('/api/status');
-        console.log(`[CGLI Status] Bridge ativa na porta ${{st.port || port}}`);
-      }} catch (err) {{
-        console.error(`[CGLI Erro] Ponte indisponível:`, err.message);
-      }}
-      break;
-    }}
-
-    default: {{
-      console.log(`CGLI Canvas CLI Helper
-Uso:
-  cgli spawn-subagent --type [claude|agy] --task "Descricao" [--role planner|executor]
-  cgli create-artifact --title "Titulo" [--content "Markdown" | --file doc.md]
-  cgli create-preview --title "Titulo" [--html "HTML" | --file page.html]
-  cgli create-diff --title "Titulo" [--file src/arquivo.ts]
-  cgli list-folders
-  cgli status`);
-      break;
-    }}
-  }}
-}}
-
-run();
-"#
-    );
-
-    let should_write_cgli = match fs::read_to_string(&cgli_js_path) {
-        Ok(existing) => !existing.contains("case 'memory'"),
-        Err(_) => true,
-    };
-    if should_write_cgli {
-        write_if_changed(&cgli_js_path, &cgli_js_content);
-    }
-
-    let vault_manager_path = bin_dir.join("vaultManager.cjs");
-    if !vault_manager_path.exists() {
-        if let Ok(src_content) = fs::read_to_string(workspace_path.join(".cgli/bin/vaultManager.cjs")) {
-            write_if_changed(&vault_manager_path, &src_content);
+    // Copy compiled native cgli binary if available in target/release or target/debug
+    for profile in ["release", "debug"] {
+        let candidate_unix = workspace_path.join("target").join(profile).join("cgli");
+        if candidate_unix.is_file() {
+            let dest = bin_dir.join("cgli-bin");
+            let _ = fs::copy(&candidate_unix, &dest);
+            break;
+        }
+        let candidate_win = workspace_path.join("target").join(profile).join("cgli.exe");
+        if candidate_win.is_file() {
+            let dest = bin_dir.join("cgli.exe");
+            let _ = fs::copy(&candidate_win, &dest);
+            break;
         }
     }
 
-    // Create cgli.cmd wrapper for Windows
+    // Create cgli.cmd wrapper for Windows (invoking native Rust cgli binary)
     let cgli_cmd_path = bin_dir.join("cgli.cmd");
-    let cgli_cmd_content = "@echo off\r\nnode \"%~dp0\\cgli.cjs\" %*\r\n";
-    write_if_changed(&cgli_cmd_path, cgli_cmd_content);
+    let cgli_cmd_content = format!(
+        "@echo off\r\nif not defined CGLI_BRIDGE_PORT set CGLI_BRIDGE_PORT={port}\r\nif exist \"%~dp0\\cgli.exe\" (\r\n  \"%~dp0\\cgli.exe\" %*\r\n) else (\r\n  cargo run --quiet --manifest-path \"%~dp0\\..\\..\\Cargo.toml\" --bin cgli -- %*\r\n)\r\n"
+    );
+    write_if_changed(&cgli_cmd_path, &cgli_cmd_content);
 
-    // Create cgli sh wrapper
+    // Create cgli sh wrapper for Unix (invoking native Rust cgli binary)
     let cgli_sh_path = bin_dir.join("cgli");
-    let cgli_sh_content = "#!/usr/bin/env sh\nDIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\nnode \"$DIR/cgli.cjs\" \"$@\"\n";
-    write_if_changed(&cgli_sh_path, cgli_sh_content);
+    let cgli_sh_content = format!(
+        "#!/usr/bin/env sh\nexport CGLI_BRIDGE_PORT=\"${{CGLI_BRIDGE_PORT:-{port}}}\"\nDIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\nif [ -x \"$DIR/cgli-bin\" ]; then\n  exec \"$DIR/cgli-bin\" \"$@\"\nelse\n  exec cargo run --quiet --manifest-path \"$DIR/../../Cargo.toml\" --bin cgli -- \"$@\"\nfi\n"
+    );
+    write_if_changed(&cgli_sh_path, &cgli_sh_content);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = fs::metadata(&cgli_sh_path) {
+            let mut perms = meta.permissions();
+            perms.set_mode(0o755);
+            let _ = fs::set_permissions(&cgli_sh_path, perms);
+        }
+    }
 
     // Create .cgli/CGLI_GUIDE.md
     let guide_path = cgli_dir.join("CGLI_GUIDE.md");

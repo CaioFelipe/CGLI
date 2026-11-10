@@ -35,5 +35,8 @@ screenshot_*.png
 .cgli/vault/**/.idem-ledger.ndjson
 .cgli/context/
 
-# Rust target
+# Rust target & local compiled CLI binaries
 target/
+.cgli/bin/cgli-bin
+.cgli/bin/cgli.exe
+
