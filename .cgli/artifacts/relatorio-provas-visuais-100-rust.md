@@ -23,6 +23,17 @@ O sistema **CGLI (Canvas Agent Orchestrator)** refatorado para **100% Rust** foi
 5. **Gaveta do Stash e Menu `+ Novo Nó` (`.cgli/artifacts/screenshots/05-stash-drawer-and-menus.png`)**
    - `StashDrawer` lateral com itens arquivados (`PREVIEW`, `MEMORY`) e botão `↺ Restaurar`, junto ao menu `+ Novo Nó`.
 
+6. **Site de Demonstração Interativo (`site/index.html` e `/demo`)**
+   - Hero com **mini-canvas dinâmico arrastável**, conexões em Bézier cúbica reativas SVG e simulador passo-a-passo do ciclo de vida da orquestração.
+   - Explorador de notas do **Dual-Vault Obsidian** com busca em tempo real, visualizador de frontmatter e hash ETag.
+   - Emulador do **motor ANSI/VT100 nativo** com comandos executáveis interativos.
+   - Visualizador modular dos **6 crates Cargo Workspace** e cheat-sheet do CLI nativo.
+   - Capturas em alta resolução:
+     - `.cgli/artifacts/screenshots/06-showcase-hero-canvas-dark.png`
+     - `.cgli/artifacts/screenshots/07-showcase-hero-canvas-light.png`
+     - `.cgli/artifacts/screenshots/08-showcase-obsidian-and-terminal.png`
+     - `.cgli/artifacts/screenshots/09-showcase-crates-and-cli.png`
+
 ## 2. Resumo de Compilação e Testes
 
 - `cargo test --workspace`: **32 passed, 0 failed, 0 warnings**

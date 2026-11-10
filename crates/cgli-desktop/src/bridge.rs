@@ -69,6 +69,8 @@ pub fn create_router(state: AppState) -> Router {
         // Frontend static assets (100% Rust Leptos WASM + encre-css)
         .route("/", get(handle_index_html))
         .route("/index.html", get(handle_index_html))
+        .route("/demo", get(handle_showcase_html))
+        .route("/showcase", get(handle_showcase_html))
         .route("/favicon.svg", get(handle_favicon_svg))
         .route("/styles.css", get(handle_styles_css))
         .route("/pkg/:file", get(handle_pkg_file))
@@ -155,6 +157,18 @@ async fn handle_favicon_svg() -> Response {
         StatusCode::OK,
         [(axum::http::header::CONTENT_TYPE, "image/svg+xml")],
         svg,
+    )
+        .into_response()
+}
+
+async fn handle_showcase_html() -> Response {
+    let ws = get_workspace_dir(None);
+    let site_index = ws.join("site").join("index.html");
+    let html = fs::read_to_string(&site_index).unwrap_or_default();
+    (
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        html,
     )
         .into_response()
 }
