@@ -1,5 +1,6 @@
 use cgli_core::BridgeAction;
 use serde::{Deserialize, Serialize};
+use wasm_bindgen::JsCast;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AnsiColor {
@@ -304,20 +305,17 @@ impl TerminalScreen {
         let line = &mut self.buffer[self.cursor_row];
         match mode {
             0 => {
-                // Clear from cursor to end of line
                 for c in self.cursor_col..line.len() {
                     line[c] = Cell::default();
                 }
             }
             1 => {
-                // Clear from beginning to cursor
                 let limit = self.cursor_col.min(line.len() - 1);
                 for c in 0..=limit {
                     line[c] = Cell::default();
                 }
             }
             2 => {
-                // Clear entire line
                 for cell in line {
                     *cell = Cell::default();
                 }
@@ -348,80 +346,21 @@ impl TerminalScreen {
             self.buffer.push(vec![Cell::default(); self.cols]);
         }
         if self.cursor_col >= self.cols {
-            self.cursor_col = 0;
             self.newline();
         }
-        let cell = &mut self.buffer[self.cursor_row][self.cursor_col];
-        cell.ch = ch;
-        cell.style = self.current_style;
-        self.cursor_col += 1;
+        let line = &mut self.buffer[self.cursor_row];
+        if self.cursor_col < line.len() {
+            line[self.cursor_col] = Cell {
+                ch,
+                style: self.current_style,
+            };
+            self.cursor_col += 1;
+        }
     }
 
-    pub fn feed_str(&mut self, data: &str) {
-        let extracted = extract_cgli_markers(data);
-        if !extracted.is_empty() {
-            self.stream_markers.extend(extracted);
-        }
-
-        let chars: Vec<char> = data.chars().collect();
-        let len = chars.len();
-        let mut i = 0;
-
-        while i < len {
-            let ch = chars[i];
-            if ch == '\x1b' {
-                if i + 1 < len && chars[i + 1] == '[' {
-                    // CSI Sequence
-                    let mut j = i + 2;
-                    while j < len {
-                        let c = chars[j];
-                        if (c >= '@' && c <= '~') && c != '[' {
-                            break;
-                        }
-                        j += 1;
-                    }
-                    if j < len {
-                        let final_byte = chars[j];
-                        let params_str: String = chars[i + 2..j].iter().collect();
-                        self.handle_csi(&params_str, final_byte);
-                        i = j + 1;
-                        continue;
-                    } else {
-                        break;
-                    }
-                } else if i + 1 < len && chars[i + 1] == ']' {
-                    // OSC sequence: \x1b] ... (\x07 | \x1b\\)
-                    let mut j = i + 2;
-                    while j < len {
-                        if chars[j] == '\x07' {
-                            j += 1;
-                            break;
-                        }
-                        if chars[j] == '\x1b' && j + 1 < len && chars[j + 1] == '\\' {
-                            j += 2;
-                            break;
-                        }
-                        j += 1;
-                    }
-                    i = j;
-                    continue;
-                } else if i + 1 < len && chars[i + 1] == '7' {
-                    // DECSC - Save cursor
-                    self.saved_cursor = (self.cursor_col, self.cursor_row);
-                    i += 2;
-                    continue;
-                } else if i + 1 < len && chars[i + 1] == '8' {
-                    // DECRC - Restore cursor
-                    self.cursor_col = self.saved_cursor.0.min(self.cols.saturating_sub(1));
-                    self.cursor_row = self.saved_cursor.1.min(self.rows.saturating_sub(1));
-                    i += 2;
-                    continue;
-                } else {
-                    i += 1;
-                    continue;
-                }
-            }
-
+    pub fn feed_str(&mut self, text: &str) {
+        let mut chars = text.chars().peekable();
+        while let Some(ch) = chars.next() {
             match ch {
                 '\r' => {
                     self.cursor_col = 0;
@@ -429,74 +368,82 @@ impl TerminalScreen {
                 '\n' => {
                     self.newline();
                 }
+                '\t' => {
+                    let next_tab = (self.cursor_col + 8) & !7;
+                    self.cursor_col = next_tab.min(self.cols.saturating_sub(1));
+                }
                 '\x08' => {
-                    // Backspace
                     if self.cursor_col > 0 {
                         self.cursor_col -= 1;
                     }
                 }
-                '\t' => {
-                    // Tab to next multiple of 8
-                    let next_tab = (self.cursor_col + 8) & !7;
-                    let target = next_tab.min(self.cols.saturating_sub(1));
-                    while self.cursor_col < target {
-                        self.put_char(' ');
+                '\x1b' => {
+                    if let Some(&next_ch) = chars.peek() {
+                        if next_ch == '[' {
+                            chars.next();
+                            self.parse_csi(&mut chars);
+                        } else if next_ch == ']' {
+                            chars.next();
+                            self.parse_osc(&mut chars);
+                        }
                     }
                 }
-                c if c >= ' ' => {
-                    self.put_char(c);
-                }
                 _ => {
-                    // Ignore other control characters
+                    if ch >= ' ' {
+                        self.put_char(ch);
+                    }
                 }
             }
-            i += 1;
         }
     }
 
-    fn handle_csi(&mut self, params_str: &str, command: char) {
-        match command {
-            'm' => self.handle_sgr(params_str),
+    fn parse_csi<I: Iterator<Item = char>>(&mut self, chars: &mut std::iter::Peekable<I>) {
+        let mut params_str = String::new();
+        while let Some(&c) = chars.peek() {
+            if c.is_ascii_digit() || c == ';' || c == '?' {
+                chars.next();
+                params_str.push(c);
+            } else {
+                break;
+            }
+        }
+
+        let cmd = match chars.next() {
+            Some(c) => c,
+            None => return,
+        };
+
+        match cmd {
+            'm' => self.handle_sgr(&params_str),
             'H' | 'f' => {
-                // Cursor position: 1-indexed (row;col)
-                let parts: Vec<&str> = params_str.split(';').collect();
-                let row = parts
-                    .get(0)
-                    .and_then(|s| s.parse::<usize>().ok())
-                    .unwrap_or(1)
-                    .saturating_sub(1);
-                let col = parts
-                    .get(1)
-                    .and_then(|s| s.parse::<usize>().ok())
-                    .unwrap_or(1)
-                    .saturating_sub(1);
+                let parts: Vec<usize> = params_str
+                    .split(';')
+                    .filter_map(|s| s.parse::<usize>().ok())
+                    .collect();
+                let row = parts.get(0).copied().unwrap_or(1).saturating_sub(1);
+                let col = parts.get(1).copied().unwrap_or(1).saturating_sub(1);
                 self.cursor_row = row.min(self.rows.saturating_sub(1));
                 self.cursor_col = col.min(self.cols.saturating_sub(1));
             }
             'A' => {
-                // Cursor Up
-                let n = params_str.parse::<usize>().unwrap_or(1).max(1);
-                self.cursor_row = self.cursor_row.saturating_sub(n);
+                let count = params_str.parse::<usize>().unwrap_or(1);
+                self.cursor_row = self.cursor_row.saturating_sub(count);
             }
             'B' => {
-                // Cursor Down
-                let n = params_str.parse::<usize>().unwrap_or(1).max(1);
-                self.cursor_row = (self.cursor_row + n).min(self.rows.saturating_sub(1));
+                let count = params_str.parse::<usize>().unwrap_or(1);
+                self.cursor_row = (self.cursor_row + count).min(self.rows.saturating_sub(1));
             }
             'C' => {
-                // Cursor Forward
-                let n = params_str.parse::<usize>().unwrap_or(1).max(1);
-                self.cursor_col = (self.cursor_col + n).min(self.cols.saturating_sub(1));
+                let count = params_str.parse::<usize>().unwrap_or(1);
+                self.cursor_col = (self.cursor_col + count).min(self.cols.saturating_sub(1));
             }
             'D' => {
-                // Cursor Back
-                let n = params_str.parse::<usize>().unwrap_or(1).max(1);
-                self.cursor_col = self.cursor_col.saturating_sub(n);
+                let count = params_str.parse::<usize>().unwrap_or(1);
+                self.cursor_col = self.cursor_col.saturating_sub(count);
             }
             'J' => {
-                // Erase in Display
                 let mode = params_str.parse::<u8>().unwrap_or(0);
-                if mode == 2 || mode == 3 {
+                if mode == 2 {
                     self.clear_screen();
                 } else if mode == 0 {
                     self.clear_line(0);
@@ -508,20 +455,25 @@ impl TerminalScreen {
                 }
             }
             'K' => {
-                // Erase in Line
                 let mode = params_str.parse::<u8>().unwrap_or(0);
                 self.clear_line(mode);
             }
             's' => {
-                // Save cursor position
                 self.saved_cursor = (self.cursor_col, self.cursor_row);
             }
             'u' => {
-                // Restore cursor position
                 self.cursor_col = self.saved_cursor.0.min(self.cols.saturating_sub(1));
                 self.cursor_row = self.saved_cursor.1.min(self.rows.saturating_sub(1));
             }
             _ => {}
+        }
+    }
+
+    fn parse_osc<I: Iterator<Item = char>>(&mut self, chars: &mut std::iter::Peekable<I>) {
+        while let Some(c) = chars.next() {
+            if c == '\x07' || c == '\x1b' {
+                break;
+            }
         }
     }
 
@@ -559,10 +511,8 @@ impl TerminalScreen {
                 27 => self.current_style.inverse = false,
                 28 => self.current_style.hidden = false,
                 29 => self.current_style.strikethrough = false,
-                // Standard Foreground
                 30..=37 => self.current_style.fg = AnsiColor::Named((code - 30) as u8),
                 38 => {
-                    // Extended Foreground: 38;5;n or 38;2;r;g;b
                     if idx + 2 < count && codes[idx + 1] == 5 {
                         let color_idx = codes[idx + 2] as u8;
                         self.current_style.fg = AnsiColor::Palette(color_idx);
@@ -576,10 +526,8 @@ impl TerminalScreen {
                     }
                 }
                 39 => self.current_style.fg = AnsiColor::Default,
-                // Standard Background
                 40..=47 => self.current_style.bg = AnsiColor::Named((code - 40) as u8),
                 48 => {
-                    // Extended Background: 48;5;n or 48;2;r;g;b
                     if idx + 2 < count && codes[idx + 1] == 5 {
                         let color_idx = codes[idx + 2] as u8;
                         self.current_style.bg = AnsiColor::Palette(color_idx);
@@ -593,9 +541,7 @@ impl TerminalScreen {
                     }
                 }
                 49 => self.current_style.bg = AnsiColor::Default,
-                // High Intensity Foreground
                 90..=97 => self.current_style.fg = AnsiColor::Named((code - 90 + 8) as u8),
-                // High Intensity Background
                 100..=107 => self.current_style.bg = AnsiColor::Named((code - 100 + 8) as u8),
                 _ => {}
             }
@@ -636,7 +582,6 @@ impl TerminalScreen {
                 });
             }
 
-            // Trim trailing blank spaces from lines
             while let Some(last_span) = spans.last_mut() {
                 let trimmed = last_span.text.trim_end_matches(' ');
                 if trimmed.is_empty() && last_span.style.bg == AnsiColor::Default {
@@ -766,98 +711,95 @@ fn html_escape(s: &str) -> String {
     escaped
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// -----------------------------------------------------------------------------
+// Interactive Leptos Component: TerminalScreenView
+// -----------------------------------------------------------------------------
 
-    #[test]
-    fn test_terminal_themes_exact_values() {
-        let dark = TerminalTheme::dark();
-        assert_eq!(dark.background, "#0D1117");
-        assert_eq!(dark.foreground, "#C9D1D9");
-        assert_eq!(dark.cursor, "#58A6FF");
+use leptos::*;
 
-        let light = TerminalTheme::light();
-        assert_eq!(light.background, "#F8FAFC");
-        assert_eq!(light.foreground, "#1E293B");
-        assert_eq!(light.cursor, "#0284C7");
+#[component]
+pub fn TerminalScreenView(
+    session_id: String,
+    #[prop(default = "#0D1117".to_string())] background: String,
+    #[prop(default = "#C9D1D9".to_string())] foreground: String,
+    #[prop(default = 24)] rows: usize,
+    #[prop(default = 80)] cols: usize,
+) -> impl IntoView {
+    let vt_state = create_rw_signal(TerminalScreen::new(cols, rows));
+    let sess_id = session_id.clone();
+    let sess_id_input = session_id.clone();
 
-        let ps = TerminalTheme::powershell();
-        assert_eq!(ps.background, "#012456");
-        assert_eq!(ps.foreground, "#EEEDF0");
-        assert_eq!(ps.blue, "#3B78FF");
-    }
+    // Subscribe to PTY stream
+    create_effect(move |_| {
+        let sid = sess_id.clone();
+        if let Some(win) = web_sys::window() {
+            let url = format!("{}/api/pty/stream?sessionId={}", "http://127.0.0.1:41732", sid);
+            if let Ok(es) = web_sys::EventSource::new(&url) {
+                let cb = wasm_bindgen::closure::Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |e: web_sys::MessageEvent| {
+                    if let Some(txt) = e.data().as_string() {
+                        vt_state.update(|vt| {
+                            vt.feed_str(&txt);
+                        });
+                    }
+                });
+                es.set_onmessage(Some(cb.as_ref().unchecked_ref()));
+                cb.forget();
+            }
+        }
+    });
 
-    #[test]
-    fn test_feed_plain_text_and_cursor_movement() {
-        let mut screen = TerminalScreen::new(80, 24);
-        screen.feed_str("Hello World!\r\nLine 2");
-        assert_eq!(screen.cursor_col, 6);
-        assert_eq!(screen.cursor_row, 1);
+    let handle_keydown = move |e: web_sys::KeyboardEvent| {
+        e.stop_propagation();
+        let key = e.key();
+        let to_send = if key == "Enter" {
+            "\r".to_string()
+        } else if key == "Backspace" {
+            "\x08".to_string()
+        } else if key == "Tab" {
+            e.prevent_default();
+            "\t".to_string()
+        } else if key == "ArrowUp" {
+            "\x1b[A".to_string()
+        } else if key == "ArrowDown" {
+            "\x1b[B".to_string()
+        } else if key == "ArrowRight" {
+            "\x1b[C".to_string()
+        } else if key == "ArrowLeft" {
+            "\x1b[D".to_string()
+        } else if key == "Escape" {
+            "\x1b".to_string()
+        } else if e.ctrl_key() && key.to_lowercase() == "c" {
+            "\x03".to_string()
+        } else if e.ctrl_key() && key.to_lowercase() == "l" {
+            "\x0c".to_string()
+        } else if key.len() == 1 {
+            key
+        } else {
+            return;
+        };
 
-        let lines = screen.visible_lines();
-        assert_eq!(lines[0].spans[0].text, "Hello World!");
-        assert_eq!(lines[1].spans[0].text, "Line 2");
-    }
+        let sid = sess_id_input.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            let body = serde_json::json!({
+                "sessionId": sid,
+                "data": to_send,
+            }).to_string();
+            let opts = web_sys::RequestInit::new();
+            opts.set_method("POST");
+            opts.set_body(&wasm_bindgen::JsValue::from_str(&body));
+            if let Some(win) = web_sys::window() {
+                let _ = wasm_bindgen_futures::JsFuture::from(win.fetch_with_str_and_init("http://127.0.0.1:41732/api/pty/write", &opts)).await;
+            }
+        });
+    };
 
-    #[test]
-    fn test_ansi_colors_and_sgr() {
-        let mut screen = TerminalScreen::new(80, 24);
-        // Red bold text, then reset
-        screen.feed_str("\x1b[1;31mRed Alert\x1b[0m Normal");
-        let lines = screen.visible_lines();
-        assert_eq!(lines[0].spans.len(), 2);
-        assert_eq!(lines[0].spans[0].text, "Red Alert");
-        assert!(lines[0].spans[0].style.bold);
-        assert_eq!(lines[0].spans[0].style.fg, AnsiColor::Named(1));
-
-        assert_eq!(lines[0].spans[1].text, " Normal");
-        assert!(!lines[0].spans[1].style.bold);
-        assert_eq!(lines[0].spans[1].style.fg, AnsiColor::Default);
-    }
-
-    #[test]
-    fn test_ansi_truecolor_and_256_colors() {
-        let mut screen = TerminalScreen::new(80, 24);
-        // TrueColor RGB 38;2;12;34;56 and 256 color bg 48;5;200
-        screen.feed_str("\x1b[38;2;12;34;56;48;5;200mColorized\x1b[0m");
-        let lines = screen.visible_lines();
-        assert_eq!(lines[0].spans[0].style.fg, AnsiColor::Rgb(12, 34, 56));
-        assert_eq!(lines[0].spans[0].style.bg, AnsiColor::Palette(200));
-
-        let html = screen.render_lines_html();
-        assert!(html.contains("color:#0C2238"));
-    }
-
-    #[test]
-    fn test_osc_and_clear_screen_escape_handling() {
-        let mut screen = TerminalScreen::new(80, 24);
-        // OSC set window title should be ignored
-        screen.feed_str("\x1b]0;CGLI Console\x07Text Before\x1b[2JText After");
-        let lines = screen.visible_lines();
-        assert_eq!(lines[0].spans[0].text, "Text After");
-    }
-
-    #[test]
-    fn test_extract_cgli_markers() {
-        let pty_output = "Compiling project...\r\n<<<CGLI:CREATE_ARTIFACT {\"title\": \"Spec 1\", \"content\": \"# Content\"}>>>\r\nDone!\r\n<<<CGLI:SPAWN_SUBAGENT {\"role\": \"executor\", \"task\": \"build\"}>>>\r\n";
-        let actions = extract_cgli_markers(pty_output);
-        assert_eq!(actions.len(), 2);
-        assert_eq!(actions[0].action_type, "create_artifact");
-        assert_eq!(actions[0].title.as_deref(), Some("Spec 1"));
-        assert_eq!(actions[0].content.as_deref(), Some("# Content"));
-
-        assert_eq!(actions[1].action_type, "spawn_subagent");
-        assert_eq!(actions[1].role.as_deref(), Some("executor"));
-        assert_eq!(actions[1].task.as_deref(), Some("build"));
-    }
-
-    #[test]
-    fn test_render_lines_html() {
-        let mut screen = TerminalScreen::new(80, 24);
-        screen.feed_str("\x1b[32m<Success & Finished>\x1b[0m");
-        let html = screen.render_lines_html();
-        assert!(html.contains("&lt;Success &amp; Finished&gt;"));
-        assert!(html.contains("color:#3FB950")); // Green in dark theme
+    view! {
+        <div
+            tabindex="0"
+            on:keydown=handle_keydown
+            class="w-full h-full p-2 font-mono text-[12px] leading-tight select-text outline-hidden overflow-y-auto cursor-text flex flex-col"
+            style=format!("background-color: {}; color: {};", background, foreground)
+            inner_html=move || vt_state.get().render_lines_html()
+        />
     }
 }

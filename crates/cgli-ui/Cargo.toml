@@ -1,0 +1,64 @@
+[package]
+name = "cgli-ui"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "cgli_ui"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cgli-ui-app"
+path = "src/main.rs"
+
+[dependencies]
+cgli-core.workspace = true
+cgli-pty-vt.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+leptos = { version = "0.6", features = ["csr"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Document",
+    "Element",
+    "HtmlElement",
+    "HtmlDivElement",
+    "HtmlInputElement",
+    "HtmlTextAreaElement",
+    "HtmlCanvasElement",
+    "HtmlIFrameElement",
+    "CanvasRenderingContext2d",
+    "SvgElement",
+    "SvgsvgElement",
+    "DomRect",
+    "Selection",
+    "Range",
+    "Node",
+    "NodeList",
+    "TreeWalker",
+    "Storage",
+    "MouseEvent",
+    "KeyboardEvent",
+    "WheelEvent",
+    "ClipboardEvent",
+    "DataTransfer",
+    "DataTransferItem",
+    "DataTransferItemList",
+    "File",
+    "FileList",
+    "FileReader",
+    "EventSource",
+    "MessageEvent",
+    "Headers",
+    "Request",
+    "RequestInit",
+    "Response",
+    "Clipboard",
+    "Navigator",
+] }
+pulldown-cmark = "0.10"

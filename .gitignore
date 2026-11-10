@@ -35,4 +35,5 @@ screenshot_*.png
 .cgli/vault/**/.idem-ledger.ndjson
 .cgli/context/
 
-
+# Rust target
+target/

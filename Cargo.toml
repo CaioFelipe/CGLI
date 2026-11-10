@@ -1,0 +1,31 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/cgli-core",
+    "crates/cgli-vault",
+    "crates/cgli-cli",
+    "crates/cgli-pty-vt",
+    "crates/cgli-desktop",
+    "crates/cgli-ui",
+]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+license = "MIT"
+authors = ["CGLI Team"]
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+log = "0.4"
+sha2 = "0.10"
+regex = "1.10"
+chrono = { version = "0.4", features = ["serde"] }
+base64 = "0.22"
+uuid = { version = "1.8", features = ["v4", "serde", "js"] }
+thiserror = "1.0"
+cgli-core = { path = "crates/cgli-core" }
+cgli-vault = { path = "crates/cgli-vault" }
+cgli-pty-vt = { path = "crates/cgli-pty-vt" }
