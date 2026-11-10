@@ -1,0 +1,15 @@
+# Trunk.toml configuration for CGLI (Leptos CSR / WASM)
+[build]
+target = "index.html"
+dist = "dist"
+
+[watch]
+watch = [
+    "crates/cgli-ui",
+    "styles",
+]
+
+[serve]
+address = "127.0.0.1"
+port = 1420
+open = false
