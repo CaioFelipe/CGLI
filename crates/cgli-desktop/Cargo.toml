@@ -25,6 +25,7 @@ axum = "0.7"
 tower-http = { version = "0.5", features = ["cors"] }
 futures-util = "0.3.34"
 async-stream = "0.3.6"
+encre-css = "0.21.1"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

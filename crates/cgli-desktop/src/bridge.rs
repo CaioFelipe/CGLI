@@ -66,6 +66,12 @@ pub fn create_router(state: AppState) -> Router {
         .allow_headers(Any);
 
     Router::new()
+        // Frontend static assets (100% Rust Leptos WASM + encre-css)
+        .route("/", get(handle_index_html))
+        .route("/index.html", get(handle_index_html))
+        .route("/favicon.svg", get(handle_favicon_svg))
+        .route("/styles.css", get(handle_styles_css))
+        .route("/pkg/:file", get(handle_pkg_file))
         // Status
         .route("/api/status", get(handle_status))
         // Bridge Action endpoints
@@ -107,6 +113,90 @@ pub fn create_router(state: AppState) -> Router {
         .layer(cors)
         .with_state(state)
 }
+
+// -------------------------------------------------------------
+// Frontend Static Asset Handlers
+// -------------------------------------------------------------
+
+async fn handle_index_html() -> Response {
+    let ws = get_workspace_dir(None);
+    let dist_index = ws.join("dist").join("index.html");
+    let html = fs::read_to_string(&dist_index).unwrap_or_else(|_| {
+        r#"<!doctype html>
+<html lang="pt-BR" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CGLI — Canvas Agent Orchestrator (100% Rust)</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <script type="module">
+      import init from '/pkg/cgli-ui-app.js';
+      init();
+    </script>
+  </body>
+</html>"#
+            .to_string()
+    });
+    (
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        html,
+    )
+        .into_response()
+}
+
+async fn handle_favicon_svg() -> Response {
+    let ws = get_workspace_dir(None);
+    let svg_path = ws.join("public").join("favicon.svg");
+    let svg = fs::read_to_string(&svg_path).unwrap_or_default();
+    (
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, "image/svg+xml")],
+        svg,
+    )
+        .into_response()
+}
+
+async fn handle_styles_css() -> Response {
+    let ws = get_workspace_dir(None);
+    let dist_css = ws.join("dist").join("styles.css");
+    let css = fs::read_to_string(&dist_css).unwrap_or_default();
+    (
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        css,
+    )
+        .into_response()
+}
+
+async fn handle_pkg_file(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+    if file.contains("..") || file.contains('/') || file.contains('\\') {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    let ws = get_workspace_dir(None);
+    let file_path = ws.join("dist").join("pkg").join(&file);
+    match fs::read(&file_path) {
+        Ok(bytes) => {
+            let content_type = if file.ends_with(".wasm") {
+                "application/wasm"
+            } else if file.ends_with(".js") {
+                "application/javascript; charset=utf-8"
+            } else {
+                "application/octet-stream"
+            };
+            (
+                StatusCode::OK,
+                [(axum::http::header::CONTENT_TYPE, content_type)],
+                bytes,
+            )
+                .into_response()
+        }
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
 
 // -------------------------------------------------------------
 // Handlers
@@ -932,7 +1022,68 @@ O CGLI possui memória persistente integrada ao Obsidian dividida em dois nívei
     upsert_managed_block(&workspace_path.join(".gemini").join("GEMINI.md"), guide_content);
     upsert_managed_block(&workspace_path.join("AGENTS.md"), guide_content);
     upsert_managed_block(&workspace_path.join("AGY.md"), guide_content);
+
+    ensure_frontend_assets(workspace_path);
 }
+
+pub fn ensure_frontend_assets(workspace_path: &Path) {
+    let dist_dir = workspace_path.join("dist");
+    let _ = fs::create_dir_all(dist_dir.join("pkg"));
+
+    // 1. Collect all Rust UI source files for encre-css scanning
+    let mut sources = Vec::new();
+    for dir in [
+        workspace_path.join("crates").join("cgli-ui").join("src"),
+        workspace_path.join("crates").join("cgli-pty-vt").join("src"),
+    ] {
+        if let Ok(entries) = fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.extension().and_then(|e| e.to_str()) == Some("rs") {
+                    if let Ok(content) = fs::read_to_string(&p) {
+                        sources.push(content);
+                    }
+                }
+            }
+        }
+    }
+
+    if !sources.is_empty() {
+        let mut config = encre_css::Config::default();
+        config.theme.dark_mode = encre_css::config::DarkMode::new_class(".dark");
+        let source_refs: Vec<&str> = sources.iter().map(|s| s.as_str()).collect();
+        let generated_tailwind = encre_css::generate(source_refs.into_iter(), &config);
+
+        let custom_css = fs::read_to_string(workspace_path.join("styles").join("index.css"))
+            .unwrap_or_default()
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("@import") && !l.trim_start().starts_with("@custom-variant"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let full_css = format!("{}\n\n/* --- CGLI Custom Variables & Base Styles --- */\n{}", generated_tailwind, custom_css);
+        write_if_changed(&dist_dir.join("styles.css"), &full_css);
+    }
+
+    let index_html = r#"<!doctype html>
+<html lang="pt-BR" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CGLI — Canvas Agent Orchestrator (100% Rust)</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <script type="module">
+      import init from '/pkg/cgli-ui-app.js';
+      init();
+    </script>
+  </body>
+</html>
+"#;
+    write_if_changed(&dist_dir.join("index.html"), index_html);
+}
+
 
 pub async fn start_bridge_server(
     state: AppState,

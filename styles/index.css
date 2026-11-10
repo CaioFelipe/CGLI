@@ -104,3 +104,16 @@ html, body, #root {
 .terminal-container .xterm-viewport {
   overflow-y: auto !important;
 }
+
+/* Arbitrary hex colors with opacity modifiers for encre-css compatibility */
+.bg-\[\#0D1117\]\/80 { background-color: rgba(13, 17, 23, 0.8); }
+.bg-\[\#0D1117\]\/95 { background-color: rgba(13, 17, 23, 0.95); }
+.bg-\[\#161B22\]\/90 { background-color: rgba(22, 27, 34, 0.9); }
+.bg-\[\#161B22\]\/95 { background-color: rgba(22, 27, 34, 0.95); }
+.border-\[\#0078D4\]\/40 { border-color: rgba(0, 120, 212, 0.4); }
+.border-\[\#0078D4\]\/60 { border-color: rgba(0, 120, 212, 0.6); }
+.hover\:bg-\[\#0078D4\]\/40:hover { background-color: rgba(0, 120, 212, 0.4); }
+.dark .dark\:bg-\[\#0B0F17\]\/95 { background-color: rgba(11, 15, 23, 0.95); }
+.dark .dark\:bg-\[\#0D1117\]\/95 { background-color: rgba(13, 17, 23, 0.95); }
+.dark .dark\:bg-\[\#080C14\]\/60 { background-color: rgba(8, 12, 20, 0.6); }
+.dark .dark\:bg-\[\#161B22\]\/80 { background-color: rgba(22, 27, 34, 0.8); }

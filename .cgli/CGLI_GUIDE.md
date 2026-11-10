@@ -43,20 +43,7 @@ O CGLI possui memória persistente integrada ao Obsidian dividida em dois nívei
   `cgli memory note --scope global --type learning --title "Convenção" --content "Conteúdo"`
 - **Listar notas de memória salvas:**
   `cgli memory list [--scope project|global] [--type decision]`
-- **Recuperação Contextual e Busca Semântica:**
-  `cgli memory search "termo" [--scope all|project|global]`
-  `cgli memory context --for "tarefa a realizar" [--budget-tokens 3000]`
-- **Diagnóstico e Integridade do Cofre (Doctor):**
-  `cgli memory doctor [--scope all|project|global]`
-- **Compactação e Curadoria de Journals:**
-  `cgli memory compact [--scope project|global] [--dry-run]`
-- **Map of Content (MOC):**
-  `cgli memory moc [--scope project|global] [--update]`
-- **Proteção Anti-Vazamento (Secret Scanner):**
-  O CGLI intercepta e redige automaticamente chaves de API (`sk-...`, `AIzaSy...`, `ghp_...`), senhas e JWTs para `[REDACTED_SECRET]` antes da gravação em disco.
 - **Consultar conteúdo de uma nota:**
   `cgli memory get <id_ou_nome>`
 - **Abrir o Vault no aplicativo Obsidian:**
   `cgli memory open [--scope project|global]`
-
-
