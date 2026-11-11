@@ -6,7 +6,7 @@
   <title>CGLI — Orquestre Agentes de IA com Controle Total</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <style>
-    /* Modern Reset & Studio Clean Tokens */
+    /* Modern Reset & Studio Clean System (Linear / Zed Style) */
     *, *::before, *::after {
       box-sizing: border-box;
       margin: 0;
@@ -14,66 +14,60 @@
     }
 
     :root {
-      --bg-base: #08090C;
-      --bg-surface: #0E1017;
-      --bg-surface-hover: #151822;
-      --bg-header: #12141D;
+      --bg-base: #0B0D13;
+      --bg-surface: #11141E;
+      --bg-surface-elevated: #161A26;
+      --bg-header: rgba(14, 17, 26, 0.88);
       --border-subtle: rgba(255, 255, 255, 0.08);
       --border-focus: rgba(255, 255, 255, 0.2);
-      --text-primary: #F3F4F6;
-      --text-secondary: #9CA3AF;
-      --text-muted: #6B7280;
-      --canvas-dot: #1A1D29;
       
-      /* Semantic Functional Accents */
-      --accent-planner: #EA580C;
-      --accent-executor: #0284C7;
+      --text-main: #F4F5F7;
+      --text-secondary: #9DA3AF;
+      --text-muted: #646A7A;
+      
+      --canvas-dot: #1E2333;
+      --accent-claude: #EA580C;
+      --accent-agy: #0284C7;
       --accent-plan: #6366F1;
       --accent-memory: #10B981;
       --accent-diff: #F43F5E;
       --accent-amber: #F59E0B;
       
-      --shadow-elevation: 0 20px 45px rgba(0, 0, 0, 0.6);
+      --shadow-window: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
+      --shadow-card: 0 10px 30px -5px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
     }
 
     html.light {
       --bg-base: #F8FAFC;
       --bg-surface: #FFFFFF;
-      --bg-surface-hover: #F1F5F9;
-      --bg-header: #FFFFFF;
+      --bg-surface-elevated: #F1F5F9;
+      --bg-header: rgba(255, 255, 255, 0.92);
       --border-subtle: #E2E8F0;
       --border-focus: #94A3B8;
-      --text-primary: #0F172A;
+      
+      --text-main: #0F172A;
       --text-secondary: #475569;
       --text-muted: #64748B;
+      
       --canvas-dot: #CBD5E1;
-      
-      --accent-planner: #EA580C;
-      --accent-executor: #0284C7;
-      --accent-plan: #4F46E5;
-      --accent-memory: #059669;
-      --accent-diff: #E11D48;
-      --accent-amber: #D97706;
-      
-      --shadow-elevation: 0 15px 35px rgba(148, 163, 184, 0.2);
+      --shadow-window: 0 20px 45px -10px rgba(148, 163, 184, 0.3), 0 0 0 1px #CBD5E1;
+      --shadow-card: 0 8px 25px -4px rgba(148, 163, 184, 0.25), inset 0 1px 0 0 #FFFFFF;
     }
 
     body {
       background-color: var(--bg-base);
-      color: var(--text-primary);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Geist", "Inter", sans-serif;
       overflow-x: hidden;
       line-height: 1.5;
-      transition: background-color 0.2s ease, color 0.2s ease;
+      background-image: radial-gradient(ellipse 80% 40% at 50% -10%, rgba(99, 102, 241, 0.14), transparent);
     }
 
-    .canvas-dots {
-      background-image: radial-gradient(var(--canvas-dot) 1.2px, transparent 1.2px);
-      background-size: 24px 24px;
-    }
-
-    .max-w-6xl { max-width: 1160px; margin-left: auto; margin-right: auto; }
-    .max-w-5xl { max-width: 1020px; margin-left: auto; margin-right: auto; }
+    /* Container Utilities */
+    .max-w-6xl { max-width: 1180px; margin-left: auto; margin-right: auto; }
+    .max-w-5xl { max-width: 1040px; margin-left: auto; margin-right: auto; }
+    .max-w-4xl { max-width: 860px; margin-left: auto; margin-right: auto; }
+    .max-w-2xl { max-width: 680px; margin-left: auto; margin-right: auto; }
     .px-4 { padding-left: 1.25rem; padding-right: 1.25rem; }
     .px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
 
@@ -92,18 +86,17 @@
     .gap-4 { gap: 1rem; }
     .gap-6 { gap: 1.5rem; }
     .gap-8 { gap: 2rem; }
-    .gap-10 { gap: 2.5rem; }
 
-    .hidden { display: none; }
     .grid { display: grid; }
     .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+    .hidden { display: none; }
+
     @media (min-width: 768px) {
       .md\:flex { display: flex; }
       .md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .md\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .md\:grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
       .md\:flex-row { flex-direction: row; }
-      .md\:items-end { align-items: flex-end; }
     }
 
     /* Typography */
@@ -123,6 +116,7 @@
     .tracking-tight { letter-spacing: -0.025em; }
     .tracking-wider { letter-spacing: 0.05em; }
     .uppercase { text-transform: uppercase; }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     /* Surface & Borders */
     .rounded-md { border-radius: 0.375rem; }
@@ -133,40 +127,50 @@
     .border { border-width: 1px; border-style: solid; border-color: var(--border-subtle); }
     .border-b { border-bottom-width: 1px; border-bottom-style: solid; border-color: var(--border-subtle); }
     .border-t { border-top-width: 1px; border-top-style: solid; border-color: var(--border-subtle); }
+    .border-l { border-left-width: 1px; border-left-style: solid; border-color: var(--border-subtle); }
 
-    /* Colors */
-    .text-muted { color: var(--text-muted); }
+    /* Custom Colors */
+    .text-main { color: var(--text-main); }
     .text-secondary { color: var(--text-secondary); }
-    .text-primary { color: var(--text-primary); }
-    .text-emerald { color: #10B981; }
-    .text-sky { color: #0284C7; }
-    .text-amber { color: #F59E0B; }
-    .text-rose { color: #F43F5E; }
-    .text-indigo { color: #6366F1; }
+    .text-muted { color: var(--text-muted); }
+    .text-indigo-400 { color: #818CF8; }
+    .text-emerald-400 { color: #34D399; }
+    .text-sky-400 { color: #38BDF8; }
+    .text-amber-400 { color: #FBBF24; }
+    .text-orange-500 { color: #F97316; }
+    .text-red-400 { color: #F87171; }
 
-    kbd {
-      font-family: ui-monospace, monospace;
-      font-size: 11px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid var(--border-subtle);
-      color: var(--text-secondary);
+    .canvas-grid {
+      background-image: radial-gradient(var(--canvas-dot) 1.2px, transparent 1.2px);
+      background-size: 24px 24px;
     }
 
-    /* Highlight anchor in plan */
-    .text-anchor-highlight {
-      background-color: rgba(245, 158, 11, 0.25);
+    .studio-window {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      box-shadow: var(--shadow-window);
+      border-radius: 1rem;
+    }
+
+    .studio-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      box-shadow: var(--shadow-card);
+      border-radius: 0.75rem;
+    }
+
+    .text-anchor-hl {
+      background-color: rgba(245, 158, 11, 0.22);
       border-bottom: 2px solid var(--accent-amber);
       padding: 1px 4px;
       border-radius: 3px;
       font-weight: 600;
+      color: #FDE68A;
     }
 
-    /* Animated connector edge */
-    .edge-active {
+    .edge-flow {
       stroke-dasharray: 6 6;
-      animation: dash 1.2s linear infinite;
+      animation: dash 1s linear infinite;
     }
     @keyframes dash {
       to { stroke-dashoffset: -24; }
@@ -178,55 +182,56 @@
 <body class="antialiased">
 
   <!-- ========================================================================= -->
-  <!-- 1. TOP NAVIGATION -->
+  <!-- 1. STICKY GLASS HEADER -->
   <!-- ========================================================================= -->
   <nav style="position: sticky; top: 0; z-index: 50; width: 100%; border-bottom: 1px solid var(--border-subtle); background: var(--bg-header); backdrop-filter: blur(16px);">
-    <div class="max-w-6xl px-4 flex items-center justify-between" style="height: 58px;">
+    <div class="max-w-6xl px-4 flex items-center justify-between" style="height: 56px;">
       
       <!-- Brand -->
-      <a href="#hero" class="flex items-center gap-2.5" style="text-decoration: none;">
-        <svg width="28" height="28" viewBox="0 0 32 32" fill="none" style="flex-shrink: 0; border-radius: 6px;">
+      <a href="#hero" class="flex items-center gap-2" style="text-decoration: none;">
+        <svg width="26" height="26" viewBox="0 0 32 32" fill="none" style="flex-shrink: 0;">
           <defs>
-            <linearGradient id="cgli-brand" x1="0%" y1="0%" x2="100%" y2="100%">
+            <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stop-color="#4F46E5" />
               <stop offset="100%" stop-color="#0284C7" />
             </linearGradient>
           </defs>
-          <rect width="32" height="32" rx="7" fill="url(#cgli-brand)" />
-          <path d="M9 16 L16 10 L23 16 L16 22 Z" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" />
+          <rect width="32" height="32" rx="7" fill="url(#brandGrad)" />
+          <path d="M9 16 L16 10 L23 16 L16 22 Z" stroke="rgba(255,255,255,0.4)" stroke-width="1.6" />
           <circle cx="16" cy="16" r="3.2" fill="#FFFFFF" />
           <circle cx="9" cy="16" r="2.2" fill="#FB923C" />
           <circle cx="23" cy="16" r="2.2" fill="#38BDF8" />
         </svg>
         <div class="flex items-center gap-2">
-          <span class="font-bold text-base tracking-tight text-primary">CGLI</span>
-          <span class="text-xs text-muted">|</span>
+          <span class="font-bold text-sm tracking-tight text-main">CGLI</span>
+          <span class="text-xs text-muted font-mono">/</span>
           <span class="text-xs font-medium text-secondary">Canvas Agent Orchestrator</span>
         </div>
       </a>
 
-      <!-- Navigation Links -->
+      <!-- Center Links -->
       <div class="hidden md:flex items-center gap-6 text-xs font-medium text-secondary">
-        <a href="#canvas-live" style="color: inherit; text-decoration: none;">Como Funciona no Canvas</a>
+        <a href="#canvas-workbench" style="color: inherit; text-decoration: none;">Como Funciona</a>
         <a href="#before-after" style="color: inherit; text-decoration: none;">O Antes & Depois</a>
         <a href="#use-cases" style="color: inherit; text-decoration: none;">Casos de Uso</a>
         <a href="#quickstart" style="color: inherit; text-decoration: none;">Começar em 1 Min</a>
       </div>
 
       <!-- Action Buttons -->
-      <div class="flex items-center gap-3">
-        <button id="themeToggleBtn" type="button" title="Alternar tema Dark / Light"
-                style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); cursor: pointer; font-size: 12px;">
+      <div class="flex items-center gap-2">
+        <button id="themeToggleBtn" type="button"
+                style="padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); color: var(--text-secondary); cursor: pointer; font-size: 11px;">
           <span id="themeBtnText">☀️ Claro</span>
         </button>
 
         <a href="https://github.com/CaioFelipe/CGLI" target="_blank" rel="noopener noreferrer"
-           style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); text-decoration: none; font-size: 12px; font-weight: 600;">
-          GitHub
+           style="padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); color: var(--text-main); text-decoration: none; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+          <span>GitHub</span>
         </a>
 
-        <a href="#canvas-live"
-           style="padding: 6px 14px; border-radius: 6px; background: #6366F1; color: #FFFFFF; text-decoration: none; font-size: 12px; font-weight: 600;">
+        <a href="#canvas-workbench"
+           style="padding: 5px 14px; border-radius: 8px; background: #6366F1; color: #FFFFFF; text-decoration: none; font-size: 11px; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.3);">
           Ver Demonstração ↓
         </a>
       </div>
@@ -235,57 +240,73 @@
   </nav>
 
   <!-- ========================================================================= -->
-  <!-- 2. HERO: FOCO NA DOR E NA RESOLUÇÃO -->
+  <!-- 2. HERO SECTION -->
   <!-- ========================================================================= -->
-  <header id="hero" class="max-w-5xl px-4" style="padding-top: 56px; padding-bottom: 36px; text-align: center;">
+  <header id="hero" class="max-w-4xl px-4" style="padding-top: 56px; padding-bottom: 32px; text-align: center;">
     
     <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium"
-         style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-subtle); color: var(--text-secondary); margin-bottom: 20px;">
-      <span style="color: #F59E0B;">●</span>
-      <span>O fluxo de engenharia que substitui o caos de terminais soltos</span>
+         style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-subtle); color: var(--text-secondary); margin-bottom: 20px;">
+      <span style="width: 6px; height: 6px; border-radius: 9999px; background: #F59E0B;"></span>
+      <span>Orquestração de Agentes com Supervisão Humana</span>
     </div>
 
-    <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight text-primary" style="margin: 0 auto; line-height: 1.15; max-width: 900px;">
+    <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight text-main" style="margin: 0 auto; line-height: 1.15; max-width: 860px;">
       Pare de se perder em 10 abas de terminal para programar com IA.
     </h1>
 
-    <p class="text-lg text-secondary" style="max-width: 760px; margin: 20px auto 0; line-height: 1.6;">
+    <p class="text-base sm:text-lg text-secondary" style="max-width: 700px; margin: 18px auto 0; line-height: 1.6;">
       O <strong>CGLI</strong> organiza múltiplos agentes em uma <strong>linha de montagem visual</strong>.
       O <span style="color: #EA580C; font-weight: 600;">Claude planeja a arquitetura</span>, você
       <strong>revisa e anota diretrizes no plano</strong>, e o
       <span style="color: #0284C7; font-weight: 600;">executor codifica e roda os testes</span>.
-      Tudo em um canvas único, com você no controle absoluto da sua base de código.
+      Tudo em um único canvas, com você no controle absoluto da sua base de código.
     </p>
 
-    <!-- Core Value Trio -->
-    <div class="flex flex-wrap items-center justify-center gap-6 text-sm" style="margin-top: 32px; color: var(--text-secondary);">
+    <!-- Fast Action Install Command Bar -->
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-3" style="max-width: 580px; margin: 28px auto 0;">
+      <div class="flex items-center justify-between w-full rounded-xl border font-mono text-xs"
+           style="background: #05070C; border-color: var(--border-subtle); padding: 10px 14px;">
+        <div class="flex items-center gap-2 overflow-hidden text-sky-400">
+          <span style="color: var(--text-muted); user-select: none;">$</span>
+          <span class="truncate">git clone https://github.com/CaioFelipe/CGLI.git</span>
+        </div>
+        <button onclick="copyInstallCmd()" style="padding: 4px 8px; border-radius: 6px; background: #27272A; color: #E4E4E7; font-size: 11px; border: none; cursor: pointer; flex-shrink: 0; margin-left: 8px;">
+          Copiar
+        </button>
+      </div>
+      <a href="#canvas-workbench" style="padding: 10px 18px; border-radius: 12px; background: #6366F1; color: #FFF; text-decoration: none; font-size: 12px; font-weight: 600; white-space: nowrap; box-shadow: 0 4px 12px rgba(99,102,241,0.25);">
+        Ver Simulação Interativa
+      </a>
+    </div>
+
+    <!-- Value Trio -->
+    <div class="flex flex-wrap items-center justify-center gap-6 text-xs font-medium text-secondary" style="margin-top: 28px;">
       <div class="flex items-center gap-2">
-        <span class="text-emerald" style="font-weight: 700;">✓</span>
+        <svg class="text-emerald-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
         <span>Zero Alt+Tab entre terminais</span>
       </div>
       <div class="flex items-center gap-2">
-        <span class="text-emerald" style="font-weight: 700;">✓</span>
+        <svg class="text-emerald-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
         <span>Você aprova o plano antes do código</span>
       </div>
       <div class="flex items-center gap-2">
-        <span class="text-emerald" style="font-weight: 700;">✓</span>
-        <span>Memória persistente no Obsidian (zero amnésia)</span>
+        <svg class="text-emerald-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        <span>Memória permanente no Obsidian (zero amnésia)</span>
       </div>
     </div>
 
   </header>
 
   <!-- ========================================================================= -->
-  <!-- 3. INTERACTIVE HERO CANVAS (A ROTINA REAL DE UMA FEATURE) -->
+  <!-- 3. THE STUDIO CANVAS WORKBENCH -->
   <!-- ========================================================================= -->
-  <section id="canvas-live" class="max-w-6xl px-4" style="margin-bottom: 80px;">
+  <section id="canvas-workbench" class="max-w-6xl px-4" style="margin-bottom: 84px;">
     
-    <!-- OS Studio Frame -->
-    <div class="rounded-2xl border" style="background: var(--bg-surface); box-shadow: var(--shadow-elevation); overflow: hidden;">
+    <div class="studio-window overflow-hidden">
       
-      <!-- Native OS Window Chrome -->
+      <!-- Window Chrome -->
       <div class="border-b flex flex-wrap items-center justify-between gap-3"
-           style="padding: 10px 16px; background: var(--bg-header);">
+           style="background: var(--bg-header); border-color: var(--border-subtle); padding: 10px 16px;">
         
         <!-- Left: Traffic Lights & Tab -->
         <div class="flex items-center gap-3">
@@ -294,115 +315,131 @@
             <div style="width: 10px; height: 10px; border-radius: 9999px; background: #F59E0B;"></div>
             <div style="width: 10px; height: 10px; border-radius: 9999px; background: #10B981;"></div>
           </div>
-          <div class="flex items-center gap-2" style="border-left: 1px solid var(--border-subtle); padding-left: 12px; font-size: 12px;">
-            <span class="font-mono text-primary font-medium">~/meu-projeto</span>
+          <div class="flex items-center gap-2 font-mono text-xs border-l" style="padding-left: 12px; border-color: var(--border-subtle);">
+            <span class="text-main font-semibold">~/meu-projeto</span>
             <span class="text-muted">•</span>
-            <span class="text-muted font-mono" style="font-size: 11px;">branch: feature/auth-jwt</span>
+            <span class="text-secondary">branch: feature/auth-jwt</span>
           </div>
         </div>
 
-        <!-- Center: Interactive Controls -->
+        <!-- Center: Step Narrative Player -->
         <div class="flex items-center gap-2">
-          <span id="stepCounter" class="text-xs font-mono font-semibold px-2.5 py-1 rounded"
-                style="background: rgba(99, 102, 241, 0.12); color: #818CF8; border: 1px solid rgba(99, 102, 241, 0.25);">
+          <span id="stepCounter" class="text-xs font-mono font-semibold px-2.5 py-1 rounded border"
+                style="background: rgba(99, 102, 241, 0.12); color: #818CF8; border-color: rgba(99, 102, 241, 0.25);">
             Passo 1/5: Sua Demanda
           </span>
-          <button id="btnPrevStep" type="button" style="padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); cursor: pointer; font-size: 12px;">
+          <button id="btnPrevStep" type="button" style="padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); color: var(--text-secondary); cursor: pointer; font-size: 11px;">
             ◀ Anterior
           </button>
-          <button id="btnPlayPause" type="button" style="padding: 4px 12px; border-radius: 6px; background: #6366F1; color: #FFF; font-weight: 600; font-size: 12px; border: none; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+          <button id="btnPlayPause" type="button" style="padding: 4px 12px; border-radius: 6px; background: #6366F1; color: #FFF; font-weight: 600; font-size: 11px; border: none; cursor: pointer; display: flex; align-items: center; gap: 6px;">
             <span id="playIcon">▶</span>
             <span id="playText">Ver Fluxo da Feature</span>
           </button>
-          <button id="btnNextStep" type="button" style="padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); cursor: pointer; font-size: 12px;">
+          <button id="btnNextStep" type="button" style="padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); color: var(--text-secondary); cursor: pointer; font-size: 11px;">
             Próximo ▶
           </button>
-          <button id="btnResetCanvas" type="button" style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-muted); cursor: pointer; font-size: 12px;">
-            ↺ Reset
+          <button id="btnResetCanvas" type="button" style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); color: var(--text-muted); cursor: pointer; font-size: 11px;">
+            ↺
           </button>
         </div>
 
       </div>
 
-      <!-- Canvas Workbench -->
-      <div id="canvasViewport" class="canvas-dots" style="position: relative; width: 100%; height: 580px; overflow: hidden; cursor: grab;">
+      <!-- Canvas Viewport -->
+      <div id="canvasViewport" class="canvas-grid" style="position: relative; width: 100%; height: 580px; overflow: hidden; user-select: none; cursor: grab; background-color: var(--bg-base);">
         
-        <!-- SVG Connections -->
+        <!-- Floating Canvas Engineering Toolbar -->
+        <div class="border rounded-xl flex items-center gap-1 backdrop-blur-md"
+             style="position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 30; padding: 6px 10px; background: var(--bg-header); border-color: var(--border-subtle); box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+          <button style="padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; background: rgba(99,102,241,0.2); color: #818CF8; border: 1px solid rgba(99,102,241,0.3); display: flex; align-items: center; gap: 4px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 3 7 17 3-7 7-3z"></path></svg>
+            <span>Seleção (V)</span>
+          </button>
+          <button style="padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; background: transparent; color: var(--text-muted); border: none; display: flex; align-items: center; gap: 4px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"></path><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"></path><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"></path><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path></svg>
+            <span>Pan (H)</span>
+          </button>
+          <span style="width: 1px; height: 16px; background: rgba(255,255,255,0.1); margin: 0 4px;"></span>
+          <span class="font-mono" style="font-size: 11px; color: var(--text-muted); padding: 0 4px;">100% Zoom</span>
+          <span style="width: 1px; height: 16px; background: rgba(255,255,255,0.1); margin: 0 4px;"></span>
+          <span style="font-size: 11px; color: var(--text-muted);">Arraste os nós livremente</span>
+        </div>
+
+        <!-- SVG Connection Lines Layer -->
         <svg id="canvasSvg" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;">
           <defs>
-            <linearGradient id="edgePromptToClaude" x1="0%" y1="0%" x2="100%" y2="0%">
+            <linearGradient id="gradClaudePlan" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="#EA580C" />
               <stop offset="100%" stop-color="#6366F1" />
             </linearGradient>
-            <linearGradient id="edgeClaudeToPlan" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="#EA580C" />
-              <stop offset="100%" stop-color="#6366F1" />
-            </linearGradient>
-            <linearGradient id="edgePlanToAgy" x1="0%" y1="0%" x2="100%" y2="0%">
+            <linearGradient id="gradPlanAgy" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="#6366F1" />
               <stop offset="100%" stop-color="#0284C7" />
             </linearGradient>
-            <linearGradient id="edgeMemToAgy" x1="0%" y1="0%" x2="100%" y2="0%">
+            <linearGradient id="gradMemAgy" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="#10B981" />
               <stop offset="100%" stop-color="#0284C7" />
             </linearGradient>
-            <linearGradient id="edgeAgyToDiff" x1="0%" y1="0%" x2="100%" y2="0%">
+            <linearGradient id="gradAgyDiff" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="#0284C7" />
               <stop offset="100%" stop-color="#F43F5E" />
             </linearGradient>
           </defs>
 
-          <path id="path-claude-art" stroke="url(#edgeClaudeToPlan)" stroke-width="2.5" fill="none" class="edge-active" />
-          <path id="path-art-agy" stroke="url(#edgePlanToAgy)" stroke-width="2.5" fill="none" class="edge-active" />
-          <path id="path-mem-agy" stroke="url(#edgeMemToAgy)" stroke-width="2" stroke-dasharray="4 4" fill="none" />
-          <path id="path-agy-diff" stroke="url(#edgeAgyToDiff)" stroke-width="2.5" fill="none" class="edge-active" />
+          <path id="path-claude-art" stroke="url(#gradClaudePlan)" stroke-width="2.5" fill="none" class="edge-flow" />
+          <path id="path-art-agy" stroke="url(#gradPlanAgy)" stroke-width="2.5" fill="none" class="edge-flow" />
+          <path id="path-mem-agy" stroke="url(#gradMemAgy)" stroke-width="2" stroke-dasharray="4 4" fill="none" />
+          <path id="path-agy-diff" stroke="url(#gradAgyDiff)" stroke-width="2.5" fill="none" class="edge-flow" />
         </svg>
 
         <!-- NODE 1: CLAUDE CODE (O ARQUITETO) -->
-        <div id="node-claude" class="canvas-node rounded-xl border"
-             style="position: absolute; z-index: 20; width: 310px; left: 30px; top: 40px; background: var(--bg-surface); box-shadow: 0 10px 30px rgba(0,0,0,0.5); user-select: none;">
-          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-header); border-top: 3px solid #EA580C; display: flex; align-items: center; justify-content: space-between;">
+        <div id="node-claude" class="canvas-node studio-card"
+             style="position: absolute; z-index: 20; width: 315px; left: 30px; top: 40px; cursor: grab;">
+          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); border-top: 3px solid #EA580C; border-top-left-radius: 0.75rem; border-top-right-radius: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
             <div class="flex items-center gap-2">
-              <div style="width: 22px; height: 22px; border-radius: 5px; background: rgba(234,88,12,0.2); color: #EA580C; font-weight: 700; font-size: 11px; display: flex; align-items: center; justify-content: center;">C</div>
+              <div style="width: 20px; height: 20px; border-radius: 4px; background: rgba(234,88,12,0.2); color: #EA580C; font-weight: 700; font-size: 11px; display: flex; align-items: center; justify-content: center;">C</div>
               <div>
-                <span class="text-xs font-bold text-primary">Claude Code</span>
-                <span style="font-size: 10px; color: #EA580C; display: block; line-height: 1;">Papel: Arquiteto de Software</span>
+                <span class="text-xs font-bold text-main" style="display: block; line-height: 1.2;">Claude Code</span>
+                <span style="font-size: 10px; color: #EA580C; font-weight: 500;">Papel: Arquiteto de Software</span>
               </div>
             </div>
-            <span class="text-xs font-mono" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); color: #34D399;">Planejador</span>
+            <span class="font-mono" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); color: #34D399; border: 1px solid rgba(16,185,129,0.2);">
+              Planejador
+            </span>
           </div>
-          <div style="padding: 12px; font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
-            <div style="padding: 8px 10px; border-radius: 6px; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border-subtle); font-size: 11px; color: var(--text-secondary);">
-              <span style="font-weight: 700; color: #818CF8;">Sua Instrução:</span> "Implementar autenticação JWT com rota de refresh token e middleware de proteção."
+          <div style="padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+            <div class="border rounded-lg" style="padding: 8px 10px; background: rgba(0, 0, 0, 0.4); border-color: var(--border-subtle); color: var(--text-secondary); font-size: 11px; line-height: 1.5;">
+              <span class="font-bold text-indigo-400">Sua Instrução:</span> "Implementar autenticação JWT com rota de refresh token e middleware de proteção."
             </div>
-            <div style="padding: 8px 10px; border-radius: 6px; background: rgba(234, 88, 12, 0.08); border: 1px solid rgba(234, 88, 12, 0.2); font-size: 11px; color: #FDBA74;">
-              💡 <strong>Raciocínio:</strong> "Não vou mexer no código agora. Estou criando a especificação técnica e publicando o plano para revisão humana."
+            <div class="border rounded-lg font-mono" style="padding: 8px 10px; background: rgba(234, 88, 12, 0.08); border-color: rgba(234, 88, 12, 0.25); color: #FDBA74; font-size: 10px; line-height: 1.5;">
+              💡 <strong>Raciocínio:</strong> "Não vou mexer no código agora. Estou criando a especificação e publicando o plano para revisão humana."
             </div>
           </div>
         </div>
 
         <!-- NODE 2: PLANO ARQUITETURAL (SUA CANETADA & APROVAÇÃO) -->
-        <div id="node-art" class="canvas-node rounded-xl border"
-             style="position: absolute; z-index: 20; width: 330px; left: 380px; top: 30px; background: var(--bg-surface); box-shadow: 0 10px 30px rgba(0,0,0,0.5); user-select: none;">
-          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-header); border-top: 3px solid #6366F1; display: flex; align-items: center; justify-content: space-between;">
+        <div id="node-art" class="canvas-node studio-card"
+             style="position: absolute; z-index: 20; width: 340px; left: 385px; top: 30px; cursor: grab;">
+          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); border-top: 3px solid #6366F1; border-top-left-radius: 0.75rem; border-top-right-radius: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
             <div class="flex items-center gap-2">
-              <span>📄</span>
-              <span class="text-xs font-bold text-primary">Plano de Autenticação JWT</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#818CF8" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+              <span class="text-xs font-bold text-main">Plano de Autenticação JWT</span>
             </div>
-            <span class="text-xs font-bold" style="font-size: 10px; padding: 2px 8px; border-radius: 9999px; background: rgba(16, 185, 129, 0.2); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.3);">
+            <span class="font-bold" style="font-size: 10px; padding: 2px 8px; border-radius: 9999px; background: rgba(16, 185, 129, 0.2); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.3);">
               ✓ Aprovado por Você
             </span>
           </div>
-          <div style="padding: 12px; font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
-            <div style="padding: 8px 10px; border-radius: 6px; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border-subtle); font-size: 11px; line-height: 1.5; color: var(--text-primary);">
-              <p style="font-weight: 700; color: #818CF8; margin-bottom: 4px;">Etapas Planejadas:</p>
-              <p>1. Criar helper de assinatura com chave HMAC-SHA256</p>
-              <p>2. <span class="text-anchor-highlight">Armazenar refresh token em Cookie HttpOnly</span></p>
-              <p>3. Middleware de validação com retorno 401 Unauthorized</p>
+          <div style="padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+            <div class="border rounded-lg" style="padding: 8px 10px; background: rgba(0, 0, 0, 0.4); border-color: var(--border-subtle); color: var(--text-main); font-size: 11px; line-height: 1.5;">
+              <p class="font-bold text-indigo-400" style="margin-bottom: 4px;">Etapas Planejadas:</p>
+              <p>1. Criar helper HMAC-SHA256 para tokens</p>
+              <p>2. <span class="text-anchor-hl">Armazenar refresh token em Cookie HttpOnly</span></p>
+              <p>3. Middleware de validação com retorno 401</p>
             </div>
             <!-- Sua Anotação TextAnchor -->
-            <div style="padding: 8px 10px; border-radius: 6px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); font-size: 11px; color: #FDE68A; display: flex; gap: 6px;">
-              <span>✍️</span>
+            <div class="border rounded-lg flex items-start gap-2"
+                 style="padding: 8px 10px; background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.35); color: #FDE68A; font-size: 11px; line-height: 1.5;">
+              <svg style="flex-shrink: 0; margin-top: 2px;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
               <div>
                 <strong>Sua Revisão (Ancorada no item 2):</strong> "Perfeito. Nunca guarde no localStorage para evitar roubo por XSS."
               </div>
@@ -410,24 +447,27 @@
           </div>
         </div>
 
-        <!-- NODE 3: AGY (O EXECUTOR QUE SÓ FAZ O APROVADO) -->
-        <div id="node-agy" class="canvas-node rounded-xl border"
-             style="position: absolute; z-index: 20; width: 310px; left: 750px; top: 40px; background: var(--bg-surface); box-shadow: 0 10px 30px rgba(0,0,0,0.5); user-select: none;">
-          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-header); border-top: 3px solid #0284C7; display: flex; align-items: center; justify-content: space-between;">
+        <!-- NODE 3: AGY (EXECUTOR QUE SÓ FAZ O APROVADO) -->
+        <div id="node-agy" class="canvas-node studio-card"
+             style="position: absolute; z-index: 20; width: 315px; left: 760px; top: 40px; cursor: grab;">
+          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); border-top: 3px solid #0284C7; border-top-left-radius: 0.75rem; border-top-right-radius: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
             <div class="flex items-center gap-2">
-              <div style="width: 22px; height: 22px; border-radius: 5px; background: rgba(2,132,199,0.2); color: #0284C7; font-weight: 700; font-size: 11px; display: flex; align-items: center; justify-content: center;">A</div>
+              <div style="width: 20px; height: 20px; border-radius: 4px; background: rgba(2,132,199,0.2); color: #38BDF8; font-bold: 700; font-size: 11px; display: flex; align-items: center; justify-content: center;">A</div>
               <div>
-                <span class="text-xs font-bold text-primary">Antigravity (AGY)</span>
-                <span style="font-size: 10px; color: #0284C7; display: block; line-height: 1;">Papel: Executor de Código</span>
+                <span class="text-xs font-bold text-main" style="display: block; line-height: 1.2;">Antigravity (AGY)</span>
+                <span style="font-size: 10px; color: #38BDF8; font-weight: 500;">Papel: Executor de Código</span>
               </div>
             </div>
-            <span class="text-xs font-mono" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); color: #34D399;">Executando</span>
+            <span class="font-mono" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); color: #34D399; border: 1px solid rgba(16,185,129,0.2);">
+              Executando
+            </span>
           </div>
-          <div style="padding: 12px; font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
-            <div style="padding: 8px 10px; border-radius: 6px; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border-subtle); font-size: 11px; color: var(--text-secondary);">
-              <span style="font-weight: 700; color: #38BDF8;">Diretriz:</span> "Plano validado pelo humano. Escrevendo o middleware e rodando testes unitários."
+          <div style="padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+            <div class="border rounded-lg" style="padding: 8px 10px; background: rgba(0, 0, 0, 0.4); border-color: var(--border-subtle); color: var(--text-secondary); font-size: 11px; line-height: 1.5;">
+              <span class="font-bold text-sky-400">Diretriz:</span> "Plano validado pelo humano. Escrevendo o middleware e rodando testes unitários."
             </div>
-            <div class="font-mono" style="padding: 8px; border-radius: 6px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); font-size: 10px; color: #6EE7B7;">
+            <div class="border rounded-lg font-mono text-emerald-400"
+                 style="padding: 8px 10px; background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.25); font-size: 10px; line-height: 1.5;">
               $ cargo test --test auth_jwt<br/>
               test result: ok. 4 passed; 0 failed
             </div>
@@ -435,70 +475,70 @@
         </div>
 
         <!-- NODE 4: OBSIDIAN VAULT (A MEMÓRIA QUE NUNCA ESQUECE) -->
-        <div id="node-mem" class="canvas-node rounded-xl border"
-             style="position: absolute; z-index: 20; width: 280px; left: 380px; top: 370px; background: var(--bg-surface); box-shadow: 0 10px 30px rgba(0,0,0,0.5); user-select: none;">
-          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-header); border-top: 3px solid #10B981; display: flex; align-items: center; justify-content: space-between;">
+        <div id="node-mem" class="canvas-node studio-card"
+             style="position: absolute; z-index: 20; width: 290px; left: 385px; top: 370px; cursor: grab;">
+          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); border-top: 3px solid #10B981; border-top-left-radius: 0.75rem; border-top-right-radius: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
             <div class="flex items-center gap-2">
-              <span>🧠</span>
-              <span class="text-xs font-bold text-primary">Memória de Decisões (ADR)</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+              <span class="text-xs font-bold text-main">Memória de Decisões (ADR)</span>
             </div>
-            <span class="text-xs font-mono" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); color: #34D399;">Obsidian</span>
+            <span class="font-mono text-emerald-400" style="font-size: 10px;">Obsidian</span>
           </div>
-          <div style="padding: 12px; font-size: 11px; display: flex; flex-direction: column; gap: 6px; color: var(--text-secondary);">
-            <p><strong>Decisão Registrada:</strong> "Sempre utilizar cookies HttpOnly + SameSite=Strict em todos os endpoints de autenticação deste projeto."</p>
-            <span style="font-size: 10px; color: var(--text-muted);">✓ Respeitado automaticamente por todos os agentes futuros.</span>
+          <div style="padding: 12px; font-size: 11px; line-height: 1.5; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px;">
+            <p><strong>Decisão Registrada:</strong> "Sempre utilizar cookies HttpOnly + SameSite=Strict em todos os endpoints deste projeto."</p>
+            <p style="font-size: 10px; color: #34D399; margin-top: 4px;">✓ Respeitado automaticamente por todos os agentes futuros.</p>
           </div>
         </div>
 
         <!-- NODE 5: UNIFIED DIFF (VOCÊ VÊ O QUE MUDOU) -->
-        <div id="node-diff" class="canvas-node rounded-xl border"
-             style="position: absolute; z-index: 20; width: 310px; left: 750px; top: 320px; background: var(--bg-surface); box-shadow: 0 10px 30px rgba(0,0,0,0.5); user-select: none;">
-          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-header); border-top: 3px solid #F43F5E; display: flex; align-items: center; justify-content: space-between;">
+        <div id="node-diff" class="canvas-node studio-card"
+             style="position: absolute; z-index: 20; width: 315px; left: 760px; top: 320px; cursor: grab;">
+          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); border-top: 3px solid #F43F5E; border-top-left-radius: 0.75rem; border-top-right-radius: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
             <div class="flex items-center gap-2">
-              <span>⚡</span>
-              <span class="text-xs font-bold text-primary">Diff em Tempo Real</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FB7185" stroke-width="2"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
+              <span class="text-xs font-bold text-main">Diff em Tempo Real</span>
             </div>
-            <span class="text-xs font-mono font-bold" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.2); color: #34D399;">
+            <span class="font-mono font-bold text-emerald-400" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.2);">
               +42 / -0
             </span>
           </div>
-          <div class="font-mono" style="padding: 10px; background: #030712; font-size: 10px; line-height: 1.5;">
+          <div class="font-mono" style="padding: 12px; background: #03060C; font-size: 10px; line-height: 1.5;">
             <div style="color: #64748B;">@@ src/middleware/auth.rs @@</div>
-            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 0 4px;">+ pub async fn verify_jwt_cookie(req: Request) {</div>
-            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 0 4px;">+   let token = req.cookies().get("jwt_token")?;</div>
-            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 0 4px;">+   decode_token(&token.value())</div>
-            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 0 4px;">+ }</div>
+            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 2px 4px; border-radius: 2px;">+ pub async fn verify_jwt(req: Request) {</div>
+            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 2px 4px; border-radius: 2px;">+   let token = req.cookies().get("jwt")?;</div>
+            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 2px 4px; border-radius: 2px;">+   decode_token(&token.value())</div>
+            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 2px 4px; border-radius: 2px;">+ }</div>
           </div>
         </div>
 
       </div>
 
-      <!-- Narrative Stepper Below Canvas -->
-      <div class="border-t" style="padding: 18px 20px; background: var(--bg-surface);">
+      <!-- Stepper Explanation Footer Below Canvas -->
+      <div class="border-t" style="padding: 16px; background: var(--bg-surface); border-color: var(--border-subtle);">
         <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-xs">
           
-          <div id="step-desc-1" class="rounded-lg border" style="padding: 12px; border-color: rgba(99, 102, 241, 0.5); background: rgba(99, 102, 241, 0.12);">
-            <div class="font-bold text-indigo" style="margin-bottom: 4px;">1. Sua Demanda</div>
+          <div id="step-desc-1" class="border rounded-xl" style="padding: 12px; border-color: rgba(99, 102, 241, 0.5); background: rgba(99, 102, 241, 0.12);">
+            <div class="font-bold text-indigo-400" style="margin-bottom: 4px;">1. Sua Demanda</div>
             <p class="text-secondary" style="font-size: 11px;">Você define a meta no nó do Claude sem abrir abas soltas de terminal.</p>
           </div>
 
-          <div id="step-desc-2" class="rounded-lg border" style="padding: 12px; opacity: 0.5;">
-            <div class="font-bold text-primary" style="margin-bottom: 4px;">2. Plano Arquitetural</div>
+          <div id="step-desc-2" class="border rounded-xl" style="padding: 12px; opacity: 0.5; border-color: var(--border-subtle); background: var(--bg-surface-elevated);">
+            <div class="font-bold text-main" style="margin-bottom: 4px;">2. Plano Técnico</div>
             <p class="text-secondary" style="font-size: 11px;">O arquiteto cria o plano técnico no canvas antes de tocar no código.</p>
           </div>
 
-          <div id="step-desc-3" class="rounded-lg border" style="padding: 12px; opacity: 0.5;">
-            <div class="font-bold text-primary" style="margin-bottom: 4px;">3. Sua Canetada</div>
+          <div id="step-desc-3" class="border rounded-xl" style="padding: 12px; opacity: 0.5; border-color: var(--border-subtle); background: var(--bg-surface-elevated);">
+            <div class="font-bold text-main" style="margin-bottom: 4px;">3. Sua Canetada</div>
             <p class="text-secondary" style="font-size: 11px;">Você grifa o parágrafo crítico, impõe regras de negócio e clica em Aprovar.</p>
           </div>
 
-          <div id="step-desc-4" class="rounded-lg border" style="padding: 12px; opacity: 0.5;">
-            <div class="font-bold text-primary" style="margin-bottom: 4px;">4. Execução Guiada</div>
+          <div id="step-desc-4" class="border rounded-xl" style="padding: 12px; opacity: 0.5; border-color: var(--border-subtle); background: var(--bg-surface-elevated);">
+            <div class="font-bold text-main" style="margin-bottom: 4px;">4. Execução Guiada</div>
             <p class="text-secondary" style="font-size: 11px;">O executor codifica apenas o plano aprovado, consultando o Obsidian.</p>
           </div>
 
-          <div id="step-desc-5" class="rounded-lg border" style="padding: 12px; opacity: 0.5;">
-            <div class="font-bold text-primary" style="margin-bottom: 4px;">5. Diffs & Paz de Espírito</div>
+          <div id="step-desc-5" class="border rounded-xl" style="padding: 12px; opacity: 0.5; border-color: var(--border-subtle); background: var(--bg-surface-elevated);">
+            <div class="font-bold text-main" style="margin-bottom: 4px;">5. Diffs & Paz</div>
             <p class="text-secondary" style="font-size: 11px;">Você audita visualmente as linhas alteradas e os testes passando.</p>
           </div>
 
@@ -509,74 +549,81 @@
   </section>
 
   <!-- ========================================================================= -->
-  <!-- 4. O ANTES E DEPOIS (A DOR VS A PAZ DE ESPÍRITO) -->
+  <!-- 4. O ANTES & DEPOIS VISUAL -->
   <!-- ========================================================================= -->
-  <section id="before-after" class="max-w-5xl px-4" style="margin-bottom: 80px;">
+  <section id="before-after" class="max-w-5xl px-4" style="margin-bottom: 84px;">
     
     <div style="text-align: center; margin-bottom: 40px;">
       <span class="text-xs uppercase tracking-wider font-bold" style="color: #F59E0B;">O Diagnóstico da Rotina</span>
-      <h2 class="text-3xl font-extrabold tracking-tight text-primary" style="margin-top: 6px;">
-        Por que codar com IA ainda dá tanta ansiedade?
+      <h2 class="text-3xl font-extrabold tracking-tight text-main" style="margin-top: 6px;">
+        Por que programar com IA ainda dá tanta ansiedade?
       </h2>
-      <p class="text-secondary text-base" style="max-width: 640px; margin: 8px auto 0;">
-        A maioria dos desenvolvedores passa o dia em um ciclo exaustivo de abas soltas e correções manuais.
+      <p class="text-secondary text-sm" style="max-width: 580px; margin: 8px auto 0;">
+        A maioria dos engenheiros passa o dia em um ciclo exaustivo de abas soltas e correções manuais no escuro.
       </p>
     </div>
 
+    <!-- Visual Split View -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       
       <!-- O Caos Tradicional -->
-      <div class="rounded-2xl border" style="padding: 24px; background: var(--bg-surface); border-color: rgba(239, 68, 68, 0.3);">
-        <div class="flex items-center gap-2" style="margin-bottom: 16px;">
-          <span style="font-size: 18px;">❌</span>
-          <h3 class="font-bold text-lg text-primary">Como você programa hoje (Sem CGLI)</h3>
+      <div class="studio-card overflow-hidden" style="border-color: rgba(239, 68, 68, 0.25);">
+        <div class="border-b flex items-center justify-between"
+             style="padding: 12px 16px; background: rgba(239, 68, 68, 0.06); border-color: rgba(239, 68, 68, 0.2);">
+          <div class="flex items-center gap-2">
+            <span style="width: 8px; height: 8px; border-radius: 9999px; background: #EF4444;"></span>
+            <span class="text-xs font-bold" style="color: #F87171;">O Terminal Tradicional (Caos)</span>
+          </div>
+          <span class="font-mono text-xs" style="color: rgba(248, 113, 113, 0.8);">12 abas abertas</span>
         </div>
         
-        <ul style="list-style: none; display: flex; flex-direction: column; gap: 14px; font-size: 13px; color: var(--text-secondary);">
-          <li class="flex items-start gap-2.5">
-            <span style="color: #EF4444; font-weight: 700;">•</span>
-            <div><strong>O inferno do Alt+Tab:</strong> 12 abas abertas (terminal do Claude, terminal de build, VS Code, Git diff, Notion). Você gasta tempo procurando onde está cada saída.</div>
-          </li>
-          <li class="flex items-start gap-2.5">
-            <span style="color: #EF4444; font-weight: 700;">•</span>
-            <div><strong>O "Enter" no escuro:</strong> O agente cospe 700 linhas no terminal. Ler diff cru no terminal cansa a vista; você aceita e descobre 30 minutos depois que quebrou outra tela.</div>
-          </li>
-          <li class="flex items-start gap-2.5">
-            <span style="color: #EF4444; font-weight: 700;">•</span>
-            <div><strong>Amnésia constante:</strong> Você explicou como seu banco funciona na terça. Na quarta, em uma nova sessão, o agente sugere a biblioteca que você proibiu.</div>
-          </li>
-          <li class="flex items-start gap-2.5">
-            <span style="color: #EF4444; font-weight: 700;">•</span>
-            <div><strong>Agente faz-tudo estourando contexto:</strong> O mesmo agente tenta arquitetar, codar e rodar testes na mesma conversa, degradando a qualidade do raciocínio.</div>
-          </li>
-        </ul>
+        <div class="font-mono text-xs" style="padding: 16px; background: #05070B; color: #94A3B8; display: flex; flex-direction: column; gap: 12px; line-height: 1.5;">
+          <div>
+            <div style="color: #64748B;">$ claude --dangerously-skip-permissions</div>
+            <div style="color: #FBBF24;">⚠ Warning: Generating 780 lines across 14 files...</div>
+            <div style="color: #CBD5E1;">? Accept changes and execute? [y/N]</div>
+          </div>
+
+          <div class="border rounded" style="padding: 10px; border-color: rgba(239, 68, 68, 0.2); background: rgba(127, 29, 29, 0.2); color: #FCA5A5; font-size: 11px; display: flex; flex-direction: column; gap: 6px;">
+            <div class="font-bold flex items-center gap-2" style="color: #F87171;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+              <span>O que acontece no seu dia a dia:</span>
+            </div>
+            <div>• <strong>O "Enter" no escuro:</strong> Você digita 'y' sem ler 800 linhas de diff cru no terminal e torce para não quebrar a main.</div>
+            <div>• <strong>Amnésia constante:</strong> O agente esqueceu a decisão de arquitetura tomada na semana passada e inventa padrões proibidos.</div>
+            <div>• <strong>Maratona de Alt+Tab:</strong> Procurando onde está o log de erro entre VS Code, split de testes e chat web.</div>
+          </div>
+        </div>
       </div>
 
-      <!-- A Vida com CGLI -->
-      <div class="rounded-2xl border" style="padding: 24px; background: var(--bg-surface); border-color: rgba(16, 185, 129, 0.4);">
-        <div class="flex items-center gap-2" style="margin-bottom: 16px;">
-          <span style="font-size: 18px;">✅</span>
-          <h3 class="font-bold text-lg text-primary">Como você programa com o CGLI</h3>
+      <!-- O CGLI Workbench -->
+      <div class="studio-card overflow-hidden" style="border-color: rgba(16, 185, 129, 0.3);">
+        <div class="border-b flex items-center justify-between"
+             style="padding: 12px 16px; background: rgba(16, 185, 129, 0.06); border-color: rgba(16, 185, 129, 0.2);">
+          <div class="flex items-center gap-2">
+            <span style="width: 8px; height: 8px; border-radius: 9999px; background: #10B981;"></span>
+            <span class="text-xs font-bold text-emerald-400">O CGLI Workbench (Controle Total)</span>
+          </div>
+          <span class="font-mono text-xs" style="color: rgba(52, 211, 153, 0.8);">Mesa Única Auditável</span>
         </div>
 
-        <ul style="list-style: none; display: flex; flex-direction: column; gap: 14px; font-size: 13px; color: var(--text-secondary);">
-          <li class="flex items-start gap-2.5">
-            <span style="color: #10B981; font-weight: 700;">•</span>
-            <div><strong>Mesa de cirurgia unificada:</strong> O arquiteto, o executor, os planos, o Obsidian e os diffs estão todos visíveis no mesmo canvas interativo.</div>
-          </li>
-          <li class="flex items-start gap-2.5">
-            <span style="color: #10B981; font-weight: 700;">•</span>
-            <div><strong>Aprovação com canetada (TextAnchor):</strong> Você grifa o parágrafo que quer ajustar no plano e dá seu aval. O executor não toca em nada antes disso.</div>
-          </li>
-          <li class="flex items-start gap-2.5">
-            <span style="color: #10B981; font-weight: 700;">•</span>
-            <div><strong>Memória permanente no repositório:</strong> Toda decisão arquitetural (ADR) é gravada em Markdown no Obsidian. Novos agentes leem as regras automaticamente.</div>
-          </li>
-          <li class="flex items-start gap-2.5">
-            <span style="color: #10B981; font-weight: 700;">•</span>
-            <div><strong>Especialização de papéis:</strong> Quem planeja não codifica às pressas. Cada agente atua no seu escopo específico, preservando a sanidade da base de código.</div>
-          </li>
-        </ul>
+        <div class="font-mono text-xs" style="padding: 16px; background: #05070B; color: #94A3B8; display: flex; flex-direction: column; gap: 12px; line-height: 1.5;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div class="text-indigo-400">✔ Plano criado por Claude Code: Especificação aprovada</div>
+            <div class="text-emerald-400">✔ Memória ADR consultada: Regras de segurança preservadas</div>
+            <div class="text-sky-400">✔ Diff verificado: +42 linhas estritamente no escopo</div>
+          </div>
+
+          <div class="border rounded" style="padding: 10px; border-color: rgba(16, 185, 129, 0.2); background: rgba(6, 78, 59, 0.2); color: #6EE7B7; font-size: 11px; display: flex; flex-direction: column; gap: 6px;">
+            <div class="font-bold flex items-center gap-2 text-emerald-400">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              <span>A sua rotina com o CGLI:</span>
+            </div>
+            <div>• <strong>Aprovação com canetada:</strong> Você grifa o plano, impõe as regras de negócio e só então libera o executor.</div>
+            <div>• <strong>Memória contínua:</strong> Toda decisão é gravada no Obsidian Vault do repositório (`.cgli/vault/`).</div>
+            <div>• <strong>Mesa unificada:</strong> Arquiteto, executor, planos, memória e diffs em uma só tela.</div>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -584,44 +631,74 @@
   </section>
 
   <!-- ========================================================================= -->
-  <!-- 5. CASOS DE USO REAIS: ONDE ELE SALVA A SUA SEMANA -->
+  <!-- 5. CASOS DE USO REAIS -->
   <!-- ========================================================================= -->
-  <section id="use-cases" class="max-w-6xl px-4" style="margin-bottom: 80px;">
+  <section id="use-cases" class="max-w-6xl px-4" style="margin-bottom: 84px;">
     
     <div style="text-align: center; margin-bottom: 40px;">
-      <span class="text-xs uppercase tracking-wider font-bold" style="color: #6366F1;">Aplicações Práticas</span>
-      <h2 class="text-3xl font-extrabold tracking-tight text-primary" style="margin-top: 6px;">
-        Onde o CGLI faz a diferença real no seu trabalho
+      <span class="text-xs uppercase tracking-wider font-bold text-indigo-400">Aplicações Práticas</span>
+      <h2 class="text-3xl font-extrabold tracking-tight text-main" style="margin-top: 6px;">
+        Onde o CGLI faz a diferença real na sua semana
       </h2>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
       
-      <div class="rounded-2xl border" style="padding: 24px; background: var(--bg-surface);">
-        <div style="font-size: 28px; margin-bottom: 12px;">🛡️</div>
-        <h3 class="text-lg font-bold text-primary" style="margin-bottom: 8px;">Refatorações Perigosas</h3>
-        <p class="text-sm text-secondary" style="line-height: 1.6;">
-          Trocar a camada de autenticação, migrar ORMs ou reescrever rotas críticas. Em vez de torcer para a IA não quebrar módulos vizinhos,
-          você aprova o plano etapa por etapa e audita cada diff em verde e vermelho.
-        </p>
+      <!-- Caso 1 -->
+      <div class="studio-card flex flex-col justify-between" style="padding: 24px;">
+        <div>
+          <div class="border rounded-xl flex items-center justify-center text-orange-500"
+               style="width: 40px; height: 40px; background: rgba(234, 88, 12, 0.1); border-color: rgba(234, 88, 12, 0.2); margin-bottom: 16px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          </div>
+          <h3 class="text-base font-bold text-main" style="margin-bottom: 8px;">Refatorações Perigosas</h3>
+          <p class="text-xs text-secondary" style="line-height: 1.6;">
+            Trocar a biblioteca de autenticação, migrar ORMs ou reescrever rotas críticas. Em vez de torcer para a IA não apagar arquivos vizinhos,
+            você valida o plano em etapas e audita cada diff visualmente antes do commit.
+          </p>
+        </div>
+        <div class="border-t font-mono flex items-center justify-between" style="margin-top: 24px; padding-top: 12px; border-color: var(--border-subtle); font-size: 11px; color: var(--text-muted);">
+          <span>Auditoria pré-execução</span>
+          <span class="text-emerald-400 font-semibold">Zero surpresas</span>
+        </div>
       </div>
 
-      <div class="rounded-2xl border" style="padding: 24px; background: var(--bg-surface);">
-        <div style="font-size: 28px; margin-bottom: 12px;">⚡</div>
-        <h3 class="text-lg font-bold text-primary" style="margin-bottom: 8px;">Features Complexas Full-Stack</h3>
-        <p class="text-sm text-secondary" style="line-height: 1.6;">
-          Deixe o Claude modelar os contratos da API e os schemas do banco em formato visual. Valide a coerência em 2 minutos.
-          O executor implementa o backend e os testes unitários sem inventar rotas que você não pediu.
-        </p>
+      <!-- Caso 2 -->
+      <div class="studio-card flex flex-col justify-between" style="padding: 24px;">
+        <div>
+          <div class="border rounded-xl flex items-center justify-center text-sky-400"
+               style="width: 40px; height: 40px; background: rgba(2, 132, 199, 0.1); border-color: rgba(2, 132, 199, 0.2); margin-bottom: 16px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          </div>
+          <h3 class="text-base font-bold text-main" style="margin-bottom: 8px;">Features Complexas Full-Stack</h3>
+          <p class="text-xs text-secondary" style="line-height: 1.6;">
+            Deixe o Claude modelar os contratos de API e os schemas do banco em formato visual. Valide a lógica em 2 minutos.
+            O executor implementa o backend e os testes unitários sem inventar rotas que você não pediu.
+          </p>
+        </div>
+        <div class="border-t font-mono flex items-center justify-between" style="margin-top: 24px; padding-top: 12px; border-color: var(--border-subtle); font-size: 11px; color: var(--text-muted);">
+          <span>Separação de papéis</span>
+          <span class="text-sky-400 font-semibold">Arquiteto ≠ Executor</span>
+        </div>
       </div>
 
-      <div class="rounded-2xl border" style="padding: 24px; background: var(--bg-surface);">
-        <div style="font-size: 28px; margin-bottom: 12px;">🧠</div>
-        <h3 class="text-lg font-bold text-primary" style="margin-bottom: 8px;">Memória Histórica da Equipe</h3>
-        <p class="text-sm text-secondary" style="line-height: 1.6;">
-          Todas as decisões (ADRs) ficam salvas em arquivos Markdown reais no seu repositório (`.cgli/vault/`).
-          Seja um novo desenvolvedor ou um agente executando na semana seguinte, a memória do projeto nunca se perde.
-        </p>
+      <!-- Caso 3 -->
+      <div class="studio-card flex flex-col justify-between" style="padding: 24px;">
+        <div>
+          <div class="border rounded-xl flex items-center justify-center text-emerald-400"
+               style="width: 40px; height: 40px; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.2); margin-bottom: 16px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          </div>
+          <h3 class="text-base font-bold text-main" style="margin-bottom: 8px;">Memória Histórica da Equipe</h3>
+          <p class="text-xs text-secondary" style="line-height: 1.6;">
+            Todas as decisões arquiteturais (ADRs) são salvas em arquivos Markdown no repositório (`.cgli/vault/`).
+            Seja um novo dev entrando no time ou um agente rodando na semana que vem, as regras nunca são violadas.
+          </p>
+        </div>
+        <div class="border-t font-mono flex items-center justify-between" style="margin-top: 24px; padding-top: 12px; border-color: var(--border-subtle); font-size: 11px; color: var(--text-muted);">
+          <span>Obsidian Dual-Vault</span>
+          <span class="font-semibold" style="color: #C084FC;">Zero amnésia</span>
+        </div>
       </div>
 
     </div>
@@ -629,24 +706,25 @@
   </section>
 
   <!-- ========================================================================= -->
-  <!-- 6. COMO COMEÇAR (CALL TO ACTION DIRETO) -->
+  <!-- 6. COMEÇAR EM 1 MINUTO -->
   <!-- ========================================================================= -->
-  <section id="quickstart" class="max-w-5xl px-4" style="margin-bottom: 80px;">
-    <div class="rounded-2xl border" style="background: var(--bg-surface); padding: 36px 28px; text-align: center;">
+  <section id="quickstart" class="max-w-4xl px-4" style="margin-bottom: 84px; text-align: center;">
+    <div class="studio-card" style="padding: 40px 24px;">
       
-      <h2 class="text-3xl font-extrabold tracking-tight text-primary">
+      <h2 class="text-3xl font-extrabold tracking-tight text-main">
         Pronto para codar com agentes sem perder o controle?
       </h2>
-      <p class="text-secondary text-sm" style="max-width: 580px; margin: 12px auto 24px; line-height: 1.6;">
-        O CGLI é 100% código aberto e roda inteiramente local na sua máquina. Seus arquivos e seus agentes permanecem no seu controle.
+      <p class="text-secondary text-sm" style="max-width: 520px; margin: 12px auto 24px; line-height: 1.6;">
+        O CGLI é 100% código aberto e executa totalmente local no seu computador.
+        Seus arquivos e seus agentes permanecem sob a sua governança.
       </p>
 
-      <div class="inline-flex items-center gap-3 font-mono text-xs rounded-xl border"
-           style="padding: 12px 18px; background: #030712; max-width: 620px; width: 100%; justify-content: space-between;">
-        <span style="color: #38BDF8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+      <div class="flex items-center justify-between font-mono text-xs border rounded-xl"
+           style="max-width: 580px; margin: 0 auto; padding: 12px 16px; background: #04060A; border-color: var(--border-subtle);">
+        <span class="text-sky-400 truncate" style="text-align: left;">
           git clone https://github.com/CaioFelipe/CGLI.git && cd CGLI && cargo run -p cgli-desktop
         </span>
-        <button onclick="copyInstallCmd()" style="padding: 4px 10px; border-radius: 6px; background: #1E293B; color: #FFF; border: none; cursor: pointer; flex-shrink: 0;">
+        <button onclick="copyInstallCmd()" style="padding: 6px 12px; border-radius: 8px; background: #27272A; color: #FFF; font-size: 11px; font-weight: 500; border: none; cursor: pointer; flex-shrink: 0; margin-left: 12px;">
           Copiar
         </button>
       </div>
@@ -655,12 +733,12 @@
   </section>
 
   <!-- ========================================================================= -->
-  <!-- 7. FOOTER (DISCRETO & TRANSPARENTE) -->
+  <!-- 7. FOOTER DISCRETO -->
   <!-- ========================================================================= -->
-  <footer class="border-t" style="padding: 32px 16px; background: var(--bg-base); font-size: 12px; color: var(--text-muted);">
-    <div class="max-w-6xl flex flex-col md:flex-row items-center justify-between gap-4">
+  <footer class="border-t" style="padding: 32px 16px; border-color: var(--border-subtle); background: var(--bg-base); font-size: 12px; color: var(--text-muted);">
+    <div class="max-w-6xl flex flex-col sm:flex-row items-center justify-between gap-4">
       <div class="flex items-center gap-2">
-        <span class="font-bold text-primary">CGLI</span>
+        <span class="font-bold text-main">CGLI</span>
         <span>•</span>
         <span>Canvas Agent Orchestrator</span>
         <span>•</span>
@@ -673,10 +751,10 @@
   </footer>
 
   <!-- ========================================================================= -->
-  <!-- 8. JAVASCRIPT: CONTROLLER & DINÂMICA DO CANVAS -->
+  <!-- 8. JAVASCRIPT: CONTROLLER, DRAGGING & BÉZIER CURVES -->
   <!-- ========================================================================= -->
   <script>
-    // Theme toggle
+    // Theme Switcher
     const themeBtn = document.getElementById('themeToggleBtn');
     const themeText = document.getElementById('themeBtnText');
 
@@ -700,7 +778,7 @@
       alert('Comando copiado para a área de transferência!');
     }
 
-    // Bézier Path calculation
+    // Bézier Dynamic Path Calculation
     function getCenter(el) {
       const r = el.getBoundingClientRect();
       const parent = document.getElementById('canvasViewport').getBoundingClientRect();
@@ -803,7 +881,7 @@
             el.style.opacity = '1';
           } else {
             el.style.borderColor = 'var(--border-subtle)';
-            el.style.background = 'var(--bg-surface)';
+            el.style.background = 'var(--bg-surface-elevated)';
             el.style.opacity = '0.5';
           }
         }
@@ -815,11 +893,11 @@
       const mem = document.getElementById('node-mem');
       const diff = document.getElementById('node-diff');
 
-      claude.style.boxShadow = step === 1 ? '0 0 25px rgba(234, 88, 12, 0.5)' : '';
-      art.style.boxShadow = (step === 2 || step === 3) ? '0 0 25px rgba(99, 102, 241, 0.5)' : '';
-      agy.style.boxShadow = (step === 4 || step === 5) ? '0 0 25px rgba(2, 132, 199, 0.5)' : '';
-      mem.style.boxShadow = step === 4 ? '0 0 20px rgba(16, 185, 129, 0.5)' : '';
-      diff.style.boxShadow = step === 5 ? '0 0 25px rgba(244, 63, 94, 0.5)' : '';
+      claude.style.boxShadow = step === 1 ? '0 0 25px rgba(234, 88, 12, 0.45)' : '';
+      art.style.boxShadow = (step === 2 || step === 3) ? '0 0 25px rgba(99, 102, 241, 0.45)' : '';
+      agy.style.boxShadow = (step === 4 || step === 5) ? '0 0 25px rgba(2, 132, 199, 0.45)' : '';
+      mem.style.boxShadow = step === 4 ? '0 0 20px rgba(16, 185, 129, 0.45)' : '';
+      diff.style.boxShadow = step === 5 ? '0 0 25px rgba(244, 63, 94, 0.45)' : '';
 
       updateAllPaths();
     }
@@ -854,13 +932,13 @@
     document.getElementById('btnResetCanvas').addEventListener('click', () => {
       document.getElementById('node-claude').style.left = '30px';
       document.getElementById('node-claude').style.top = '40px';
-      document.getElementById('node-art').style.left = '380px';
+      document.getElementById('node-art').style.left = '385px';
       document.getElementById('node-art').style.top = '30px';
-      document.getElementById('node-agy').style.left = '750px';
+      document.getElementById('node-agy').style.left = '760px';
       document.getElementById('node-agy').style.top = '40px';
-      document.getElementById('node-mem').style.left = '380px';
+      document.getElementById('node-mem').style.left = '385px';
       document.getElementById('node-mem').style.top = '370px';
-      document.getElementById('node-diff').style.left = '750px';
+      document.getElementById('node-diff').style.left = '760px';
       document.getElementById('node-diff').style.top = '320px';
       applySimulationStep(1);
       updateAllPaths();
