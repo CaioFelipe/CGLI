@@ -1,784 +1,1579 @@
 <!DOCTYPE html>
 <html lang="pt-BR" class="dark">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CGLI — Orquestre Agentes de IA com Controle Total</title>
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CGLI — Orquestrador Visual de Agentes de IA com Supervisão Humana</title>
+  <meta name="description" content="Pare de se perder em 10 abas de terminal para programar com IA. O CGLI organiza múltiplos agentes em uma linha de montagem visual no seu desktop.">
+  
   <style>
-    /* Modern Reset & Studio Clean System (Linear / Zed Style) */
-    *, *::before, *::after {
+    /* ========================================================================= */
+    /* 1. DESIGN TOKENS & RESET (INSPIRADO EM LINEAR, RAYCAST E ZED)            */
+    /* ========================================================================= */
+    :root {
+      --bg-base: #08090E;
+      --bg-surface: #0E111A;
+      --bg-surface-elevated: #141824;
+      --bg-card: rgba(16, 20, 31, 0.75);
+      --bg-card-hover: rgba(22, 28, 44, 0.85);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.16);
+      --border-focus: #6366F1;
+      
+      --text-main: #FFFFFF;
+      --text-secondary: #94A3B8;
+      --text-muted: #64748B;
+      
+      --canvas-dot: rgba(255, 255, 255, 0.08);
+      --accent-claude: #F97316;
+      --accent-agy: #0284C7;
+      --accent-plan: #818CF8;
+      --accent-memory: #10B981;
+      --accent-diff: #F43F5E;
+      --accent-amber: #F59E0B;
+      --accent-purple: #A855F7;
+      
+      --shadow-ambient: 0 20px 50px rgba(0, 0, 0, 0.8);
+      --glow-indigo: 0 0 80px rgba(99, 102, 241, 0.2);
+      --glow-emerald: 0 0 50px rgba(16, 185, 129, 0.15);
+      --glow-rose: 0 0 50px rgba(239, 68, 68, 0.15);
+    }
+
+    * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
 
-    :root {
-      --bg-base: #0B0D13;
-      --bg-surface: #11141E;
-      --bg-surface-elevated: #161A26;
-      --bg-header: rgba(14, 17, 26, 0.88);
-      --border-subtle: rgba(255, 255, 255, 0.08);
-      --border-focus: rgba(255, 255, 255, 0.2);
-      
-      --text-main: #F4F5F7;
-      --text-secondary: #9DA3AF;
-      --text-muted: #646A7A;
-      
-      --canvas-dot: #1E2333;
-      --accent-claude: #EA580C;
-      --accent-agy: #0284C7;
-      --accent-plan: #6366F1;
-      --accent-memory: #10B981;
-      --accent-diff: #F43F5E;
-      --accent-amber: #F59E0B;
-      
-      --shadow-window: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
-      --shadow-card: 0 10px 30px -5px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
-    }
-
-    html.light {
-      --bg-base: #F8FAFC;
-      --bg-surface: #FFFFFF;
-      --bg-surface-elevated: #F1F5F9;
-      --bg-header: rgba(255, 255, 255, 0.92);
-      --border-subtle: #E2E8F0;
-      --border-focus: #94A3B8;
-      
-      --text-main: #0F172A;
-      --text-secondary: #475569;
-      --text-muted: #64748B;
-      
-      --canvas-dot: #CBD5E1;
-      --shadow-window: 0 20px 45px -10px rgba(148, 163, 184, 0.3), 0 0 0 1px #CBD5E1;
-      --shadow-card: 0 8px 25px -4px rgba(148, 163, 184, 0.25), inset 0 1px 0 0 #FFFFFF;
+    html {
+      scroll-behavior: smooth;
+      background-color: var(--bg-base);
+      color: var(--text-main);
     }
 
     body {
-      background-color: var(--bg-base);
-      color: var(--text-main);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Geist", "Inter", sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
       overflow-x: hidden;
       line-height: 1.5;
-      background-image: radial-gradient(ellipse 80% 40% at 50% -10%, rgba(99, 102, 241, 0.14), transparent);
+      background-image: 
+        radial-gradient(ellipse 70% 35% at 50% -5%, rgba(99, 102, 241, 0.22), transparent 75%),
+        radial-gradient(circle 500px at 90% 25%, rgba(168, 85, 247, 0.07), transparent 60%),
+        radial-gradient(circle 500px at 10% 65%, rgba(2, 132, 199, 0.06), transparent 60%);
+      background-attachment: fixed;
     }
 
     /* Container Utilities */
-    .max-w-6xl { max-width: 1180px; margin-left: auto; margin-right: auto; }
-    .max-w-5xl { max-width: 1040px; margin-left: auto; margin-right: auto; }
-    .max-w-4xl { max-width: 860px; margin-left: auto; margin-right: auto; }
-    .max-w-2xl { max-width: 680px; margin-left: auto; margin-right: auto; }
-    .px-4 { padding-left: 1.25rem; padding-right: 1.25rem; }
-    .px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
-
-    /* Flex / Grid Utilities */
-    .flex { display: flex; }
-    .inline-flex { display: inline-flex; }
-    .items-center { align-items: center; }
-    .items-start { align-items: flex-start; }
-    .justify-between { justify-content: space-between; }
-    .justify-center { justify-content: center; }
-    .flex-col { flex-direction: column; }
-    .flex-wrap { flex-wrap: wrap; }
-    .gap-1 { gap: 0.25rem; }
-    .gap-2 { gap: 0.5rem; }
-    .gap-3 { gap: 0.75rem; }
-    .gap-4 { gap: 1rem; }
-    .gap-6 { gap: 1.5rem; }
-    .gap-8 { gap: 2rem; }
-
-    .grid { display: grid; }
-    .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
-    .hidden { display: none; }
-
-    @media (min-width: 768px) {
-      .md\:flex { display: flex; }
-      .md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .md\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .md\:grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-      .md\:flex-row { flex-direction: row; }
+    .container {
+      max-width: 1200px;
+      margin-left: auto;
+      margin-right: auto;
+      padding-left: 24px;
+      padding-right: 24px;
     }
 
     /* Typography */
-    .text-xs { font-size: 0.75rem; line-height: 1rem; }
-    .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
-    .text-base { font-size: 1rem; line-height: 1.5rem; }
-    .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
-    .text-2xl { font-size: 1.5rem; line-height: 2rem; }
-    .text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
-    .text-4xl { font-size: 2.25rem; line-height: 2.5rem; }
-    .text-5xl { font-size: 3rem; line-height: 1.12; }
-    .font-medium { font-weight: 500; }
-    .font-semibold { font-weight: 600; }
-    .font-bold { font-weight: 700; }
-    .font-extrabold { font-weight: 800; }
-    .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "JetBrains Mono", monospace; }
-    .tracking-tight { letter-spacing: -0.025em; }
-    .tracking-wider { letter-spacing: 0.05em; }
-    .uppercase { text-transform: uppercase; }
-    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-    /* Surface & Borders */
-    .rounded-md { border-radius: 0.375rem; }
-    .rounded-lg { border-radius: 0.5rem; }
-    .rounded-xl { border-radius: 0.75rem; }
-    .rounded-2xl { border-radius: 1rem; }
-    .rounded-full { border-radius: 9999px; }
-    .border { border-width: 1px; border-style: solid; border-color: var(--border-subtle); }
-    .border-b { border-bottom-width: 1px; border-bottom-style: solid; border-color: var(--border-subtle); }
-    .border-t { border-top-width: 1px; border-top-style: solid; border-color: var(--border-subtle); }
-    .border-l { border-left-width: 1px; border-left-style: solid; border-color: var(--border-subtle); }
-
-    /* Custom Colors */
-    .text-main { color: var(--text-main); }
-    .text-secondary { color: var(--text-secondary); }
-    .text-muted { color: var(--text-muted); }
-    .text-indigo-400 { color: #818CF8; }
-    .text-emerald-400 { color: #34D399; }
-    .text-sky-400 { color: #38BDF8; }
-    .text-amber-400 { color: #FBBF24; }
-    .text-orange-500 { color: #F97316; }
-    .text-red-400 { color: #F87171; }
-
-    .canvas-grid {
-      background-image: radial-gradient(var(--canvas-dot) 1.2px, transparent 1.2px);
-      background-size: 24px 24px;
+    h1, h2, h3, h4 {
+      letter-spacing: -0.035em;
+      font-weight: 700;
+      line-height: 1.15;
     }
 
-    .studio-window {
-      background: var(--bg-surface);
-      border: 1px solid var(--border-subtle);
-      box-shadow: var(--shadow-window);
-      border-radius: 1rem;
+    .font-mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
 
-    .studio-card {
-      background: var(--bg-surface);
-      border: 1px solid var(--border-subtle);
-      box-shadow: var(--shadow-card);
-      border-radius: 0.75rem;
+    /* Badge Eyebrow */
+    .badge-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      color: #C7D2FE;
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
+      margin-bottom: 24px;
     }
 
-    .text-anchor-hl {
-      background-color: rgba(245, 158, 11, 0.22);
-      border-bottom: 2px solid var(--accent-amber);
-      padding: 1px 4px;
-      border-radius: 3px;
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #F59E0B;
+      box-shadow: 0 0 10px #F59E0B;
+      animation: pulseAnim 2s infinite;
+    }
+
+    @keyframes pulseAnim {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.35); opacity: 0.7; }
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
       font-weight: 600;
+      font-size: 14px;
+      border-radius: 9999px;
+      padding: 10px 22px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      border: 1px solid transparent;
+    }
+
+    .btn-primary {
+      background: #FFFFFF;
+      color: #090A0F;
+      box-shadow: 0 4px 20px rgba(255, 255, 255, 0.25);
+    }
+    .btn-primary:hover {
+      background: #F1F5F9;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 25px rgba(255, 255, 255, 0.35);
+    }
+
+    .btn-indigo {
+      background: #4F46E5;
+      color: #FFFFFF;
+      box-shadow: 0 4px 18px rgba(79, 70, 229, 0.35);
+    }
+    .btn-indigo:hover {
+      background: #4338CA;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 24px rgba(79, 70, 229, 0.5);
+    }
+
+    .btn-ghost {
+      background: rgba(255, 255, 255, 0.05);
+      color: #F8FAFC;
+      border: 1px solid var(--border-subtle);
+      backdrop-filter: blur(10px);
+    }
+    .btn-ghost:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--border-strong);
+      transform: translateY(-1px);
+    }
+
+    /* ========================================================================= */
+    /* 2. HEADER & NAVIGATION                                                    */
+    /* ========================================================================= */
+    header {
+      position: sticky;
+      top: 16px;
+      z-index: 100;
+      margin-bottom: 20px;
+    }
+
+    .nav-pill {
+      max-width: 1020px;
+      margin: 0 auto;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-radius: 9999px;
+      background: rgba(14, 17, 26, 0.75);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 15px;
+      color: #FFFFFF;
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+    .logo-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #4F46E5, #9333EA);
+      color: white;
+      box-shadow: 0 2px 10px rgba(79, 70, 229, 0.4);
+    }
+    .logo-sub {
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 400;
+      margin-left: 2px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      list-style: none;
+    }
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 13.5px;
+      font-weight: 500;
+      transition: color 0.15s;
+    }
+    .nav-links a:hover {
+      color: #FFFFFF;
+    }
+
+    /* ========================================================================= */
+    /* 3. HERO SECTION                                                           */
+    /* ========================================================================= */
+    .hero-section {
+      padding-top: 50px;
+      padding-bottom: 60px;
+      text-align: center;
+    }
+
+    .hero-title {
+      font-size: 54px;
+      line-height: 1.08;
+      max-width: 900px;
+      margin: 0 auto 22px auto;
+      background: linear-gradient(180deg, #FFFFFF 30%, #94A3B8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-sub {
+      font-size: 18px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      max-width: 740px;
+      margin: 0 auto 32px auto;
+      font-weight: 400;
+    }
+    .hero-sub strong {
+      color: #F1F5F9;
+      font-weight: 600;
+    }
+
+    /* Terminal Snippet Box */
+    .cli-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 6px 6px 18px;
+      background: rgba(14, 17, 26, 0.9);
+      border: 1px solid var(--border-strong);
+      border-radius: 9999px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13.5px;
+      color: #E2E8F0;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      margin-bottom: 24px;
+    }
+    .cli-prefix { color: #64748B; user-select: none; }
+    .cli-cmd { color: #38BDF8; font-weight: 500; }
+    .cli-copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #FFFFFF;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .cli-copy-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+
+    .hero-checks {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      font-size: 13.5px;
+      color: var(--text-secondary);
+    }
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .check-icon {
+      color: #10B981;
+      font-weight: bold;
+    }
+
+    /* ========================================================================= */
+    /* 4. STUDIO OS WINDOW & INTERACTIVE CANVAS (REFERÊNCIA IMAGEM 1)           */
+    /* ========================================================================= */
+    .workbench-container {
+      margin-top: 40px;
+      position: relative;
+    }
+
+    .window-frame {
+      border-radius: 20px;
+      background: #0B0D14;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 30px 100px -20px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.05), var(--glow-indigo);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .window-header {
+      height: 48px;
+      background: rgba(18, 22, 34, 0.95);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      gap: 12px;
+    }
+
+    .window-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .win-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+    }
+    .win-red { background: #FF5F56; }
+    .win-yellow { background: #FFBD2E; }
+    .win-green { background: #27C93F; }
+
+    .window-title {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 12.5px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .branch-pill {
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: #A5B4FC;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+    }
+
+    .stepper-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .step-pill {
+      font-family: ui-monospace, monospace;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(99, 102, 241, 0.2);
+      color: #C7D2FE;
+      border: 1px solid rgba(99, 102, 241, 0.4);
+    }
+    .step-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-subtle);
+      color: #E2E8F0;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .step-btn:hover {
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    /* Canvas Viewport */
+    .canvas-viewport {
+      position: relative;
+      width: 100%;
+      height: 520px;
+      background-color: #07090E;
+      background-image: radial-gradient(var(--canvas-dot) 1.2px, transparent 1.2px);
+      background-size: 22px 22px;
+      overflow: hidden;
+      cursor: grab;
+    }
+    .canvas-viewport:active { cursor: grabbing; }
+
+    /* SVG Connector Wire Layer */
+    .svg-canvas-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .wire-glow {
+      filter: drop-shadow(0 0 6px currentColor);
+    }
+    .wire-animated {
+      stroke-dasharray: 6 4;
+      animation: wireFlow 1.2s linear infinite;
+    }
+    @keyframes wireFlow {
+      to { stroke-dashoffset: -20; }
+    }
+
+    /* Interactive Canvas Nodes */
+    .c-node {
+      position: absolute;
+      z-index: 20;
+      border-radius: 12px;
+      background: rgba(14, 18, 28, 0.9);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-strong);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      cursor: grab;
+      transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      user-select: none;
+    }
+    .c-node:active { cursor: grabbing; }
+    .c-node.active-highlight {
+      border-color: #818CF8;
+      box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.5), 0 20px 40px rgba(0, 0, 0, 0.9);
+      transform: scale(1.02);
+    }
+
+    .node-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      gap: 8px;
+    }
+    .node-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .node-icon {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #FFFFFF;
+    }
+    .node-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #FFFFFF;
+    }
+    .node-role-pill {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .node-inner {
+      padding: 14px;
+    }
+
+    /* Node Styles */
+    #node-claude {
+      width: 280px;
+      border-top: 3px solid var(--accent-claude);
+    }
+    #node-claude .node-icon { background: var(--accent-claude); }
+    #node-claude .node-role-pill { background: rgba(249, 115, 22, 0.15); color: #FB923C; }
+
+    #node-plan {
+      width: 320px;
+      border-top: 3px solid var(--accent-amber);
+    }
+    #node-plan .node-role-pill { background: rgba(16, 185, 129, 0.15); color: #34D399; }
+
+    #node-agy {
+      width: 290px;
+      border-top: 3px solid var(--accent-agy);
+    }
+    #node-agy .node-icon { background: var(--accent-agy); }
+    #node-agy .node-role-pill { background: rgba(2, 132, 199, 0.15); color: #38BDF8; }
+
+    #node-diff {
+      width: 300px;
+      border-top: 3px solid var(--accent-diff);
+    }
+    #node-diff .node-role-pill { background: rgba(16, 185, 129, 0.15); color: #34D399; font-family: ui-monospace, monospace; }
+
+    #node-mem {
+      width: 290px;
+      border-top: 3px solid var(--accent-memory);
+    }
+    #node-mem .node-role-pill { background: rgba(16, 185, 129, 0.15); color: #6EE7B7; font-family: ui-monospace, monospace; }
+
+    .code-terminal-card {
+      background: #06080D;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      color: #94A3B8;
+      margin-top: 8px;
+    }
+
+    .human-note-bubble {
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-top: 8px;
+    }
+
+    .text-highlight {
+      background: rgba(245, 158, 11, 0.25);
+      border-bottom: 2px solid #F59E0B;
+      padding: 0 4px;
+      border-radius: 2px;
       color: #FDE68A;
+      font-weight: 600;
     }
 
-    .edge-flow {
-      stroke-dasharray: 6 6;
-      animation: dash 1s linear infinite;
+    /* Canvas Bottom Toolbar */
+    .canvas-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 18px;
+      background: rgba(14, 17, 26, 0.95);
+      border-top: 1px solid var(--border-subtle);
+      font-size: 12px;
+      color: var(--text-muted);
     }
-    @keyframes dash {
-      to { stroke-dashoffset: -24; }
+    .tools-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tool-pill {
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      color: #CBD5E1;
+      font-size: 11.5px;
+      cursor: pointer;
+    }
+    .tool-pill.active {
+      background: rgba(99, 102, 241, 0.2);
+      border-color: #6366F1;
+      color: #C7D2FE;
     }
 
-    button { font-family: inherit; }
+    /* ========================================================================= */
+    /* 5. COMPARATIVE SECTION (REFERÊNCIA IMAGEM 2)                             */
+    /* ========================================================================= */
+    .section-spacing {
+      padding-top: 100px;
+      padding-bottom: 90px;
+    }
+
+    .section-header {
+      text-align: center;
+      margin-bottom: 54px;
+    }
+    .section-eyebrow {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #818CF8;
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-size: 38px;
+      color: #FFFFFF;
+      margin-bottom: 14px;
+    }
+    .section-sub {
+      font-size: 16px;
+      color: var(--text-secondary);
+      max-width: 640px;
+      margin: 0 auto;
+    }
+
+    .split-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+    }
+
+    .split-card {
+      border-radius: 20px;
+      background: #0B0E17;
+      border: 1px solid var(--border-subtle);
+      padding: 28px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    .card-chaos {
+      border-color: rgba(239, 68, 68, 0.28);
+      box-shadow: 0 10px 50px -10px rgba(239, 68, 68, 0.14), 0 0 0 1px rgba(239, 68, 68, 0.15);
+    }
+    .card-control {
+      border-color: rgba(16, 185, 129, 0.3);
+      box-shadow: 0 10px 50px -10px rgba(16, 185, 129, 0.16), 0 0 0 1px rgba(16, 185, 129, 0.18);
+    }
+
+    .split-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .split-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-family: ui-monospace, monospace;
+    }
+    .badge-chaos { background: rgba(239, 68, 68, 0.15); color: #F87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .badge-control { background: rgba(16, 185, 129, 0.15); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.3); }
+
+    /* Mock Tabs for Terminal */
+    .tabs-strip {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+      overflow-x: auto;
+    }
+    .tab-pill {
+      font-family: ui-monospace, monospace;
+      font-size: 10.5px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.05);
+      color: #94A3B8;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    .tab-pill.alert {
+      background: rgba(239, 68, 68, 0.12);
+      color: #FCA5A5;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .split-box {
+      background: #06080E;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      padding: 16px;
+      font-family: ui-monospace, monospace;
+      font-size: 11.5px;
+      line-height: 1.5;
+      margin-bottom: 22px;
+    }
+
+    .pain-points {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .pain-point-item {
+      display: flex;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+    .pain-point-item strong {
+      color: #FFFFFF;
+      display: block;
+      margin-bottom: 2px;
+    }
+    .point-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+      font-size: 10px;
+      font-weight: bold;
+    }
+    .dot-danger { background: rgba(239, 68, 68, 0.2); color: #EF4444; }
+    .dot-success { background: rgba(16, 185, 129, 0.2); color: #10B981; }
+
+    /* ========================================================================= */
+    /* 6. FEATURES SECTION (REFERÊNCIA IMAGEM 3)                                */
+    /* ========================================================================= */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+
+    .feat-card {
+      border-radius: 20px;
+      background: rgba(14, 18, 28, 0.7);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border-subtle);
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+    .feat-card:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-3px);
+      background: rgba(19, 25, 40, 0.85);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+    }
+
+    .feat-title {
+      font-size: 20px;
+      color: #FFFFFF;
+      margin-bottom: 10px;
+    }
+    .feat-desc {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.55;
+      margin-bottom: 22px;
+    }
+
+    /* Embedded UI Graphics inside cards */
+    .mini-ui-frame {
+      border-radius: 12px;
+      background: #080A10;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 14px;
+      margin-bottom: 18px;
+    }
+
+    /* Graphic 1: Diff Audit Widget */
+    .diff-line {
+      font-family: ui-monospace, monospace;
+      font-size: 10px;
+      padding: 3px 6px;
+      border-radius: 4px;
+      margin-bottom: 3px;
+    }
+    .diff-add { background: rgba(16, 185, 129, 0.15); color: #34D399; }
+    .diff-del { background: rgba(239, 68, 68, 0.15); color: #F87171; }
+
+    /* Graphic 2: Pipeline Diagram */
+    .pipeline-nodes {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .pipe-node {
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      font-size: 10.5px;
+      font-weight: 600;
+      text-align: center;
+      flex: 1;
+    }
+    .pipe-arrow {
+      color: #64748B;
+      font-size: 11px;
+    }
+
+    /* Graphic 3: Obsidian Graph Node Constellation */
+    .obsidian-graph {
+      position: relative;
+      height: 90px;
+      border-radius: 8px;
+      background: radial-gradient(circle at center, rgba(168, 85, 247, 0.12), transparent 70%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .feat-tag {
+      font-size: 12px;
+      font-weight: 500;
+      color: #A5B4FC;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ========================================================================= */
+    /* 7. CTA & QUICKSTART SECTION (REFERÊNCIA IMAGEM 4)                        */
+    /* ========================================================================= */
+    .cta-container {
+      margin-top: 30px;
+      margin-bottom: 90px;
+      position: relative;
+    }
+
+    .cta-halo {
+      position: absolute;
+      inset: -20px;
+      background: radial-gradient(circle 500px at center, rgba(99, 102, 241, 0.28), transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .cta-card {
+      position: relative;
+      z-index: 10;
+      border-radius: 24px;
+      background: rgba(14, 18, 28, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 56px 40px;
+      text-align: center;
+      max-width: 880px;
+      margin: 0 auto;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+
+    .cta-title {
+      font-size: 40px;
+      color: #FFFFFF;
+      margin-bottom: 16px;
+    }
+    .cta-sub {
+      font-size: 16.5px;
+      color: var(--text-secondary);
+      max-width: 620px;
+      margin: 0 auto 34px auto;
+    }
+
+    .cta-terminal {
+      max-width: 620px;
+      margin: 0 auto 30px auto;
+      background: #07090F;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      overflow: hidden;
+      text-align: left;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+    }
+    .cta-term-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      font-family: ui-monospace, monospace;
+      font-size: 11px;
+      color: #94A3B8;
+    }
+    .cta-term-code {
+      padding: 16px 20px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #CBD5E1;
+    }
+    .term-kw { color: #A855F7; font-weight: 600; }
+    .term-str { color: #38BDF8; }
+
+    /* ========================================================================= */
+    /* 8. FOOTER                                                                 */
+    /* ========================================================================= */
+    footer {
+      border-top: 1px solid var(--border-subtle);
+      padding: 48px 0;
+      background: #06070B;
+    }
+
+    .footer-content {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .footer-badges {
+      display: flex;
+      gap: 8px;
+    }
+    .f-badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      color: #94A3B8;
+      text-decoration: none;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 20px;
+      list-style: none;
+    }
+    .footer-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      transition: color 0.15s;
+    }
+    .footer-links a:hover {
+      color: #FFFFFF;
+    }
+
+    /* Responsive */
+    @media (max-width: 960px) {
+      .hero-title { font-size: 40px; }
+      .split-grid { grid-template-columns: 1fr; }
+      .features-grid { grid-template-columns: 1fr; }
+      .nav-links { display: none; }
+      .canvas-viewport { height: 460px; }
+    }
   </style>
 </head>
-<body class="antialiased">
+<body>
 
   <!-- ========================================================================= -->
-  <!-- 1. STICKY GLASS HEADER -->
+  <!-- 1. NAVIGATION BAR                                                         -->
   <!-- ========================================================================= -->
-  <nav style="position: sticky; top: 0; z-index: 50; width: 100%; border-bottom: 1px solid var(--border-subtle); background: var(--bg-header); backdrop-filter: blur(16px);">
-    <div class="max-w-6xl px-4 flex items-center justify-between" style="height: 56px;">
-      
-      <!-- Brand -->
-      <a href="#hero" class="flex items-center gap-2" style="text-decoration: none;">
-        <svg width="26" height="26" viewBox="0 0 32 32" fill="none" style="flex-shrink: 0;">
-          <defs>
-            <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#4F46E5" />
-              <stop offset="100%" stop-color="#0284C7" />
-            </linearGradient>
-          </defs>
-          <rect width="32" height="32" rx="7" fill="url(#brandGrad)" />
-          <path d="M9 16 L16 10 L23 16 L16 22 Z" stroke="rgba(255,255,255,0.4)" stroke-width="1.6" />
-          <circle cx="16" cy="16" r="3.2" fill="#FFFFFF" />
-          <circle cx="9" cy="16" r="2.2" fill="#FB923C" />
-          <circle cx="23" cy="16" r="2.2" fill="#38BDF8" />
-        </svg>
-        <div class="flex items-center gap-2">
-          <span class="font-bold text-sm tracking-tight text-main">CGLI</span>
-          <span class="text-xs text-muted font-mono">/</span>
-          <span class="text-xs font-medium text-secondary">Canvas Agent Orchestrator</span>
+  <header>
+    <div class="nav-pill">
+      <a href="#" class="logo">
+        <div class="logo-badge">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M3 12h3M18 12h3M12 3v3M12 18v3" />
+          </svg>
         </div>
+        <span>CGLI</span>
+        <span class="logo-sub">/ Canvas Agent Orchestrator</span>
       </a>
 
-      <!-- Center Links -->
-      <div class="hidden md:flex items-center gap-6 text-xs font-medium text-secondary">
-        <a href="#canvas-workbench" style="color: inherit; text-decoration: none;">Como Funciona</a>
-        <a href="#before-after" style="color: inherit; text-decoration: none;">O Antes & Depois</a>
-        <a href="#use-cases" style="color: inherit; text-decoration: none;">Casos de Uso</a>
-        <a href="#quickstart" style="color: inherit; text-decoration: none;">Começar em 1 Min</a>
-      </div>
+      <ul class="nav-links">
+        <li><a href="#canvas">Como Funciona</a></li>
+        <li><a href="#diagnostico">O Antes &amp; Depois</a></li>
+        <li><a href="#casos">Casos de Uso</a></li>
+        <li><a href="#quickstart">Começar em 1 Min</a></li>
+      </ul>
 
-      <!-- Action Buttons -->
-      <div class="flex items-center gap-2">
-        <button id="themeToggleBtn" type="button"
-                style="padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); color: var(--text-secondary); cursor: pointer; font-size: 11px;">
-          <span id="themeBtnText">☀️ Claro</span>
-        </button>
-
-        <a href="https://github.com/CaioFelipe/CGLI" target="_blank" rel="noopener noreferrer"
-           style="padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); color: var(--text-main); text-decoration: none; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <a href="https://github.com/CaioFelipe/CGLI" target="_blank" class="btn btn-ghost" style="padding: 7px 14px; font-size: 13px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
           <span>GitHub</span>
         </a>
-
-        <a href="#canvas-workbench"
-           style="padding: 5px 14px; border-radius: 8px; background: #6366F1; color: #FFFFFF; text-decoration: none; font-size: 11px; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.3);">
-          Ver Demonstração ↓
+        <a href="#canvas" class="btn btn-primary" style="padding: 7px 16px; font-size: 13px;">
+          Ver Demonstração
         </a>
       </div>
-
     </div>
-  </nav>
-
-  <!-- ========================================================================= -->
-  <!-- 2. HERO SECTION -->
-  <!-- ========================================================================= -->
-  <header id="hero" class="max-w-4xl px-4" style="padding-top: 56px; padding-bottom: 32px; text-align: center;">
-    
-    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium"
-         style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-subtle); color: var(--text-secondary); margin-bottom: 20px;">
-      <span style="width: 6px; height: 6px; border-radius: 9999px; background: #F59E0B;"></span>
-      <span>Orquestração de Agentes com Supervisão Humana</span>
-    </div>
-
-    <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight text-main" style="margin: 0 auto; line-height: 1.15; max-width: 860px;">
-      Pare de se perder em 10 abas de terminal para programar com IA.
-    </h1>
-
-    <p class="text-base sm:text-lg text-secondary" style="max-width: 700px; margin: 18px auto 0; line-height: 1.6;">
-      O <strong>CGLI</strong> organiza múltiplos agentes em uma <strong>linha de montagem visual</strong>.
-      O <span style="color: #EA580C; font-weight: 600;">Claude planeja a arquitetura</span>, você
-      <strong>revisa e anota diretrizes no plano</strong>, e o
-      <span style="color: #0284C7; font-weight: 600;">executor codifica e roda os testes</span>.
-      Tudo em um único canvas, com você no controle absoluto da sua base de código.
-    </p>
-
-    <!-- Fast Action Install Command Bar -->
-    <div class="flex flex-col sm:flex-row items-center justify-center gap-3" style="max-width: 580px; margin: 28px auto 0;">
-      <div class="flex items-center justify-between w-full rounded-xl border font-mono text-xs"
-           style="background: #05070C; border-color: var(--border-subtle); padding: 10px 14px;">
-        <div class="flex items-center gap-2 overflow-hidden text-sky-400">
-          <span style="color: var(--text-muted); user-select: none;">$</span>
-          <span class="truncate">git clone https://github.com/CaioFelipe/CGLI.git</span>
-        </div>
-        <button onclick="copyInstallCmd()" style="padding: 4px 8px; border-radius: 6px; background: #27272A; color: #E4E4E7; font-size: 11px; border: none; cursor: pointer; flex-shrink: 0; margin-left: 8px;">
-          Copiar
-        </button>
-      </div>
-      <a href="#canvas-workbench" style="padding: 10px 18px; border-radius: 12px; background: #6366F1; color: #FFF; text-decoration: none; font-size: 12px; font-weight: 600; white-space: nowrap; box-shadow: 0 4px 12px rgba(99,102,241,0.25);">
-        Ver Simulação Interativa
-      </a>
-    </div>
-
-    <!-- Value Trio -->
-    <div class="flex flex-wrap items-center justify-center gap-6 text-xs font-medium text-secondary" style="margin-top: 28px;">
-      <div class="flex items-center gap-2">
-        <svg class="text-emerald-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-        <span>Zero Alt+Tab entre terminais</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <svg class="text-emerald-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-        <span>Você aprova o plano antes do código</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <svg class="text-emerald-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-        <span>Memória permanente no Obsidian (zero amnésia)</span>
-      </div>
-    </div>
-
   </header>
 
   <!-- ========================================================================= -->
-  <!-- 3. THE STUDIO CANVAS WORKBENCH -->
+  <!-- 2. HERO SECTION                                                           -->
   <!-- ========================================================================= -->
-  <section id="canvas-workbench" class="max-w-6xl px-4" style="margin-bottom: 84px;">
-    
-    <div class="studio-window overflow-hidden">
-      
-      <!-- Window Chrome -->
-      <div class="border-b flex flex-wrap items-center justify-between gap-3"
-           style="background: var(--bg-header); border-color: var(--border-subtle); padding: 10px 16px;">
-        
-        <!-- Left: Traffic Lights & Tab -->
-        <div class="flex items-center gap-3">
-          <div class="flex items-center gap-1.5">
-            <div style="width: 10px; height: 10px; border-radius: 9999px; background: #EF4444;"></div>
-            <div style="width: 10px; height: 10px; border-radius: 9999px; background: #F59E0B;"></div>
-            <div style="width: 10px; height: 10px; border-radius: 9999px; background: #10B981;"></div>
-          </div>
-          <div class="flex items-center gap-2 font-mono text-xs border-l" style="padding-left: 12px; border-color: var(--border-subtle);">
-            <span class="text-main font-semibold">~/meu-projeto</span>
-            <span class="text-muted">•</span>
-            <span class="text-secondary">branch: feature/auth-jwt</span>
-          </div>
-        </div>
-
-        <!-- Center: Step Narrative Player -->
-        <div class="flex items-center gap-2">
-          <span id="stepCounter" class="text-xs font-mono font-semibold px-2.5 py-1 rounded border"
-                style="background: rgba(99, 102, 241, 0.12); color: #818CF8; border-color: rgba(99, 102, 241, 0.25);">
-            Passo 1/5: Sua Demanda
-          </span>
-          <button id="btnPrevStep" type="button" style="padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); color: var(--text-secondary); cursor: pointer; font-size: 11px;">
-            ◀ Anterior
-          </button>
-          <button id="btnPlayPause" type="button" style="padding: 4px 12px; border-radius: 6px; background: #6366F1; color: #FFF; font-weight: 600; font-size: 11px; border: none; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-            <span id="playIcon">▶</span>
-            <span id="playText">Ver Fluxo da Feature</span>
-          </button>
-          <button id="btnNextStep" type="button" style="padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); color: var(--text-secondary); cursor: pointer; font-size: 11px;">
-            Próximo ▶
-          </button>
-          <button id="btnResetCanvas" type="button" style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); color: var(--text-muted); cursor: pointer; font-size: 11px;">
-            ↺
-          </button>
-        </div>
-
+  <section class="hero-section">
+    <div class="container">
+      <div class="badge-eyebrow">
+        <div class="pulse-dot"></div>
+        <span>Orquestração de Agentes com Supervisão Humana</span>
       </div>
 
-      <!-- Canvas Viewport -->
-      <div id="canvasViewport" class="canvas-grid" style="position: relative; width: 100%; height: 580px; overflow: hidden; user-select: none; cursor: grab; background-color: var(--bg-base);">
-        
-        <!-- Floating Canvas Engineering Toolbar -->
-        <div class="border rounded-xl flex items-center gap-1 backdrop-blur-md"
-             style="position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 30; padding: 6px 10px; background: var(--bg-header); border-color: var(--border-subtle); box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
-          <button style="padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; background: rgba(99,102,241,0.2); color: #818CF8; border: 1px solid rgba(99,102,241,0.3); display: flex; align-items: center; gap: 4px;">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 3 7 17 3-7 7-3z"></path></svg>
-            <span>Seleção (V)</span>
+      <h1 class="hero-title">
+        Pare de se perder em 10 abas de terminal para programar com IA.
+      </h1>
+
+      <p class="hero-sub">
+        O <strong>CGLI</strong> organiza múltiplos agentes em uma linha de montagem visual no seu desktop.
+        O Claude planeja a arquitetura, você revisa e anota diretrizes no plano, e o executor codifica e roda os testes.
+        Tudo em um único canvas, com você no controle absoluto da sua base de código.
+      </p>
+
+      <!-- Terminal Quick Snippet -->
+      <div>
+        <div class="cli-box">
+          <span class="cli-prefix">$</span>
+          <span class="cli-cmd">git clone https://github.com/CaioFelipe/CGLI.git</span>
+          <button class="cli-copy-btn" onclick="copyInstallCmd()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            <span>Copiar</span>
           </button>
-          <button style="padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; background: transparent; color: var(--text-muted); border: none; display: flex; align-items: center; gap: 4px;">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"></path><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"></path><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"></path><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path></svg>
-            <span>Pan (H)</span>
-          </button>
-          <span style="width: 1px; height: 16px; background: rgba(255,255,255,0.1); margin: 0 4px;"></span>
-          <span class="font-mono" style="font-size: 11px; color: var(--text-muted); padding: 0 4px;">100% Zoom</span>
-          <span style="width: 1px; height: 16px; background: rgba(255,255,255,0.1); margin: 0 4px;"></span>
-          <span style="font-size: 11px; color: var(--text-muted);">Arraste os nós livremente</span>
+        </div>
+      </div>
+
+      <div class="hero-actions">
+        <button id="heroPlayBtn" class="btn btn-indigo" onclick="startFlowSimulation()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          <span>Ver Simulação Interativa</span>
+        </button>
+        <a href="#diagnostico" class="btn btn-ghost">
+          Entenda o Antes &amp; Depois
+        </a>
+      </div>
+
+      <div class="hero-checks">
+        <div class="check-item">
+          <span class="check-icon">✓</span>
+          <span>Zero Alt+Tab entre terminais</span>
+        </div>
+        <div class="check-item">
+          <span class="check-icon">✓</span>
+          <span>Você aprova o plano antes do código</span>
+        </div>
+        <div class="check-item">
+          <span class="check-icon">✓</span>
+          <span>Memória permanente no Obsidian (zero amnésia)</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- 3. WORKBENCH CANVAS INTERATIVO (REFERÊNCIA IMAGEM 1)                     -->
+  <!-- ========================================================================= -->
+  <section id="canvas" class="container workbench-container">
+    <div class="window-frame">
+      <!-- Window Title Bar -->
+      <div class="window-header">
+        <div class="window-controls">
+          <div class="win-dot win-red"></div>
+          <div class="win-dot win-yellow"></div>
+          <div class="win-dot win-green"></div>
+          <div class="window-title" style="margin-left: 10px;">
+            <span>~/meu-projeto</span>
+            <span class="branch-pill">branch: feature/auth-jwt</span>
+          </div>
         </div>
 
-        <!-- SVG Connection Lines Layer -->
-        <svg id="canvasSvg" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;">
+        <div class="stepper-group">
+          <span id="stepBadge" class="step-pill">Passo 1/5: Sua Demanda</span>
+          <button class="step-btn" onclick="prevStep()">◀ Anterior</button>
+          <button id="simToggleBtn" class="step-btn" style="background:#4F46E5; color:white; border-color:transparent;" onclick="toggleAutoPlay()">
+            ▶ Ver Fluxo da Feature
+          </button>
+          <button class="step-btn" onclick="nextStep()">Próximo ▶</button>
+          <button class="step-btn" title="Resetar Posição dos Nós" onclick="resetNodePositions()">↺</button>
+        </div>
+      </div>
+
+      <!-- Canvas Viewport with Bézier Connections -->
+      <div id="canvasViewport" class="canvas-viewport">
+        <!-- SVG Connections with Glow Filters -->
+        <svg id="svgLayer" class="svg-canvas-layer">
           <defs>
-            <linearGradient id="gradClaudePlan" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="#EA580C" />
-              <stop offset="100%" stop-color="#6366F1" />
-            </linearGradient>
-            <linearGradient id="gradPlanAgy" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="#6366F1" />
-              <stop offset="100%" stop-color="#0284C7" />
-            </linearGradient>
-            <linearGradient id="gradMemAgy" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="#10B981" />
-              <stop offset="100%" stop-color="#0284C7" />
-            </linearGradient>
-            <linearGradient id="gradAgyDiff" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="#0284C7" />
-              <stop offset="100%" stop-color="#F43F5E" />
-            </linearGradient>
+            <filter id="glowOrange" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <filter id="glowIndigo" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <filter id="glowCyan" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <filter id="glowGreen" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
           </defs>
 
-          <path id="path-claude-art" stroke="url(#gradClaudePlan)" stroke-width="2.5" fill="none" class="edge-flow" />
-          <path id="path-art-agy" stroke="url(#gradPlanAgy)" stroke-width="2.5" fill="none" class="edge-flow" />
-          <path id="path-mem-agy" stroke="url(#gradMemAgy)" stroke-width="2" stroke-dasharray="4 4" fill="none" />
-          <path id="path-agy-diff" stroke="url(#gradAgyDiff)" stroke-width="2.5" fill="none" class="edge-flow" />
+          <path id="path-claude-plan" stroke="#F97316" stroke-width="2.5" fill="none" class="wire-animated wire-glow" style="color: #F97316;" />
+          <path id="path-plan-agy" stroke="#818CF8" stroke-width="2.5" fill="none" class="wire-animated wire-glow" style="color: #818CF8;" />
+          <path id="path-agy-diff" stroke="#0284C7" stroke-width="2.5" fill="none" class="wire-animated wire-glow" style="color: #0284C7;" />
+          <path id="path-mem-agy" stroke="#10B981" stroke-width="2" stroke-dasharray="4 4" fill="none" class="wire-glow" style="color: #10B981;" />
         </svg>
 
-        <!-- NODE 1: CLAUDE CODE (O ARQUITETO) -->
-        <div id="node-claude" class="canvas-node studio-card"
-             style="position: absolute; z-index: 20; width: 315px; left: 30px; top: 40px; cursor: grab;">
-          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); border-top: 3px solid #EA580C; border-top-left-radius: 0.75rem; border-top-right-radius: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
-            <div class="flex items-center gap-2">
-              <div style="width: 20px; height: 20px; border-radius: 4px; background: rgba(234,88,12,0.2); color: #EA580C; font-weight: 700; font-size: 11px; display: flex; align-items: center; justify-content: center;">C</div>
-              <div>
-                <span class="text-xs font-bold text-main" style="display: block; line-height: 1.2;">Claude Code</span>
-                <span style="font-size: 10px; color: #EA580C; font-weight: 500;">Papel: Arquiteto de Software</span>
-              </div>
+        <!-- Node 1: Claude Code (Arquiteto) -->
+        <div id="node-claude" class="c-node active-highlight" style="left: 24px; top: 30px;">
+          <div class="node-bar">
+            <div class="node-brand">
+              <div class="node-icon">C</div>
+              <span class="node-name">Claude Code</span>
             </div>
-            <span class="font-mono" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); color: #34D399; border: 1px solid rgba(16,185,129,0.2);">
-              Planejador
-            </span>
+            <span class="node-role-pill">Planejador</span>
           </div>
-          <div style="padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
-            <div class="border rounded-lg" style="padding: 8px 10px; background: rgba(0, 0, 0, 0.4); border-color: var(--border-subtle); color: var(--text-secondary); font-size: 11px; line-height: 1.5;">
-              <span class="font-bold text-indigo-400">Sua Instrução:</span> "Implementar autenticação JWT com rota de refresh token e middleware de proteção."
+          <div class="node-inner">
+            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">Sua Instrução:</div>
+            <div style="font-size: 12px; color: #FFFFFF; font-weight: 500; margin-bottom: 8px;">
+              "Implementar autenticação JWT com rota de refresh token e middleware de proteção."
             </div>
-            <div class="border rounded-lg font-mono" style="padding: 8px 10px; background: rgba(234, 88, 12, 0.08); border-color: rgba(234, 88, 12, 0.25); color: #FDBA74; font-size: 10px; line-height: 1.5;">
+            <div class="code-terminal-card" style="border-left: 2px solid #F59E0B; background: rgba(245, 158, 11, 0.08); color: #FDE68A;">
               💡 <strong>Raciocínio:</strong> "Não vou mexer no código agora. Estou criando a especificação e publicando o plano para revisão humana."
             </div>
           </div>
         </div>
 
-        <!-- NODE 2: PLANO ARQUITETURAL (SUA CANETADA & APROVAÇÃO) -->
-        <div id="node-art" class="canvas-node studio-card"
-             style="position: absolute; z-index: 20; width: 340px; left: 385px; top: 30px; cursor: grab;">
-          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); border-top: 3px solid #6366F1; border-top-left-radius: 0.75rem; border-top-right-radius: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
-            <div class="flex items-center gap-2">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#818CF8" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
-              <span class="text-xs font-bold text-main">Plano de Autenticação JWT</span>
+        <!-- Node 2: Technical Plan with Review Note -->
+        <div id="node-plan" class="c-node" style="left: 335px; top: 20px;">
+          <div class="node-bar">
+            <div class="node-brand">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <span class="node-name">Plano de Autenticação JWT</span>
             </div>
-            <span class="font-bold" style="font-size: 10px; padding: 2px 8px; border-radius: 9999px; background: rgba(16, 185, 129, 0.2); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.3);">
-              ✓ Aprovado por Você
-            </span>
+            <span class="node-role-pill">✓ Aprovado por Você</span>
           </div>
-          <div style="padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
-            <div class="border rounded-lg" style="padding: 8px 10px; background: rgba(0, 0, 0, 0.4); border-color: var(--border-subtle); color: var(--text-main); font-size: 11px; line-height: 1.5;">
-              <p class="font-bold text-indigo-400" style="margin-bottom: 4px;">Etapas Planejadas:</p>
-              <p>1. Criar helper HMAC-SHA256 para tokens</p>
-              <p>2. <span class="text-anchor-hl">Armazenar refresh token em Cookie HttpOnly</span></p>
-              <p>3. Middleware de validação com retorno 401</p>
-            </div>
-            <!-- Sua Anotação TextAnchor -->
-            <div class="border rounded-lg flex items-start gap-2"
-                 style="padding: 8px 10px; background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.35); color: #FDE68A; font-size: 11px; line-height: 1.5;">
-              <svg style="flex-shrink: 0; margin-top: 2px;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-              <div>
-                <strong>Sua Revisão (Ancorada no item 2):</strong> "Perfeito. Nunca guarde no localStorage para evitar roubo por XSS."
+          <div class="node-inner">
+            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">Etapas Planejadas:</div>
+            <ol style="font-size: 11.5px; color: #CBD5E1; padding-left: 16px; margin-bottom: 8px; line-height: 1.5;">
+              <li>Criar helper HMAC-SHA256 para tokens</li>
+              <li><span class="text-highlight">Armazenar refresh token em Cookie HttpOnly</span></li>
+              <li>Middleware de validação com retorno 401</li>
+            </ol>
+            <div class="human-note-bubble">
+              <div style="font-size: 10.5px; color: #F59E0B; font-weight: 600; margin-bottom: 2px;">
+                ✍️ Sua Revisão (Ancorada no item 2):
+              </div>
+              <div style="font-size: 11.5px; color: #FEF3C7;">
+                "Perfeito. Nunca guarde no localStorage para evitar roubo por XSS."
               </div>
             </div>
           </div>
         </div>
 
-        <!-- NODE 3: AGY (EXECUTOR QUE SÓ FAZ O APROVADO) -->
-        <div id="node-agy" class="canvas-node studio-card"
-             style="position: absolute; z-index: 20; width: 315px; left: 760px; top: 40px; cursor: grab;">
-          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); border-top: 3px solid #0284C7; border-top-left-radius: 0.75rem; border-top-right-radius: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
-            <div class="flex items-center gap-2">
-              <div style="width: 20px; height: 20px; border-radius: 4px; background: rgba(2,132,199,0.2); color: #38BDF8; font-bold: 700; font-size: 11px; display: flex; align-items: center; justify-content: center;">A</div>
-              <div>
-                <span class="text-xs font-bold text-main" style="display: block; line-height: 1.2;">Antigravity (AGY)</span>
-                <span style="font-size: 10px; color: #38BDF8; font-weight: 500;">Papel: Executor de Código</span>
-              </div>
+        <!-- Node 3: Antigravity AGY (Executor) -->
+        <div id="node-agy" class="c-node" style="left: 690px; top: 30px;">
+          <div class="node-bar">
+            <div class="node-brand">
+              <div class="node-icon">A</div>
+              <span class="node-name">Antigravity (AGY)</span>
             </div>
-            <span class="font-mono" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); color: #34D399; border: 1px solid rgba(16,185,129,0.2);">
-              Executando
-            </span>
+            <span class="node-role-pill">Executando</span>
           </div>
-          <div style="padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
-            <div class="border rounded-lg" style="padding: 8px 10px; background: rgba(0, 0, 0, 0.4); border-color: var(--border-subtle); color: var(--text-secondary); font-size: 11px; line-height: 1.5;">
-              <span class="font-bold text-sky-400">Diretriz:</span> "Plano validado pelo humano. Escrevendo o middleware e rodando testes unitários."
+          <div class="node-inner">
+            <div style="font-size: 11.5px; color: var(--text-secondary); margin-bottom: 6px;">
+              <strong>Diretriz:</strong> "Plano validado pelo humano. Escrevendo o middleware e rodando testes unitários."
             </div>
-            <div class="border rounded-lg font-mono text-emerald-400"
-                 style="padding: 8px 10px; background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.25); font-size: 10px; line-height: 1.5;">
-              $ cargo test --test auth_jwt<br/>
-              test result: ok. 4 passed; 0 failed
+            <div class="code-terminal-card" style="color: #38BDF8;">
+              $ cargo test --test auth_jwt<br>
+              <span style="color: #34D399; font-weight: 600;">test result: ok. 4 passed; 0 failed</span>
             </div>
           </div>
         </div>
 
-        <!-- NODE 4: OBSIDIAN VAULT (A MEMÓRIA QUE NUNCA ESQUECE) -->
-        <div id="node-mem" class="canvas-node studio-card"
-             style="position: absolute; z-index: 20; width: 290px; left: 385px; top: 370px; cursor: grab;">
-          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); border-top: 3px solid #10B981; border-top-left-radius: 0.75rem; border-top-right-radius: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
-            <div class="flex items-center gap-2">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-              <span class="text-xs font-bold text-main">Memória de Decisões (ADR)</span>
+        <!-- Node 4: Obsidian ADR Memory -->
+        <div id="node-mem" class="c-node" style="left: 350px; top: 330px;">
+          <div class="node-bar">
+            <div class="node-brand">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+              </svg>
+              <span class="node-name">Memória de Decisões (ADR)</span>
             </div>
-            <span class="font-mono text-emerald-400" style="font-size: 10px;">Obsidian</span>
+            <span class="node-role-pill">Obsidian</span>
           </div>
-          <div style="padding: 12px; font-size: 11px; line-height: 1.5; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px;">
-            <p><strong>Decisão Registrada:</strong> "Sempre utilizar cookies HttpOnly + SameSite=Strict em todos os endpoints deste projeto."</p>
-            <p style="font-size: 10px; color: #34D399; margin-top: 4px;">✓ Respeitado automaticamente por todos os agentes futuros.</p>
+          <div class="node-inner">
+            <div style="font-size: 10.5px; color: var(--text-muted); margin-bottom: 4px;">Decisão Registrada:</div>
+            <div style="font-size: 11.5px; color: #A7F3D0; margin-bottom: 6px; font-weight: 500;">
+              "Sempre utilizar cookies HttpOnly + SameSite=Strict em todos os endpoints deste projeto."
+            </div>
+            <div style="font-size: 10.5px; color: #6EE7B7;">
+              ✓ Respeitado automaticamente por todos os agentes futuros.
+            </div>
           </div>
         </div>
 
-        <!-- NODE 5: UNIFIED DIFF (VOCÊ VÊ O QUE MUDOU) -->
-        <div id="node-diff" class="canvas-node studio-card"
-             style="position: absolute; z-index: 20; width: 315px; left: 760px; top: 320px; cursor: grab;">
-          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); border-top: 3px solid #F43F5E; border-top-left-radius: 0.75rem; border-top-right-radius: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
-            <div class="flex items-center gap-2">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FB7185" stroke-width="2"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
-              <span class="text-xs font-bold text-main">Diff em Tempo Real</span>
+        <!-- Node 5: Real-time Diff Viewer -->
+        <div id="node-diff" class="c-node" style="left: 690px; top: 280px;">
+          <div class="node-bar">
+            <div class="node-brand">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F43F5E" stroke-width="2">
+                <path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/>
+              </svg>
+              <span class="node-name">Diff em Tempo Real</span>
             </div>
-            <span class="font-mono font-bold text-emerald-400" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.2);">
-              +42 / -0
-            </span>
+            <span class="node-role-pill">+42 / -0</span>
           </div>
-          <div class="font-mono" style="padding: 12px; background: #03060C; font-size: 10px; line-height: 1.5;">
-            <div style="color: #64748B;">@@ src/middleware/auth.rs @@</div>
-            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 2px 4px; border-radius: 2px;">+ pub async fn verify_jwt(req: Request) {</div>
-            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 2px 4px; border-radius: 2px;">+   let token = req.cookies().get("jwt")?;</div>
-            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 2px 4px; border-radius: 2px;">+   decode_token(&token.value())</div>
-            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 2px 4px; border-radius: 2px;">+ }</div>
+          <div class="node-inner">
+            <div class="code-terminal-card" style="font-size: 10.5px;">
+              <span style="color: #64748B;">@@ src/middleware/auth.rs @@</span><br>
+              <span style="color: #34D399;">+ pub async fn verify_jwt(req: Request) {</span><br>
+              <span style="color: #34D399;">+   let token = req.cookies().get("jwt")?;</span><br>
+              <span style="color: #34D399;">+   decode_token(&token.value())</span><br>
+              <span style="color: #34D399;">+ }</span>
+            </div>
           </div>
-        </div>
-
-      </div>
-
-      <!-- Stepper Explanation Footer Below Canvas -->
-      <div class="border-t" style="padding: 16px; background: var(--bg-surface); border-color: var(--border-subtle);">
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-xs">
-          
-          <div id="step-desc-1" class="border rounded-xl" style="padding: 12px; border-color: rgba(99, 102, 241, 0.5); background: rgba(99, 102, 241, 0.12);">
-            <div class="font-bold text-indigo-400" style="margin-bottom: 4px;">1. Sua Demanda</div>
-            <p class="text-secondary" style="font-size: 11px;">Você define a meta no nó do Claude sem abrir abas soltas de terminal.</p>
-          </div>
-
-          <div id="step-desc-2" class="border rounded-xl" style="padding: 12px; opacity: 0.5; border-color: var(--border-subtle); background: var(--bg-surface-elevated);">
-            <div class="font-bold text-main" style="margin-bottom: 4px;">2. Plano Técnico</div>
-            <p class="text-secondary" style="font-size: 11px;">O arquiteto cria o plano técnico no canvas antes de tocar no código.</p>
-          </div>
-
-          <div id="step-desc-3" class="border rounded-xl" style="padding: 12px; opacity: 0.5; border-color: var(--border-subtle); background: var(--bg-surface-elevated);">
-            <div class="font-bold text-main" style="margin-bottom: 4px;">3. Sua Canetada</div>
-            <p class="text-secondary" style="font-size: 11px;">Você grifa o parágrafo crítico, impõe regras de negócio e clica em Aprovar.</p>
-          </div>
-
-          <div id="step-desc-4" class="border rounded-xl" style="padding: 12px; opacity: 0.5; border-color: var(--border-subtle); background: var(--bg-surface-elevated);">
-            <div class="font-bold text-main" style="margin-bottom: 4px;">4. Execução Guiada</div>
-            <p class="text-secondary" style="font-size: 11px;">O executor codifica apenas o plano aprovado, consultando o Obsidian.</p>
-          </div>
-
-          <div id="step-desc-5" class="border rounded-xl" style="padding: 12px; opacity: 0.5; border-color: var(--border-subtle); background: var(--bg-surface-elevated);">
-            <div class="font-bold text-main" style="margin-bottom: 4px;">5. Diffs & Paz</div>
-            <p class="text-secondary" style="font-size: 11px;">Você audita visualmente as linhas alteradas e os testes passando.</p>
-          </div>
-
         </div>
       </div>
 
+      <!-- Window Bottom Status Bar -->
+      <div class="canvas-footer">
+        <div class="tools-group">
+          <button class="tool-pill active">Seleção (V)</button>
+          <button class="tool-pill">Pan (H)</button>
+          <button class="tool-pill">100% Zoom</button>
+        </div>
+        <div>
+          ✦ <strong>Dica:</strong> Arraste qualquer nó no canvas. As conexões de Bézier recalculam em tempo real.
+        </div>
+      </div>
     </div>
   </section>
 
   <!-- ========================================================================= -->
-  <!-- 4. O ANTES & DEPOIS VISUAL -->
+  <!-- 4. DIAGNÓSTICO COMPARATIVO: O ANTES & DEPOIS (REFERÊNCIA IMAGEM 2)        -->
   <!-- ========================================================================= -->
-  <section id="before-after" class="max-w-5xl px-4" style="margin-bottom: 84px;">
-    
-    <div style="text-align: center; margin-bottom: 40px;">
-      <span class="text-xs uppercase tracking-wider font-bold" style="color: #F59E0B;">O Diagnóstico da Rotina</span>
-      <h2 class="text-3xl font-extrabold tracking-tight text-main" style="margin-top: 6px;">
-        Por que programar com IA ainda dá tanta ansiedade?
-      </h2>
-      <p class="text-secondary text-sm" style="max-width: 580px; margin: 8px auto 0;">
-        A maioria dos engenheiros passa o dia em um ciclo exaustivo de abas soltas e correções manuais no escuro.
-      </p>
-    </div>
+  <section id="diagnostico" class="section-spacing">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-eyebrow">O DIAGNÓSTICO DA ROTINA</div>
+        <h2 class="section-title">Por que programar com IA ainda dá tanta ansiedade?</h2>
+        <p class="section-sub">
+          A maioria dos desenvolvedores passa o dia em um ciclo exaustivo de abas soltas, 
+          apertando "Enter" no escuro e corrigindo estragos manuais depois.
+        </p>
+      </div>
 
-    <!-- Visual Split View -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      
-      <!-- O Caos Tradicional -->
-      <div class="studio-card overflow-hidden" style="border-color: rgba(239, 68, 68, 0.25);">
-        <div class="border-b flex items-center justify-between"
-             style="padding: 12px 16px; background: rgba(239, 68, 68, 0.06); border-color: rgba(239, 68, 68, 0.2);">
-          <div class="flex items-center gap-2">
-            <span style="width: 8px; height: 8px; border-radius: 9999px; background: #EF4444;"></span>
-            <span class="text-xs font-bold" style="color: #F87171;">O Terminal Tradicional (Caos)</span>
+      <div class="split-grid">
+        <!-- Card 1: Terminal Tradicional (Caos) -->
+        <div class="split-card card-chaos">
+          <div class="split-header">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="color: #EF4444; font-size: 15px;">●</span>
+              <strong style="color: #FFFFFF; font-size: 16px;">O Terminal Tradicional (Caos)</strong>
+            </div>
+            <span class="split-badge badge-chaos">12 abas abertas</span>
           </div>
-          <span class="font-mono text-xs" style="color: rgba(248, 113, 113, 0.8);">12 abas abertas</span>
+
+          <!-- Mock terminal tab bar -->
+          <div class="tabs-strip">
+            <div class="tab-pill alert">term-1 (error)</div>
+            <div class="tab-pill alert">claude-agent [!]</div>
+            <div class="tab-pill">tests-runner</div>
+            <div class="tab-pill">api-server</div>
+          </div>
+
+          <div class="split-box" style="border-color: rgba(239, 68, 68, 0.2); color: #FCA5A5;">
+            <div style="color: #94A3B8;">$ claude --dangerously-skip-permissions</div>
+            <div style="color: #EF4444; margin: 4px 0;">⚠ Warning: Generating 780 lines across 14 files...</div>
+            <div style="color: #F87171;">? Accept changes and execute? [y/N]</div>
+            <div style="color: #64748B; margin-top: 6px;">
+              File "src/auth/jwt.rs", line 83, in verify_token<br>
+              Panic: unhandled error in cookie parser
+            </div>
+          </div>
+
+          <ul class="pain-points">
+            <li class="pain-point-item">
+              <div class="point-dot dot-danger">✕</div>
+              <div>
+                <strong>O "Enter" no escuro</strong>
+                Você digita 'y' sem ler 800 linhas de diff corrido no terminal e torce para não quebrar a branch main.
+              </div>
+            </li>
+            <li class="pain-point-item">
+              <div class="point-dot dot-danger">✕</div>
+              <div>
+                <strong>Amnésia constante entre sessões</strong>
+                O agente esquece a decisão de arquitetura tomada na semana passada e inventa padrões proibidos no repositório.
+              </div>
+            </li>
+            <li class="pain-point-item">
+              <div class="point-dot dot-danger">✕</div>
+              <div>
+                <strong>Maratona de Alt+Tab</strong>
+                Procurando onde está o log de erro entre VS Code, split de testes, chat web e terminais independentes.
+              </div>
+            </li>
+          </ul>
         </div>
-        
-        <div class="font-mono text-xs" style="padding: 16px; background: #05070B; color: #94A3B8; display: flex; flex-direction: column; gap: 12px; line-height: 1.5;">
+
+        <!-- Card 2: O CGLI Workbench (Controle Total) -->
+        <div class="split-card card-control">
+          <div class="split-header">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="color: #10B981; font-size: 15px;">●</span>
+              <strong style="color: #FFFFFF; font-size: 16px;">O CGLI Workbench (Controle Total)</strong>
+            </div>
+            <span class="split-badge badge-control">Mesa Única Auditável</span>
+          </div>
+
+          <!-- Structured Visual Mockup -->
+          <div class="split-box" style="border-color: rgba(16, 185, 129, 0.2); background: rgba(16, 185, 129, 0.04);">
+            <div style="color: #34D399; font-weight: 600; margin-bottom: 4px;">
+              ✓ Plano criado pelo Claude: Especificação aprovada
+            </div>
+            <div style="color: #A7F3D0; margin-bottom: 4px;">
+              ✓ Memória ADR consultada: Regras de segurança preservadas
+            </div>
+            <div style="color: #38BDF8;">
+              ✓ Diff verificado: +42 linhas estritamente no escopo
+            </div>
+          </div>
+
+          <ul class="pain-points">
+            <li class="pain-point-item">
+              <div class="point-dot dot-success">✓</div>
+              <div>
+                <strong>Aprovação com canetada humana</strong>
+                Você grifa o plano, impõe as regras de negócio antes de qualquer código e só então libera o executor.
+              </div>
+            </li>
+            <li class="pain-point-item">
+              <div class="point-dot dot-success">✓</div>
+              <div>
+                <strong>Memória contínua no Obsidian</strong>
+                Toda decisão de arquitetura é gravada no Obsidian Vault do repositório (<code>.cgli/vault/</code>) para sempre.
+              </div>
+            </li>
+            <li class="pain-point-item">
+              <div class="point-dot dot-success">✓</div>
+              <div>
+                <strong>Mesa unificada de governança</strong>
+                Arquiteto, executor, especificações, memória e diffs na mesma tela, sem perder o foco mental.
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- 5. CASOS DE USO PRÁTICOS (REFERÊNCIA IMAGEM 3)                           -->
+  <!-- ========================================================================= -->
+  <section id="casos" class="section-spacing" style="padding-top: 20px;">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-eyebrow">APLICAÇÕES PRÁTICAS</div>
+        <h2 class="section-title">Onde o CGLI faz a diferença real na sua semana</h2>
+        <p class="section-sub">
+          Projetado para os momentos críticos em que errar não é uma opção.
+        </p>
+      </div>
+
+      <div class="features-grid">
+        <!-- Card 1: Refatorações Perigosas -->
+        <div class="feat-card">
           <div>
-            <div style="color: #64748B;">$ claude --dangerously-skip-permissions</div>
-            <div style="color: #FBBF24;">⚠ Warning: Generating 780 lines across 14 files...</div>
-            <div style="color: #CBD5E1;">? Accept changes and execute? [y/N]</div>
-          </div>
-
-          <div class="border rounded" style="padding: 10px; border-color: rgba(239, 68, 68, 0.2); background: rgba(127, 29, 29, 0.2); color: #FCA5A5; font-size: 11px; display: flex; flex-direction: column; gap: 6px;">
-            <div class="font-bold flex items-center gap-2" style="color: #F87171;">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-              <span>O que acontece no seu dia a dia:</span>
+            <h3 class="feat-title">Refatorações Perigosas</h3>
+            <p class="feat-desc">
+              Trocar a biblioteca de auth, migrar ORMs ou reescrever rotas críticas. 
+              Em vez de torcer para a IA não apagar arquivos vizinhos, aprove o plano em etapas e audite cada diff visualmente.
+            </p>
+            <!-- Embedded UI Graphic -->
+            <div class="mini-ui-frame">
+              <div style="display: flex; justify-content: space-between; font-size: 10px; color: #94A3B8; margin-bottom: 6px;">
+                <span>Auditoria de Diff</span>
+                <span style="color: #34D399; font-weight: 600;">✓ Aprovado</span>
+              </div>
+              <div class="diff-line diff-del">- const token = localStorage.getItem('token');</div>
+              <div class="diff-line diff-add">+ const token = req.cookies.get('jwt_secure');</div>
             </div>
-            <div>• <strong>O "Enter" no escuro:</strong> Você digita 'y' sem ler 800 linhas de diff cru no terminal e torce para não quebrar a main.</div>
-            <div>• <strong>Amnésia constante:</strong> O agente esqueceu a decisão de arquitetura tomada na semana passada e inventa padrões proibidos.</div>
-            <div>• <strong>Maratona de Alt+Tab:</strong> Procurando onde está o log de erro entre VS Code, split de testes e chat web.</div>
+          </div>
+          <div class="feat-tag">
+            <span>🛡️ Auditoria pré-execução • Zero surpresas</span>
+          </div>
+        </div>
+
+        <!-- Card 2: Features Complexas Full-Stack -->
+        <div class="feat-card">
+          <div>
+            <h3 class="feat-title">Features Complexas Full-Stack</h3>
+            <p class="feat-desc">
+              Deixe o Claude modelar os contratos de API e os schemas em formato visual. 
+              Valide a lógica em 2 minutos. O executor implementa o backend e os testes sem inventar rotas que você não pediu.
+            </p>
+            <!-- Embedded Pipeline Graphic -->
+            <div class="mini-ui-frame">
+              <div class="pipeline-nodes">
+                <div class="pipe-node" style="color: #FB923C;">Arquiteto</div>
+                <div class="pipe-arrow">➔</div>
+                <div class="pipe-node" style="color: #818CF8;">Plano</div>
+                <div class="pipe-arrow">➔</div>
+                <div class="pipe-node" style="color: #38BDF8;">Executor</div>
+              </div>
+            </div>
+          </div>
+          <div class="feat-tag">
+            <span>⚡ Separação de papéis • Arquiteto ➔ Executor</span>
+          </div>
+        </div>
+
+        <!-- Card 3: Memória Histórica da Equipe -->
+        <div class="feat-card">
+          <div>
+            <h3 class="feat-title">Memória Histórica da Equipe</h3>
+            <p class="feat-desc">
+              Todas as decisões arquiteturais (ADRs) são salvas em arquivos Markdown no repositório (<code>.cgli/vault/</code>). 
+              Seja um novo desenvolvedor ou um agente rodando na semana que vem, as convenções nunca são violadas.
+            </p>
+            <!-- Embedded Knowledge Graph Graphic -->
+            <div class="mini-ui-frame">
+              <div class="obsidian-graph">
+                <svg width="100%" height="80" viewBox="0 0 200 80">
+                  <circle cx="100" cy="40" r="10" fill="#9333EA" opacity="0.8" />
+                  <circle cx="50" cy="25" r="5" fill="#A855F7" />
+                  <circle cx="150" cy="30" r="6" fill="#A855F7" />
+                  <circle cx="70" cy="65" r="5" fill="#34D399" />
+                  <circle cx="140" cy="60" r="5" fill="#38BDF8" />
+                  <line x1="100" y1="40" x2="50" y2="25" stroke="rgba(168,85,247,0.4)" stroke-width="1.5" />
+                  <line x1="100" y1="40" x2="150" y2="30" stroke="rgba(168,85,247,0.4)" stroke-width="1.5" />
+                  <line x1="100" y1="40" x2="70" y2="65" stroke="rgba(168,85,247,0.4)" stroke-width="1.5" />
+                  <line x1="100" y1="40" x2="140" y2="60" stroke="rgba(168,85,247,0.4)" stroke-width="1.5" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div class="feat-tag">
+            <span>🧠 Obsidian Dual-Vault • Zero amnésia</span>
           </div>
         </div>
       </div>
-
-      <!-- O CGLI Workbench -->
-      <div class="studio-card overflow-hidden" style="border-color: rgba(16, 185, 129, 0.3);">
-        <div class="border-b flex items-center justify-between"
-             style="padding: 12px 16px; background: rgba(16, 185, 129, 0.06); border-color: rgba(16, 185, 129, 0.2);">
-          <div class="flex items-center gap-2">
-            <span style="width: 8px; height: 8px; border-radius: 9999px; background: #10B981;"></span>
-            <span class="text-xs font-bold text-emerald-400">O CGLI Workbench (Controle Total)</span>
-          </div>
-          <span class="font-mono text-xs" style="color: rgba(52, 211, 153, 0.8);">Mesa Única Auditável</span>
-        </div>
-
-        <div class="font-mono text-xs" style="padding: 16px; background: #05070B; color: #94A3B8; display: flex; flex-direction: column; gap: 12px; line-height: 1.5;">
-          <div style="display: flex; flex-direction: column; gap: 4px;">
-            <div class="text-indigo-400">✔ Plano criado por Claude Code: Especificação aprovada</div>
-            <div class="text-emerald-400">✔ Memória ADR consultada: Regras de segurança preservadas</div>
-            <div class="text-sky-400">✔ Diff verificado: +42 linhas estritamente no escopo</div>
-          </div>
-
-          <div class="border rounded" style="padding: 10px; border-color: rgba(16, 185, 129, 0.2); background: rgba(6, 78, 59, 0.2); color: #6EE7B7; font-size: 11px; display: flex; flex-direction: column; gap: 6px;">
-            <div class="font-bold flex items-center gap-2 text-emerald-400">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span>A sua rotina com o CGLI:</span>
-            </div>
-            <div>• <strong>Aprovação com canetada:</strong> Você grifa o plano, impõe as regras de negócio e só então libera o executor.</div>
-            <div>• <strong>Memória contínua:</strong> Toda decisão é gravada no Obsidian Vault do repositório (`.cgli/vault/`).</div>
-            <div>• <strong>Mesa unificada:</strong> Arquiteto, executor, planos, memória e diffs em uma só tela.</div>
-          </div>
-        </div>
-      </div>
-
     </div>
-
   </section>
 
   <!-- ========================================================================= -->
-  <!-- 5. CASOS DE USO REAIS -->
+  <!-- 6. CTA & QUICKSTART (REFERÊNCIA IMAGEM 4)                                -->
   <!-- ========================================================================= -->
-  <section id="use-cases" class="max-w-6xl px-4" style="margin-bottom: 84px;">
-    
-    <div style="text-align: center; margin-bottom: 40px;">
-      <span class="text-xs uppercase tracking-wider font-bold text-indigo-400">Aplicações Práticas</span>
-      <h2 class="text-3xl font-extrabold tracking-tight text-main" style="margin-top: 6px;">
-        Onde o CGLI faz a diferença real na sua semana
-      </h2>
-    </div>
-
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      
-      <!-- Caso 1 -->
-      <div class="studio-card flex flex-col justify-between" style="padding: 24px;">
-        <div>
-          <div class="border rounded-xl flex items-center justify-center text-orange-500"
-               style="width: 40px; height: 40px; background: rgba(234, 88, 12, 0.1); border-color: rgba(234, 88, 12, 0.2); margin-bottom: 16px;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-          </div>
-          <h3 class="text-base font-bold text-main" style="margin-bottom: 8px;">Refatorações Perigosas</h3>
-          <p class="text-xs text-secondary" style="line-height: 1.6;">
-            Trocar a biblioteca de autenticação, migrar ORMs ou reescrever rotas críticas. Em vez de torcer para a IA não apagar arquivos vizinhos,
-            você valida o plano em etapas e audita cada diff visualmente antes do commit.
-          </p>
-        </div>
-        <div class="border-t font-mono flex items-center justify-between" style="margin-top: 24px; padding-top: 12px; border-color: var(--border-subtle); font-size: 11px; color: var(--text-muted);">
-          <span>Auditoria pré-execução</span>
-          <span class="text-emerald-400 font-semibold">Zero surpresas</span>
-        </div>
-      </div>
-
-      <!-- Caso 2 -->
-      <div class="studio-card flex flex-col justify-between" style="padding: 24px;">
-        <div>
-          <div class="border rounded-xl flex items-center justify-center text-sky-400"
-               style="width: 40px; height: 40px; background: rgba(2, 132, 199, 0.1); border-color: rgba(2, 132, 199, 0.2); margin-bottom: 16px;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-          </div>
-          <h3 class="text-base font-bold text-main" style="margin-bottom: 8px;">Features Complexas Full-Stack</h3>
-          <p class="text-xs text-secondary" style="line-height: 1.6;">
-            Deixe o Claude modelar os contratos de API e os schemas do banco em formato visual. Valide a lógica em 2 minutos.
-            O executor implementa o backend e os testes unitários sem inventar rotas que você não pediu.
-          </p>
-        </div>
-        <div class="border-t font-mono flex items-center justify-between" style="margin-top: 24px; padding-top: 12px; border-color: var(--border-subtle); font-size: 11px; color: var(--text-muted);">
-          <span>Separação de papéis</span>
-          <span class="text-sky-400 font-semibold">Arquiteto ≠ Executor</span>
-        </div>
-      </div>
-
-      <!-- Caso 3 -->
-      <div class="studio-card flex flex-col justify-between" style="padding: 24px;">
-        <div>
-          <div class="border rounded-xl flex items-center justify-center text-emerald-400"
-               style="width: 40px; height: 40px; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.2); margin-bottom: 16px;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-          </div>
-          <h3 class="text-base font-bold text-main" style="margin-bottom: 8px;">Memória Histórica da Equipe</h3>
-          <p class="text-xs text-secondary" style="line-height: 1.6;">
-            Todas as decisões arquiteturais (ADRs) são salvas em arquivos Markdown no repositório (`.cgli/vault/`).
-            Seja um novo dev entrando no time ou um agente rodando na semana que vem, as regras nunca são violadas.
-          </p>
-        </div>
-        <div class="border-t font-mono flex items-center justify-between" style="margin-top: 24px; padding-top: 12px; border-color: var(--border-subtle); font-size: 11px; color: var(--text-muted);">
-          <span>Obsidian Dual-Vault</span>
-          <span class="font-semibold" style="color: #C084FC;">Zero amnésia</span>
-        </div>
-      </div>
-
-    </div>
-
-  </section>
-
-  <!-- ========================================================================= -->
-  <!-- 6. COMEÇAR EM 1 MINUTO -->
-  <!-- ========================================================================= -->
-  <section id="quickstart" class="max-w-4xl px-4" style="margin-bottom: 84px; text-align: center;">
-    <div class="studio-card" style="padding: 40px 24px;">
-      
-      <h2 class="text-3xl font-extrabold tracking-tight text-main">
-        Pronto para codar com agentes sem perder o controle?
-      </h2>
-      <p class="text-secondary text-sm" style="max-width: 520px; margin: 12px auto 24px; line-height: 1.6;">
-        O CGLI é 100% código aberto e executa totalmente local no seu computador.
-        Seus arquivos e seus agentes permanecem sob a sua governança.
+  <section id="quickstart" class="container cta-container">
+    <div class="cta-halo"></div>
+    <div class="cta-card">
+      <h2 class="cta-title">Pronto para codar com agentes sem perder o controle?</h2>
+      <p class="cta-sub">
+        A plataforma Open-Source que une autonomia de IA e supervisão total para desenvolvedores exigentes.
+        Executa 100% local no seu computador.
       </p>
 
-      <div class="flex items-center justify-between font-mono text-xs border rounded-xl"
-           style="max-width: 580px; margin: 0 auto; padding: 12px 16px; background: #04060A; border-color: var(--border-subtle);">
-        <span class="text-sky-400 truncate" style="text-align: left;">
-          git clone https://github.com/CaioFelipe/CGLI.git && cd CGLI && cargo run -p cgli-desktop
-        </span>
-        <button onclick="copyInstallCmd()" style="padding: 6px 12px; border-radius: 8px; background: #27272A; color: #FFF; font-size: 11px; font-weight: 500; border: none; cursor: pointer; flex-shrink: 0; margin-left: 12px;">
-          Copiar
-        </button>
+      <!-- Interactive-looking Terminal Snippet -->
+      <div class="cta-terminal">
+        <div class="cta-term-bar">
+          <div>&gt;_ Início Rápido $ bash</div>
+          <button class="cli-copy-btn" onclick="copyInstallCmd()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            <span>Copiar Comando</span>
+          </button>
+        </div>
+        <div class="cta-term-code">
+          <span class="term-kw">$</span> git clone <span class="term-str">https://github.com/CaioFelipe/CGLI.git</span><br>
+          <span class="term-kw">$</span> cd CGLI<br>
+          <span class="term-kw">$</span> cargo run -p cgli-desktop
+        </div>
       </div>
 
+      <div style="display: flex; justify-content: center; gap: 14px;">
+        <button class="btn btn-primary" onclick="copyInstallCmd()">
+          Copiar Comando de Instalação
+        </button>
+        <a href="https://github.com/CaioFelipe/CGLI" target="_blank" class="btn btn-ghost">
+          Ver Código no GitHub →
+        </a>
+      </div>
     </div>
   </section>
 
   <!-- ========================================================================= -->
-  <!-- 7. FOOTER DISCRETO -->
+  <!-- 7. FOOTER                                                                 -->
   <!-- ========================================================================= -->
-  <footer class="border-t" style="padding: 32px 16px; border-color: var(--border-subtle); background: var(--bg-base); font-size: 12px; color: var(--text-muted);">
-    <div class="max-w-6xl flex flex-col sm:flex-row items-center justify-between gap-4">
-      <div class="flex items-center gap-2">
-        <span class="font-bold text-main">CGLI</span>
-        <span>•</span>
-        <span>Canvas Agent Orchestrator</span>
-        <span>•</span>
-        <a href="https://github.com/CaioFelipe/CGLI" target="_blank" style="color: inherit;">GitHub Open Source</a>
+  <footer>
+    <div class="container footer-content">
+      <div class="footer-left">
+        <div class="logo">
+          <div class="logo-badge" style="width: 24px; height: 24px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M3 12h3M18 12h3M12 3v3M12 18v3" />
+            </svg>
+          </div>
+          <span>CGLI</span>
+        </div>
+        <div class="footer-badges">
+          <span class="f-badge">Open Source</span>
+          <span class="f-badge">MIT License</span>
+          <span class="f-badge">100% Rust</span>
+        </div>
       </div>
-      <div>
-        Projetado para engenheiros de software que exigem controle, transparência e zero alucinação às cegas.
-      </div>
+
+      <ul class="footer-links">
+        <li><a href="#canvas">Como Funciona</a></li>
+        <li><a href="#diagnostico">O Antes &amp; Depois</a></li>
+        <li><a href="#casos">Casos de Uso</a></li>
+        <li><a href="https://github.com/CaioFelipe/CGLI" target="_blank">GitHub</a></li>
+      </ul>
     </div>
   </footer>
 
   <!-- ========================================================================= -->
-  <!-- 8. JAVASCRIPT: CONTROLLER, DRAGGING & BÉZIER CURVES -->
+  <!-- 8. JAVASCRIPT: CONTROLLER, BÉZIER CURVES & DRAG-AND-DROP                 -->
   <!-- ========================================================================= -->
   <script>
-    // Theme Switcher
-    const themeBtn = document.getElementById('themeToggleBtn');
-    const themeText = document.getElementById('themeBtnText');
-
-    function toggleTheme() {
-      const isDark = document.documentElement.classList.contains('dark');
-      if (isDark) {
-        document.documentElement.classList.remove('dark');
-        document.documentElement.classList.add('light');
-        themeText.innerText = '🌙 Escuro';
-      } else {
-        document.documentElement.classList.remove('light');
-        document.documentElement.classList.add('dark');
-        themeText.innerText = '☀️ Claro';
-      }
-      updateAllPaths();
-    }
-    themeBtn.addEventListener('click', toggleTheme);
-
+    // Copy Command to Clipboard
     function copyInstallCmd() {
       navigator.clipboard.writeText('git clone https://github.com/CaioFelipe/CGLI.git && cd CGLI && cargo run -p cgli-desktop');
-      alert('Comando copiado para a área de transferência!');
+      alert('Comando copiado para a área de transferência! Cole no seu terminal.');
     }
 
-    // Bézier Dynamic Path Calculation
+    // Bézier Dynamic Math
     function getCenter(el) {
       const r = el.getBoundingClientRect();
       const parent = document.getElementById('canvasViewport').getBoundingClientRect();
@@ -800,40 +1595,39 @@
     function updateAllPaths() {
       try {
         const claude = getCenter(document.getElementById('node-claude'));
-        const art = getCenter(document.getElementById('node-art'));
+        const plan = getCenter(document.getElementById('node-plan'));
         const agy = getCenter(document.getElementById('node-agy'));
         const mem = getCenter(document.getElementById('node-mem'));
         const diff = getCenter(document.getElementById('node-diff'));
 
-        document.getElementById('path-claude-art').setAttribute('d',
-          makeCubicBezier(claude.right, claude.cy, art.left, art.cy));
+        document.getElementById('path-claude-plan').setAttribute('d',
+          makeCubicBezier(claude.right, claude.cy, plan.left, plan.cy));
 
-        document.getElementById('path-art-agy').setAttribute('d',
-          makeCubicBezier(art.right, art.cy, agy.left, agy.cy));
-
-        document.getElementById('path-mem-agy').setAttribute('d',
-          `M ${mem.cx} ${mem.top} C ${mem.cx} ${mem.top - 60}, ${agy.cx} ${agy.bottom + 60}, ${agy.cx} ${agy.bottom}`);
+        document.getElementById('path-plan-agy').setAttribute('d',
+          makeCubicBezier(plan.right, plan.cy, agy.left, agy.cy));
 
         document.getElementById('path-agy-diff').setAttribute('d',
           makeCubicBezier(agy.cx, agy.bottom, diff.cx, diff.top));
+
+        document.getElementById('path-mem-agy').setAttribute('d',
+          `M ${mem.cx} ${mem.top} C ${mem.cx} ${mem.top - 60}, ${agy.cx} ${agy.bottom + 60}, ${agy.cx} ${agy.bottom}`);
       } catch (e) {}
     }
 
-    // Node Dragging
-    const nodes = document.querySelectorAll('.canvas-node');
+    // Drag and Drop Logic
+    const nodes = document.querySelectorAll('.c-node');
     let activeNode = null;
-    let startX = 0, startY = 0, initialLeft = 0, initialTop = 0;
+    let startX = 0, startY = 0, initLeft = 0, initTop = 0;
 
     nodes.forEach(node => {
       node.addEventListener('mousedown', (e) => {
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+        if (e.target.tagName === 'BUTTON' || e.target.tagName === 'A') return;
         activeNode = node;
         startX = e.clientX;
         startY = e.clientY;
-        initialLeft = parseFloat(node.style.left) || 0;
-        initialTop = parseFloat(node.style.top) || 0;
-        node.style.zIndex = '35';
-        e.preventDefault();
+        initLeft = node.offsetLeft;
+        initTop = node.offsetTop;
+        node.style.zIndex = '40';
       });
     });
 
@@ -841,8 +1635,8 @@
       if (!activeNode) return;
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
-      activeNode.style.left = `${initialLeft + dx}px`;
-      activeNode.style.top = `${initialTop + dy}px`;
+      activeNode.style.left = `${Math.max(10, initLeft + dx)}px`;
+      activeNode.style.top = `${Math.max(10, initTop + dy)}px`;
       updateAllPaths();
     });
 
@@ -853,103 +1647,90 @@
       }
     });
 
-    // Workflow Simulation Engine
-    let currentStep = 1;
-    let isPlaying = false;
-    let playInterval = null;
+    // Reset Initial Positions
+    function resetNodePositions() {
+      document.getElementById('node-claude').style.left = '24px';
+      document.getElementById('node-claude').style.top = '30px';
 
-    const stepCounter = document.getElementById('stepCounter');
-    const btnPlayPause = document.getElementById('btnPlayPause');
-    const playIcon = document.getElementById('playIcon');
-    const playText = document.getElementById('playText');
+      document.getElementById('node-plan').style.left = '335px';
+      document.getElementById('node-plan').style.top = '20px';
 
-    function applySimulationStep(step) {
-      currentStep = step;
-      stepCounter.innerText = `Passo ${step}/5: ${
-        step === 1 ? 'Sua Demanda' :
-        step === 2 ? 'Plano Técnico' :
-        step === 3 ? 'Sua Canetada' :
-        step === 4 ? 'Execução Guiada' : 'Diff & Testes'
-      }`;
+      document.getElementById('node-agy').style.left = '690px';
+      document.getElementById('node-agy').style.top = '30px';
 
-      for (let i = 1; i <= 5; i++) {
-        const el = document.getElementById(`step-desc-${i}`);
-        if (el) {
-          if (i === step) {
-            el.style.borderColor = 'rgba(99, 102, 241, 0.6)';
-            el.style.background = 'rgba(99, 102, 241, 0.15)';
-            el.style.opacity = '1';
-          } else {
-            el.style.borderColor = 'var(--border-subtle)';
-            el.style.background = 'var(--bg-surface-elevated)';
-            el.style.opacity = '0.5';
-          }
-        }
-      }
+      document.getElementById('node-mem').style.left = '350px';
+      document.getElementById('node-mem').style.top = '330px';
 
-      const claude = document.getElementById('node-claude');
-      const art = document.getElementById('node-art');
-      const agy = document.getElementById('node-agy');
-      const mem = document.getElementById('node-mem');
-      const diff = document.getElementById('node-diff');
-
-      claude.style.boxShadow = step === 1 ? '0 0 25px rgba(234, 88, 12, 0.45)' : '';
-      art.style.boxShadow = (step === 2 || step === 3) ? '0 0 25px rgba(99, 102, 241, 0.45)' : '';
-      agy.style.boxShadow = (step === 4 || step === 5) ? '0 0 25px rgba(2, 132, 199, 0.45)' : '';
-      mem.style.boxShadow = step === 4 ? '0 0 20px rgba(16, 185, 129, 0.45)' : '';
-      diff.style.boxShadow = step === 5 ? '0 0 25px rgba(244, 63, 94, 0.45)' : '';
+      document.getElementById('node-diff').style.left = '690px';
+      document.getElementById('node-diff').style.top = '280px';
 
       updateAllPaths();
     }
 
-    document.getElementById('btnNextStep').addEventListener('click', () => {
-      const next = currentStep >= 5 ? 1 : currentStep + 1;
-      applySimulationStep(next);
-    });
+    // Step Simulation
+    const stepBadge = document.getElementById('stepBadge');
+    const simToggleBtn = document.getElementById('simToggleBtn');
+    const nodeIds = ['node-claude', 'node-plan', 'node-plan', 'node-agy', 'node-diff'];
+    const stepTexts = [
+      'Passo 1/5: Sua Demanda',
+      'Passo 2/5: Plano do Arquiteto',
+      'Passo 3/5: Sua Revisão / Canetada',
+      'Passo 4/5: Execução Guiada',
+      'Passo 5/5: Diff & Paz de Espírito'
+    ];
+    let stepIndex = 0;
+    let autoPlayInterval = null;
 
-    document.getElementById('btnPrevStep').addEventListener('click', () => {
-      const prev = currentStep <= 1 ? 5 : currentStep - 1;
-      applySimulationStep(prev);
-    });
+    function renderStep(idx) {
+      stepIndex = (idx + 5) % 5;
+      stepBadge.innerText = stepTexts[stepIndex];
+      nodes.forEach(n => n.classList.remove('active-highlight'));
+      const target = document.getElementById(nodeIds[stepIndex]);
+      if (target) target.classList.add('active-highlight');
+    }
 
-    btnPlayPause.addEventListener('click', () => {
-      if (isPlaying) {
-        clearInterval(playInterval);
-        isPlaying = false;
-        playIcon.innerText = '▶';
-        playText.innerText = 'Ver Fluxo da Feature';
+    function nextStep() {
+      clearInterval(autoPlayInterval);
+      simToggleBtn.innerText = '▶ Ver Fluxo da Feature';
+      renderStep(stepIndex + 1);
+    }
+
+    function prevStep() {
+      clearInterval(autoPlayInterval);
+      simToggleBtn.innerText = '▶ Ver Fluxo da Feature';
+      renderStep(stepIndex - 1);
+    }
+
+    function toggleAutoPlay() {
+      if (autoPlayInterval) {
+        clearInterval(autoPlayInterval);
+        autoPlayInterval = null;
+        simToggleBtn.innerText = '▶ Ver Fluxo da Feature';
       } else {
-        isPlaying = true;
-        playIcon.innerText = '⏸';
-        playText.innerText = 'Pausar';
-        playInterval = setInterval(() => {
-          const next = currentStep >= 5 ? 1 : currentStep + 1;
-          applySimulationStep(next);
-        }, 3200);
+        stepIndex = 0;
+        renderStep(0);
+        simToggleBtn.innerText = '⏸ Pausar Simulação';
+        autoPlayInterval = setInterval(() => {
+          if (stepIndex >= 4) {
+            clearInterval(autoPlayInterval);
+            autoPlayInterval = null;
+            simToggleBtn.innerText = '▶ Ver Fluxo da Feature';
+            return;
+          }
+          renderStep(stepIndex + 1);
+        }, 1700);
       }
-    });
+    }
 
-    document.getElementById('btnResetCanvas').addEventListener('click', () => {
-      document.getElementById('node-claude').style.left = '30px';
-      document.getElementById('node-claude').style.top = '40px';
-      document.getElementById('node-art').style.left = '385px';
-      document.getElementById('node-art').style.top = '30px';
-      document.getElementById('node-agy').style.left = '760px';
-      document.getElementById('node-agy').style.top = '40px';
-      document.getElementById('node-mem').style.left = '385px';
-      document.getElementById('node-mem').style.top = '370px';
-      document.getElementById('node-diff').style.left = '760px';
-      document.getElementById('node-diff').style.top = '320px';
-      applySimulationStep(1);
-      updateAllPaths();
-    });
+    function startFlowSimulation() {
+      document.getElementById('canvas').scrollIntoView({ behavior: 'smooth' });
+      toggleAutoPlay();
+    }
 
-    window.addEventListener('load', () => {
-      updateAllPaths();
-      applySimulationStep(1);
-    });
+    // Initial load
+    window.addEventListener('load', updateAllPaths);
     window.addEventListener('resize', updateAllPaths);
+    setTimeout(updateAllPaths, 80);
   </script>
-
 </body>
 </html>
