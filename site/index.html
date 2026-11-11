@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CGLI — Canvas Agent Orchestrator (100% Rust Showcase)</title>
+  <title>CGLI — Orquestre Agentes de IA com Controle Total</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <style>
-    /* --- Modern Reset & Core Theme Tokens --- */
+    /* Modern Reset & Studio Clean Tokens */
     *, *::before, *::after {
       box-sizing: border-box;
       margin: 0;
@@ -14,46 +14,53 @@
     }
 
     :root {
-      --canvas-bg: #06090E;
-      --canvas-dot: #1E293B;
-      --card-bg: #0D1117;
-      --card-border: #21262D;
-      --card-border-hover: #30363D;
-      --card-header: #161B22;
-      --text-main: #F0F6FC;
-      --text-muted: #8B949E;
-      --accent-claude: #EA580C;
-      --accent-agy: #0284C7;
-      --accent-artifact: #6366F1;
+      --bg-base: #08090C;
+      --bg-surface: #0E1017;
+      --bg-surface-hover: #151822;
+      --bg-header: #12141D;
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(255, 255, 255, 0.2);
+      --text-primary: #F3F4F6;
+      --text-secondary: #9CA3AF;
+      --text-muted: #6B7280;
+      --canvas-dot: #1A1D29;
+      
+      /* Semantic Functional Accents */
+      --accent-planner: #EA580C;
+      --accent-executor: #0284C7;
+      --accent-plan: #6366F1;
       --accent-memory: #10B981;
-      --accent-diff: #FB7185;
-      --code-bg: #030712;
-      --terminal-bg: #011E48;
-      --shadow-color: rgba(0, 0, 0, 0.4);
+      --accent-diff: #F43F5E;
+      --accent-amber: #F59E0B;
+      
+      --shadow-elevation: 0 20px 45px rgba(0, 0, 0, 0.6);
     }
 
     html.light {
-      --canvas-bg: #EEF2F6;
-      --canvas-dot: #94A3B8;
-      --card-bg: #FFFFFF;
-      --card-border: #CBD5E1;
-      --card-border-hover: #94A3B8;
-      --card-header: #F8FAFC;
-      --text-main: #0F172A;
-      --text-muted: #475569;
-      --accent-claude: #EA580C;
-      --accent-agy: #0284C7;
-      --accent-artifact: #4F46E5;
+      --bg-base: #F8FAFC;
+      --bg-surface: #FFFFFF;
+      --bg-surface-hover: #F1F5F9;
+      --bg-header: #FFFFFF;
+      --border-subtle: #E2E8F0;
+      --border-focus: #94A3B8;
+      --text-primary: #0F172A;
+      --text-secondary: #475569;
+      --text-muted: #64748B;
+      --canvas-dot: #CBD5E1;
+      
+      --accent-planner: #EA580C;
+      --accent-executor: #0284C7;
+      --accent-plan: #4F46E5;
       --accent-memory: #059669;
       --accent-diff: #E11D48;
-      --code-bg: #F1F5F9;
-      --terminal-bg: #011E48;
-      --shadow-color: rgba(148, 163, 184, 0.25);
+      --accent-amber: #D97706;
+      
+      --shadow-elevation: 0 15px 35px rgba(148, 163, 184, 0.2);
     }
 
     body {
-      background-color: var(--canvas-bg);
-      color: var(--text-main);
+      background-color: var(--bg-base);
+      color: var(--text-primary);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       overflow-x: hidden;
       line-height: 1.5;
@@ -65,13 +72,9 @@
       background-size: 24px 24px;
     }
 
-    /* Container */
-    .max-w-7xl {
-      max-width: 1280px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    .px-4 { padding-left: 1rem; padding-right: 1rem; }
+    .max-w-6xl { max-width: 1160px; margin-left: auto; margin-right: auto; }
+    .max-w-5xl { max-width: 1020px; margin-left: auto; margin-right: auto; }
+    .px-4 { padding-left: 1.25rem; padding-right: 1.25rem; }
     .px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
 
     /* Flex / Grid Utilities */
@@ -89,21 +92,18 @@
     .gap-4 { gap: 1rem; }
     .gap-6 { gap: 1.5rem; }
     .gap-8 { gap: 2rem; }
+    .gap-10 { gap: 2.5rem; }
 
+    .hidden { display: none; }
     .grid { display: grid; }
     .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
     @media (min-width: 768px) {
+      .md\:flex { display: flex; }
       .md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .md\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .md\:grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
       .md\:flex-row { flex-direction: row; }
       .md\:items-end { align-items: flex-end; }
-    }
-    @media (min-width: 1024px) {
-      .lg\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .lg\:grid-cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
-      .lg\:col-span-5 { grid-column: span 5 / span 5; }
-      .lg\:col-span-7 { grid-column: span 7 / span 7; }
     }
 
     /* Typography */
@@ -111,52 +111,59 @@
     .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
     .text-base { font-size: 1rem; line-height: 1.5rem; }
     .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+    .text-2xl { font-size: 1.5rem; line-height: 2rem; }
     .text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
     .text-4xl { font-size: 2.25rem; line-height: 2.5rem; }
-    .text-5xl { font-size: 3rem; line-height: 1.15; }
+    .text-5xl { font-size: 3rem; line-height: 1.12; }
+    .font-medium { font-weight: 500; }
     .font-semibold { font-weight: 600; }
     .font-bold { font-weight: 700; }
     .font-extrabold { font-weight: 800; }
-    .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "JetBrains Mono", monospace; }
     .tracking-tight { letter-spacing: -0.025em; }
     .tracking-wider { letter-spacing: 0.05em; }
     .uppercase { text-transform: uppercase; }
-    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     /* Surface & Borders */
+    .rounded-md { border-radius: 0.375rem; }
     .rounded-lg { border-radius: 0.5rem; }
     .rounded-xl { border-radius: 0.75rem; }
     .rounded-2xl { border-radius: 1rem; }
     .rounded-full { border-radius: 9999px; }
-    .border { border-width: 1px; border-style: solid; border-color: var(--card-border); }
-    .border-b { border-bottom-width: 1px; border-bottom-style: solid; border-color: var(--card-border); }
-    .border-t { border-top-width: 1px; border-top-style: solid; border-color: var(--card-border); }
-    .border-l { border-left-width: 1px; border-left-style: solid; border-color: var(--card-border); }
+    .border { border-width: 1px; border-style: solid; border-color: var(--border-subtle); }
+    .border-b { border-bottom-width: 1px; border-bottom-style: solid; border-color: var(--border-subtle); }
+    .border-t { border-top-width: 1px; border-top-style: solid; border-color: var(--border-subtle); }
 
     /* Colors */
     .text-muted { color: var(--text-muted); }
-    .text-main { color: var(--text-main); }
-    .text-indigo-400 { color: #818CF8; }
-    .text-indigo-500 { color: #6366F1; }
-    .text-emerald-400 { color: #34D399; }
-    .text-emerald-300 { color: #6EE7B7; }
-    .text-sky-400 { color: #38BDF8; }
-    .text-sky-300 { color: #7DD3FC; }
-    .text-amber-400 { color: #FBBF24; }
-    .text-amber-300 { color: #FCD34D; }
-    .text-rose-400 { color: #FB7185; }
-    .text-purple-300 { color: #D8B4FE; }
-    .text-purple-400 { color: #C084FC; }
+    .text-secondary { color: var(--text-secondary); }
+    .text-primary { color: var(--text-primary); }
+    .text-emerald { color: #10B981; }
+    .text-sky { color: #0284C7; }
+    .text-amber { color: #F59E0B; }
+    .text-rose { color: #F43F5E; }
+    .text-indigo { color: #6366F1; }
 
-    /* Custom highlight for artifact comments */
-    .highlight-quote {
-      background-color: rgba(250, 204, 21, 0.35);
-      border-bottom: 2px solid #FACC15;
-      padding: 0 2px;
-      border-radius: 2px;
+    kbd {
+      font-family: ui-monospace, monospace;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
     }
 
-    /* Edge active pulse */
+    /* Highlight anchor in plan */
+    .text-anchor-highlight {
+      background-color: rgba(245, 158, 11, 0.25);
+      border-bottom: 2px solid var(--accent-amber);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-weight: 600;
+    }
+
+    /* Animated connector edge */
     .edge-active {
       stroke-dasharray: 6 6;
       animation: dash 1.2s linear infinite;
@@ -165,73 +172,62 @@
       to { stroke-dashoffset: -24; }
     }
 
-    button {
-      font-family: inherit;
-    }
-
-    /* Scrollbars */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 9999px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.6); }
+    button { font-family: inherit; }
   </style>
 </head>
-<body class="canvas-dots antialiased">
+<body class="antialiased">
 
   <!-- ========================================================================= -->
-  <!-- 1. TOP NAVIGATION BAR -->
+  <!-- 1. TOP NAVIGATION -->
   <!-- ========================================================================= -->
-  <nav style="position: sticky; top: 0; z-index: 50; width: 100%; border-bottom: 1px solid var(--card-border); background-color: var(--card-header); backdrop-filter: blur(12px);">
-    <div class="max-w-7xl px-4 flex items-center justify-between" style="height: 56px;">
+  <nav style="position: sticky; top: 0; z-index: 50; width: 100%; border-bottom: 1px solid var(--border-subtle); background: var(--bg-header); backdrop-filter: blur(16px);">
+    <div class="max-w-6xl px-4 flex items-center justify-between" style="height: 58px;">
       
-      <!-- Brand & Badges -->
-      <div class="flex items-center gap-3">
-        <a href="#hero" class="flex items-center gap-2" style="text-decoration: none;">
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style="width: 32px; height: 32px; flex-shrink: 0; border-radius: 8px;">
-            <defs>
-              <linearGradient id="cgli-bg" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#4F46E5" />
-                <stop offset="50%" stop-color="#6366F1" />
-                <stop offset="100%" stop-color="#0284C7" />
-              </linearGradient>
-            </defs>
-            <rect width="32" height="32" rx="7.5" fill="url(#cgli-bg)" />
-            <path d="M9 16 L16 10 L23 16 L16 22 Z" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" stroke-linejoin="round" />
-            <path d="M16 10 L16 22" stroke="rgba(255,255,255,0.5)" stroke-width="1.5" />
-            <circle cx="16" cy="16" r="3.2" fill="#FFFFFF" />
-            <circle cx="9" cy="16" r="2.4" fill="#FB923C" stroke="#FFFFFF" stroke-width="1" />
-            <circle cx="16" cy="10" r="2.4" fill="#C084FC" stroke="#FFFFFF" stroke-width="1" />
-            <circle cx="23" cy="16" r="2.4" fill="#38BDF8" stroke="#FFFFFF" stroke-width="1" />
-            <circle cx="16" cy="22" r="2.4" fill="#FB7185" stroke="#FFFFFF" stroke-width="1" />
-          </svg>
-          <div class="flex items-center gap-2">
-            <span class="font-bold text-sm tracking-tight text-main">CGLI</span>
-            <span class="text-xs uppercase font-bold tracking-wider px-2 py-0.5 rounded-full"
-                  style="background-color: rgba(99, 102, 241, 0.15); color: #818CF8; border: 1px solid rgba(99, 102, 241, 0.3); font-size: 10px;">
-              100% Rust • WASM
-            </span>
-          </div>
-        </a>
+      <!-- Brand -->
+      <a href="#hero" class="flex items-center gap-2.5" style="text-decoration: none;">
+        <svg width="28" height="28" viewBox="0 0 32 32" fill="none" style="flex-shrink: 0; border-radius: 6px;">
+          <defs>
+            <linearGradient id="cgli-brand" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#4F46E5" />
+              <stop offset="100%" stop-color="#0284C7" />
+            </linearGradient>
+          </defs>
+          <rect width="32" height="32" rx="7" fill="url(#cgli-brand)" />
+          <path d="M9 16 L16 10 L23 16 L16 22 Z" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" />
+          <circle cx="16" cy="16" r="3.2" fill="#FFFFFF" />
+          <circle cx="9" cy="16" r="2.2" fill="#FB923C" />
+          <circle cx="23" cy="16" r="2.2" fill="#38BDF8" />
+        </svg>
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-base tracking-tight text-primary">CGLI</span>
+          <span class="text-xs text-muted">|</span>
+          <span class="text-xs font-medium text-secondary">Canvas Agent Orchestrator</span>
+        </div>
+      </a>
+
+      <!-- Navigation Links -->
+      <div class="hidden md:flex items-center gap-6 text-xs font-medium text-secondary">
+        <a href="#canvas-live" style="color: inherit; text-decoration: none;">Como Funciona no Canvas</a>
+        <a href="#before-after" style="color: inherit; text-decoration: none;">O Antes & Depois</a>
+        <a href="#use-cases" style="color: inherit; text-decoration: none;">Casos de Uso</a>
+        <a href="#quickstart" style="color: inherit; text-decoration: none;">Começar em 1 Min</a>
       </div>
 
-      <!-- Action Buttons & Theme Switcher -->
+      <!-- Action Buttons -->
       <div class="flex items-center gap-3">
-        <!-- Theme Toggle -->
         <button id="themeToggleBtn" type="button" title="Alternar tema Dark / Light"
-                style="padding: 6px 10px; border-radius: 8px; border: 1px solid var(--card-border); background: var(--card-bg); color: var(--text-main); cursor: pointer; font-size: 12px; display: flex; items-center: center;">
-          <span id="themeBtnText">☀️ Modo Claro</span>
+                style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); cursor: pointer; font-size: 12px;">
+          <span id="themeBtnText">☀️ Claro</span>
         </button>
 
-        <!-- GitHub Link -->
         <a href="https://github.com/CaioFelipe/CGLI" target="_blank" rel="noopener noreferrer"
-           style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--card-border); background: var(--card-bg); color: var(--text-main); text-decoration: none; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
-          <span>GitHub</span>
+           style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); text-decoration: none; font-size: 12px; font-weight: 600;">
+          GitHub
         </a>
 
-        <!-- Open App -->
-        <a href="http://127.0.0.1:41732" target="_blank"
-           style="padding: 6px 14px; border-radius: 8px; background: #6366F1; color: #FFFFFF; text-decoration: none; font-size: 12px; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
-          Abrir App Desktop →
+        <a href="#canvas-live"
+           style="padding: 6px 14px; border-radius: 6px; background: #6366F1; color: #FFFFFF; text-decoration: none; font-size: 12px; font-weight: 600;">
+          Ver Demonstração ↓
         </a>
       </div>
 
@@ -239,101 +235,110 @@
   </nav>
 
   <!-- ========================================================================= -->
-  <!-- 2. HERO SECTION -->
+  <!-- 2. HERO: FOCO NA DOR E NA RESOLUÇÃO -->
   <!-- ========================================================================= -->
-  <header id="hero" class="max-w-7xl px-4" style="padding-top: 48px; padding-bottom: 24px; text-align: center;">
+  <header id="hero" class="max-w-5xl px-4" style="padding-top: 56px; padding-bottom: 36px; text-align: center;">
     
-    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold"
-         style="background: rgba(30, 41, 59, 0.8); border: 1px solid #334155; color: #CBD5E1; margin-bottom: 20px;">
-      <span style="width: 8px; height: 8px; border-radius: 9999px; background: #34D399;"></span>
-      <span>Refatorado para 100% Rust • Leptos CSR WASM • Axum Server • Zero Node.js</span>
+    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium"
+         style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-subtle); color: var(--text-secondary); margin-bottom: 20px;">
+      <span style="color: #F59E0B;">●</span>
+      <span>O fluxo de engenharia que substitui o caos de terminais soltos</span>
     </div>
 
-    <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight text-main" style="max-width: 860px; margin: 0 auto; line-height: 1.15;">
-      Orquestração de Agentes em <span style="color: #6366F1;">Canvas Infinito</span>. Sem Abas. Sem Alucinação.
+    <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight text-primary" style="margin: 0 auto; line-height: 1.15; max-width: 900px;">
+      Pare de se perder em 10 abas de terminal para programar com IA.
     </h1>
 
-    <p class="text-base text-muted" style="max-width: 720px; margin: 18px auto 0; font-size: 16px; line-height: 1.6;">
-      Chega de terminals perdidos e cópia manual de prompts. O <strong>CGLI</strong> conecta
-      <span style="color: #EA580C; font-weight: 600;">Claude Code (Planejador)</span> e
-      <span style="color: #0284C7; font-weight: 600;">Antigravity (Executor)</span> em um grafo visual interativo,
-      com <strong>planos aprováveis por humanos</strong>, diffs de código em tempo real, terminal VT100 nativo
-      e <strong>memória dual-vault persistente no Obsidian</strong>.
+    <p class="text-lg text-secondary" style="max-width: 760px; margin: 20px auto 0; line-height: 1.6;">
+      O <strong>CGLI</strong> organiza múltiplos agentes em uma <strong>linha de montagem visual</strong>.
+      O <span style="color: #EA580C; font-weight: 600;">Claude planeja a arquitetura</span>, você
+      <strong>revisa e anota diretrizes no plano</strong>, e o
+      <span style="color: #0284C7; font-weight: 600;">executor codifica e roda os testes</span>.
+      Tudo em um canvas único, com você no controle absoluto da sua base de código.
     </p>
 
-    <!-- Metrics -->
-    <div class="flex flex-wrap items-center justify-center gap-3 font-mono text-xs" style="margin-top: 28px;">
-      <div class="flex items-center gap-2 rounded-lg border" style="padding: 6px 12px; background: var(--card-bg);">
-        <span class="text-emerald-400 font-bold">18 MB</span>
-        <span class="text-muted">RAM (vs 180MB Node/Electron)</span>
+    <!-- Core Value Trio -->
+    <div class="flex flex-wrap items-center justify-center gap-6 text-sm" style="margin-top: 32px; color: var(--text-secondary);">
+      <div class="flex items-center gap-2">
+        <span class="text-emerald" style="font-weight: 700;">✓</span>
+        <span>Zero Alt+Tab entre terminais</span>
       </div>
-      <div class="flex items-center gap-2 rounded-lg border" style="padding: 6px 12px; background: var(--card-bg);">
-        <span class="text-sky-400 font-bold">4 ms</span>
-        <span class="text-muted">Cold Start Axum</span>
+      <div class="flex items-center gap-2">
+        <span class="text-emerald" style="font-weight: 700;">✓</span>
+        <span>Você aprova o plano antes do código</span>
       </div>
-      <div class="flex items-center gap-2 rounded-lg border" style="padding: 6px 12px; background: var(--card-bg);">
-        <span class="text-purple-400 font-bold">32/32</span>
-        <span class="text-muted">Testes Automatizados Aprovados</span>
-      </div>
-      <div class="flex items-center gap-2 rounded-lg border" style="padding: 6px 12px; background: var(--card-bg);">
-        <span class="text-amber-400 font-bold">0 ms</span>
-        <span class="text-muted">Overhead de JavaScript</span>
+      <div class="flex items-center gap-2">
+        <span class="text-emerald" style="font-weight: 700;">✓</span>
+        <span>Memória persistente no Obsidian (zero amnésia)</span>
       </div>
     </div>
+
   </header>
 
   <!-- ========================================================================= -->
-  <!-- 3. INTERACTIVE HERO CANVAS (O EFEITO UAU) -->
+  <!-- 3. INTERACTIVE HERO CANVAS (A ROTINA REAL DE UMA FEATURE) -->
   <!-- ========================================================================= -->
-  <section id="interactive-canvas" class="max-w-7xl px-4" style="margin-bottom: 72px;">
-    <div class="rounded-2xl border" style="background: var(--card-bg); box-shadow: 0 20px 40px var(--shadow-color); overflow: hidden;">
+  <section id="canvas-live" class="max-w-6xl px-4" style="margin-bottom: 80px;">
+    
+    <!-- OS Studio Frame -->
+    <div class="rounded-2xl border" style="background: var(--bg-surface); box-shadow: var(--shadow-elevation); overflow: hidden;">
       
-      <!-- Toolbar -->
+      <!-- Native OS Window Chrome -->
       <div class="border-b flex flex-wrap items-center justify-between gap-3"
-           style="padding: 10px 16px; background: var(--card-header);">
+           style="padding: 10px 16px; background: var(--bg-header);">
+        
+        <!-- Left: Traffic Lights & Tab -->
         <div class="flex items-center gap-3">
-          <div class="flex items-center gap-1">
+          <div class="flex items-center gap-1.5">
             <div style="width: 10px; height: 10px; border-radius: 9999px; background: #EF4444;"></div>
             <div style="width: 10px; height: 10px; border-radius: 9999px; background: #F59E0B;"></div>
             <div style="width: 10px; height: 10px; border-radius: 9999px; background: #10B981;"></div>
           </div>
-          <span class="text-xs font-semibold text-muted" style="border-left: 1px solid var(--card-border); padding-left: 12px;">
-            Simulador Dinâmico do Grafo CGLI (Arraste os nós livremente)
-          </span>
+          <div class="flex items-center gap-2" style="border-left: 1px solid var(--border-subtle); padding-left: 12px; font-size: 12px;">
+            <span class="font-mono text-primary font-medium">~/meu-projeto</span>
+            <span class="text-muted">•</span>
+            <span class="text-muted font-mono" style="font-size: 11px;">branch: feature/auth-jwt</span>
+          </div>
         </div>
 
+        <!-- Center: Interactive Controls -->
         <div class="flex items-center gap-2">
-          <span id="stepCounter" class="text-xs font-mono font-semibold px-2 py-1 rounded"
-                style="background: rgba(99, 102, 241, 0.15); color: #818CF8; border: 1px solid rgba(99, 102, 241, 0.25);">
-            Passo 1 / 5: Solicitação Inicial
+          <span id="stepCounter" class="text-xs font-mono font-semibold px-2.5 py-1 rounded"
+                style="background: rgba(99, 102, 241, 0.12); color: #818CF8; border: 1px solid rgba(99, 102, 241, 0.25);">
+            Passo 1/5: Sua Demanda
           </span>
-          <button id="btnPrevStep" type="button" style="padding: 4px 10px; border-radius: 6px; border: 1px solid var(--card-border); background: var(--card-bg); color: var(--text-muted); cursor: pointer; font-size: 12px;">
+          <button id="btnPrevStep" type="button" style="padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); cursor: pointer; font-size: 12px;">
             ◀ Anterior
           </button>
           <button id="btnPlayPause" type="button" style="padding: 4px 12px; border-radius: 6px; background: #6366F1; color: #FFF; font-weight: 600; font-size: 12px; border: none; cursor: pointer; display: flex; align-items: center; gap: 6px;">
             <span id="playIcon">▶</span>
-            <span id="playText">Reproduzir Fluxo</span>
+            <span id="playText">Ver Fluxo da Feature</span>
           </button>
-          <button id="btnNextStep" type="button" style="padding: 4px 10px; border-radius: 6px; border: 1px solid var(--card-border); background: var(--card-bg); color: var(--text-muted); cursor: pointer; font-size: 12px;">
+          <button id="btnNextStep" type="button" style="padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-secondary); cursor: pointer; font-size: 12px;">
             Próximo ▶
           </button>
-          <button id="btnResetCanvas" type="button" style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--card-border); background: var(--card-bg); color: var(--text-muted); cursor: pointer; font-size: 12px;">
+          <button id="btnResetCanvas" type="button" style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-muted); cursor: pointer; font-size: 12px;">
             ↺ Reset
           </button>
         </div>
+
       </div>
 
-      <!-- Canvas Play Area -->
+      <!-- Canvas Workbench -->
       <div id="canvasViewport" class="canvas-dots" style="position: relative; width: 100%; height: 580px; overflow: hidden; cursor: grab;">
         
         <!-- SVG Connections -->
         <svg id="canvasSvg" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;">
           <defs>
-            <linearGradient id="edgeClaudeToArt" x1="0%" y1="0%" x2="100%" y2="0%">
+            <linearGradient id="edgePromptToClaude" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="#EA580C" />
               <stop offset="100%" stop-color="#6366F1" />
             </linearGradient>
-            <linearGradient id="edgeArtToAgy" x1="0%" y1="0%" x2="100%" y2="0%">
+            <linearGradient id="edgeClaudeToPlan" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#EA580C" />
+              <stop offset="100%" stop-color="#6366F1" />
+            </linearGradient>
+            <linearGradient id="edgePlanToAgy" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="#6366F1" />
               <stop offset="100%" stop-color="#0284C7" />
             </linearGradient>
@@ -343,163 +348,160 @@
             </linearGradient>
             <linearGradient id="edgeAgyToDiff" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="#0284C7" />
-              <stop offset="100%" stop-color="#FB7185" />
+              <stop offset="100%" stop-color="#F43F5E" />
             </linearGradient>
           </defs>
 
-          <path id="path-claude-art" stroke="url(#edgeClaudeToArt)" stroke-width="2.5" fill="none" class="edge-active" />
-          <path id="path-art-agy" stroke="url(#edgeArtToAgy)" stroke-width="2.5" fill="none" class="edge-active" />
+          <path id="path-claude-art" stroke="url(#edgeClaudeToPlan)" stroke-width="2.5" fill="none" class="edge-active" />
+          <path id="path-art-agy" stroke="url(#edgePlanToAgy)" stroke-width="2.5" fill="none" class="edge-active" />
           <path id="path-mem-agy" stroke="url(#edgeMemToAgy)" stroke-width="2" stroke-dasharray="4 4" fill="none" />
           <path id="path-agy-diff" stroke="url(#edgeAgyToDiff)" stroke-width="2.5" fill="none" class="edge-active" />
         </svg>
 
-        <!-- NODE 1: CLAUDE CODE (PLANNER) -->
-        <div id="node-claude" class="canvas-node rounded-xl"
-             style="position: absolute; z-index: 20; width: 310px; left: 35px; top: 60px; border: 2px solid rgba(234, 88, 12, 0.85); background: var(--card-bg); box-shadow: 0 10px 25px rgba(0,0,0,0.4); user-select: none;">
-          <div style="padding: 8px 12px; border-bottom: 1px solid var(--card-border); background: var(--card-header); border-top: 3px solid #EA580C; display: flex; align-items: center; justify-content: space-between;">
+        <!-- NODE 1: CLAUDE CODE (O ARQUITETO) -->
+        <div id="node-claude" class="canvas-node rounded-xl border"
+             style="position: absolute; z-index: 20; width: 310px; left: 30px; top: 40px; background: var(--bg-surface); box-shadow: 0 10px 30px rgba(0,0,0,0.5); user-select: none;">
+          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-header); border-top: 3px solid #EA580C; display: flex; align-items: center; justify-content: space-between;">
             <div class="flex items-center gap-2">
-              <div style="width: 24px; height: 24px; border-radius: 6px; background: rgba(234,88,12,0.2); color: #EA580C; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center;">C</div>
+              <div style="width: 22px; height: 22px; border-radius: 5px; background: rgba(234,88,12,0.2); color: #EA580C; font-weight: 700; font-size: 11px; display: flex; align-items: center; justify-content: center;">C</div>
               <div>
-                <span class="text-xs font-bold text-main" style="display: block; line-height: 1.2;">Claude Code</span>
-                <span style="font-size: 9px; color: #EA580C; font-weight: 600; text-transform: uppercase;">Planejador de Arquitetura</span>
+                <span class="text-xs font-bold text-primary">Claude Code</span>
+                <span style="font-size: 10px; color: #EA580C; display: block; line-height: 1;">Papel: Arquiteto de Software</span>
               </div>
             </div>
-            <span id="claudeStatusBadge" class="text-xs font-mono" style="font-size: 9px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.2); color: #34D399;">Pronto</span>
+            <span class="text-xs font-mono" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); color: #34D399;">Planejador</span>
           </div>
           <div style="padding: 12px; font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
-            <div style="padding: 8px; border-radius: 6px; background: rgba(15, 23, 42, 0.6); border: 1px solid #1E293B; font-size: 11px; color: #CBD5E1;">
-              <span style="font-weight: 700; color: #818CF8;">Usuário:</span> "Refatore todo o sistema para 100% Rust sem dependências Node.js."
+            <div style="padding: 8px 10px; border-radius: 6px; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border-subtle); font-size: 11px; color: var(--text-secondary);">
+              <span style="font-weight: 700; color: #818CF8;">Sua Instrução:</span> "Implementar autenticação JWT com rota de refresh token e middleware de proteção."
             </div>
-            <div id="claudeThinkingBox" style="padding: 8px; border-radius: 6px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.25); font-size: 10px; color: #FCD34D;">
-              💡 <strong>Raciocinando:</strong> Criando 6 crates no Cargo Workspace e registrando artefato de plano via <code>cgli create-artifact</code>...
-            </div>
-            <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--card-border); padding-top: 6px; font-size: 10px; color: var(--text-muted);">
-              <span>PTY: <code>pty-claude-1</code></span>
-              <span style="color: #34D399; font-weight: 600;">✓ 1 plano aprovado</span>
+            <div style="padding: 8px 10px; border-radius: 6px; background: rgba(234, 88, 12, 0.08); border: 1px solid rgba(234, 88, 12, 0.2); font-size: 11px; color: #FDBA74;">
+              💡 <strong>Raciocínio:</strong> "Não vou mexer no código agora. Estou criando a especificação técnica e publicando o plano para revisão humana."
             </div>
           </div>
         </div>
 
-        <!-- NODE 2: ARTIFACT NODE (PLAN) -->
-        <div id="node-art" class="canvas-node rounded-xl"
-             style="position: absolute; z-index: 20; width: 330px; left: 390px; top: 40px; border: 2px solid rgba(99, 102, 241, 0.85); background: var(--card-bg); box-shadow: 0 10px 25px rgba(0,0,0,0.4); user-select: none;">
-          <div style="padding: 8px 12px; border-bottom: 1px solid var(--card-border); background: var(--card-header); border-top: 3px solid #6366F1; display: flex; align-items: center; justify-content: space-between;">
+        <!-- NODE 2: PLANO ARQUITETURAL (SUA CANETADA & APROVAÇÃO) -->
+        <div id="node-art" class="canvas-node rounded-xl border"
+             style="position: absolute; z-index: 20; width: 330px; left: 380px; top: 30px; background: var(--bg-surface); box-shadow: 0 10px 30px rgba(0,0,0,0.5); user-select: none;">
+          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-header); border-top: 3px solid #6366F1; display: flex; align-items: center; justify-content: space-between;">
             <div class="flex items-center gap-2">
               <span>📄</span>
-              <span class="text-xs font-bold text-main">Plano 100% Rust</span>
+              <span class="text-xs font-bold text-primary">Plano de Autenticação JWT</span>
             </div>
-            <span class="text-xs font-bold" style="font-size: 9px; padding: 2px 8px; border-radius: 9999px; background: rgba(16, 185, 129, 0.2); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.3);">
-              ✓ Aprovado
+            <span class="text-xs font-bold" style="font-size: 10px; padding: 2px 8px; border-radius: 9999px; background: rgba(16, 185, 129, 0.2); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.3);">
+              ✓ Aprovado por Você
             </span>
           </div>
           <div style="padding: 12px; font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
-            <div class="font-mono" style="padding: 8px; border-radius: 6px; background: rgba(3, 7, 18, 0.7); border: 1px solid #1E293B; font-size: 10px; line-height: 1.6; color: #E2E8F0;">
-              <p style="font-weight: 700; color: #818CF8; margin-bottom: 4px;">## Cargo Workspace (6 Crates)</p>
-              <p>• <strong>cgli-core</strong>: Tipos de domínio e diff</p>
-              <p>• <span class="highlight-quote"><strong>cgli-pty-vt</strong>: Motor ANSI/VT100</span></p>
-              <p>• <strong>cgli-vault</strong>: Dual-Vault Obsidian</p>
-              <p>• <strong>cgli-ui</strong>: Leptos 0.6 CSR WASM</p>
+            <div style="padding: 8px 10px; border-radius: 6px; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border-subtle); font-size: 11px; line-height: 1.5; color: var(--text-primary);">
+              <p style="font-weight: 700; color: #818CF8; margin-bottom: 4px;">Etapas Planejadas:</p>
+              <p>1. Criar helper de assinatura com chave HMAC-SHA256</p>
+              <p>2. <span class="text-anchor-highlight">Armazenar refresh token em Cookie HttpOnly</span></p>
+              <p>3. Middleware de validação com retorno 401 Unauthorized</p>
             </div>
-            <!-- Human Comment -->
-            <div style="padding: 8px; border-radius: 6px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); font-size: 10px; color: #FEF08A; display: flex; gap: 6px;">
-              <span>💬</span>
+            <!-- Sua Anotação TextAnchor -->
+            <div style="padding: 8px 10px; border-radius: 6px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); font-size: 11px; color: #FDE68A; display: flex; gap: 6px;">
+              <span>✍️</span>
               <div>
-                <strong>Caio Felipe (Comentário):</strong> "Garantir suporte a TrueColor 24-bit no VT100."
+                <strong>Sua Revisão (Ancorada no item 2):</strong> "Perfeito. Nunca guarde no localStorage para evitar roubo por XSS."
               </div>
             </div>
           </div>
         </div>
 
-        <!-- NODE 3: ANTIGRAVITY AGY (EXECUTOR) -->
-        <div id="node-agy" class="canvas-node rounded-xl"
-             style="position: absolute; z-index: 20; width: 310px; left: 760px; top: 60px; border: 2px solid rgba(2, 132, 199, 0.85); background: var(--card-bg); box-shadow: 0 10px 25px rgba(0,0,0,0.4); user-select: none;">
-          <div style="padding: 8px 12px; border-bottom: 1px solid var(--card-border); background: var(--card-header); border-top: 3px solid #0284C7; display: flex; align-items: center; justify-content: space-between;">
+        <!-- NODE 3: AGY (O EXECUTOR QUE SÓ FAZ O APROVADO) -->
+        <div id="node-agy" class="canvas-node rounded-xl border"
+             style="position: absolute; z-index: 20; width: 310px; left: 750px; top: 40px; background: var(--bg-surface); box-shadow: 0 10px 30px rgba(0,0,0,0.5); user-select: none;">
+          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-header); border-top: 3px solid #0284C7; display: flex; align-items: center; justify-content: space-between;">
             <div class="flex items-center gap-2">
-              <div style="width: 24px; height: 24px; border-radius: 6px; background: rgba(2,132,199,0.2); color: #0284C7; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center;">A</div>
+              <div style="width: 22px; height: 22px; border-radius: 5px; background: rgba(2,132,199,0.2); color: #0284C7; font-weight: 700; font-size: 11px; display: flex; align-items: center; justify-content: center;">A</div>
               <div>
-                <span class="text-xs font-bold text-main" style="display: block; line-height: 1.2;">Antigravity (AGY)</span>
-                <span style="font-size: 9px; color: #0284C7; font-weight: 600; text-transform: uppercase;">Executor de Build</span>
+                <span class="text-xs font-bold text-primary">Antigravity (AGY)</span>
+                <span style="font-size: 10px; color: #0284C7; display: block; line-height: 1;">Papel: Executor de Código</span>
               </div>
             </div>
-            <span class="text-xs font-mono" style="font-size: 9px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.2); color: #34D399;">Executando</span>
+            <span class="text-xs font-mono" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); color: #34D399;">Executando</span>
           </div>
           <div style="padding: 12px; font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
-            <div style="padding: 8px; border-radius: 6px; background: rgba(15, 23, 42, 0.6); border: 1px solid #1E293B; font-size: 11px; color: #CBD5E1;">
-              <span style="font-weight: 700; color: #38BDF8;">Diretriz:</span> "Plano aprovado. Compilar target <code>wasm32-unknown-unknown</code> e rodar 32 testes."
+            <div style="padding: 8px 10px; border-radius: 6px; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border-subtle); font-size: 11px; color: var(--text-secondary);">
+              <span style="font-weight: 700; color: #38BDF8;">Diretriz:</span> "Plano validado pelo humano. Escrevendo o middleware e rodando testes unitários."
             </div>
             <div class="font-mono" style="padding: 8px; border-radius: 6px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); font-size: 10px; color: #6EE7B7;">
-              $ cargo test --workspace<br/>
-              test result: ok. 32 passed; 0 failed
+              $ cargo test --test auth_jwt<br/>
+              test result: ok. 4 passed; 0 failed
             </div>
           </div>
         </div>
 
-        <!-- NODE 4: OBSIDIAN MEMORY NODE -->
-        <div id="node-mem" class="canvas-node rounded-xl"
-             style="position: absolute; z-index: 20; width: 280px; left: 390px; top: 370px; border: 2px solid rgba(16, 185, 129, 0.85); background: var(--card-bg); box-shadow: 0 10px 25px rgba(0,0,0,0.4); user-select: none;">
-          <div style="padding: 8px 12px; border-bottom: 1px solid var(--card-border); background: var(--card-header); border-top: 3px solid #10B981; display: flex; align-items: center; justify-content: space-between;">
+        <!-- NODE 4: OBSIDIAN VAULT (A MEMÓRIA QUE NUNCA ESQUECE) -->
+        <div id="node-mem" class="canvas-node rounded-xl border"
+             style="position: absolute; z-index: 20; width: 280px; left: 380px; top: 370px; background: var(--bg-surface); box-shadow: 0 10px 30px rgba(0,0,0,0.5); user-select: none;">
+          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-header); border-top: 3px solid #10B981; display: flex; align-items: center; justify-content: space-between;">
             <div class="flex items-center gap-2">
               <span>🧠</span>
-              <span class="text-xs font-bold text-main">ADR-001 (Obsidian)</span>
+              <span class="text-xs font-bold text-primary">Memória de Decisões (ADR)</span>
             </div>
-            <span class="text-xs font-mono" style="font-size: 9px; padding: 2px 6px; border-radius: 4px; background: rgba(168, 85, 247, 0.2); color: #D8B4FE;">Vault Local</span>
+            <span class="text-xs font-mono" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); color: #34D399;">Obsidian</span>
           </div>
-          <div class="font-mono" style="padding: 10px; font-size: 10px; display: flex; flex-direction: column; gap: 6px;">
-            <p style="color: #CBD5E1;"><strong>Decisão:</strong> Migrar 100% para Rust puro (Leptos CSR WASM + Axum).</p>
-            <div class="flex flex-wrap gap-1" style="padding-top: 4px;">
-              <span style="padding: 2px 6px; border-radius: 4px; background: #1E293B; color: #94A3B8;">#rust</span>
-              <span style="padding: 2px 6px; border-radius: 4px; background: #1E293B; color: #94A3B8;">#leptos</span>
-              <span style="padding: 2px 6px; border-radius: 4px; background: #1E293B; color: #94A3B8;">#obsidian</span>
-            </div>
+          <div style="padding: 12px; font-size: 11px; display: flex; flex-direction: column; gap: 6px; color: var(--text-secondary);">
+            <p><strong>Decisão Registrada:</strong> "Sempre utilizar cookies HttpOnly + SameSite=Strict em todos os endpoints de autenticação deste projeto."</p>
+            <span style="font-size: 10px; color: var(--text-muted);">✓ Respeitado automaticamente por todos os agentes futuros.</span>
           </div>
         </div>
 
-        <!-- NODE 5: UNIFIED DIFF NODE -->
-        <div id="node-diff" class="canvas-node rounded-xl"
-             style="position: absolute; z-index: 20; width: 310px; left: 760px; top: 320px; border: 2px solid rgba(251, 113, 133, 0.85); background: var(--card-bg); box-shadow: 0 10px 25px rgba(0,0,0,0.4); user-select: none;">
-          <div style="padding: 8px 12px; border-bottom: 1px solid var(--card-border); background: var(--card-header); border-top: 3px solid #FB7185; display: flex; align-items: center; justify-content: space-between;">
+        <!-- NODE 5: UNIFIED DIFF (VOCÊ VÊ O QUE MUDOU) -->
+        <div id="node-diff" class="canvas-node rounded-xl border"
+             style="position: absolute; z-index: 20; width: 310px; left: 750px; top: 320px; background: var(--bg-surface); box-shadow: 0 10px 30px rgba(0,0,0,0.5); user-select: none;">
+          <div style="padding: 10px 14px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-header); border-top: 3px solid #F43F5E; display: flex; align-items: center; justify-content: space-between;">
             <div class="flex items-center gap-2">
               <span>⚡</span>
-              <span class="text-xs font-bold text-main truncate" style="max-width: 160px;">bridge.rs</span>
+              <span class="text-xs font-bold text-primary">Diff em Tempo Real</span>
             </div>
-            <span class="text-xs font-mono font-bold" style="font-size: 9px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.2); color: #34D399;">
-              +68 / -4
+            <span class="text-xs font-mono font-bold" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.2); color: #34D399;">
+              +42 / -0
             </span>
           </div>
-          <div class="font-mono" style="padding: 8px; background: #030712; font-size: 10px; line-height: 1.5;">
-            <div style="color: #64748B;">@@ -66,6 +66,12 @@ create_router()</div>
-            <div style="color: #FB7185; background: rgba(225, 29, 72, 0.15); padding: 0 4px;">- // Legacy Node proxy routes</div>
-            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 0 4px;">+ // 100% Rust Leptos WASM assets</div>
-            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 0 4px;">+ .route("/", get(handle_index_html))</div>
-            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 0 4px;">+ .route("/styles.css", get(handle_styles))</div>
+          <div class="font-mono" style="padding: 10px; background: #030712; font-size: 10px; line-height: 1.5;">
+            <div style="color: #64748B;">@@ src/middleware/auth.rs @@</div>
+            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 0 4px;">+ pub async fn verify_jwt_cookie(req: Request) {</div>
+            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 0 4px;">+   let token = req.cookies().get("jwt_token")?;</div>
+            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 0 4px;">+   decode_token(&token.value())</div>
+            <div style="color: #34D399; background: rgba(16, 185, 129, 0.15); padding: 0 4px;">+ }</div>
           </div>
         </div>
 
       </div>
 
       <!-- Narrative Stepper Below Canvas -->
-      <div class="border-t" style="padding: 16px; background: var(--card-bg);">
+      <div class="border-t" style="padding: 18px 20px; background: var(--bg-surface);">
         <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-xs">
-          <div id="step-desc-1" class="rounded-lg border" style="padding: 10px; border-color: rgba(99, 102, 241, 0.5); background: rgba(99, 102, 241, 0.12);">
-            <div class="font-bold text-indigo-400" style="margin-bottom: 2px;">1. Intenção do Usuário</div>
-            <p class="text-muted" style="font-size: 11px;">Você envia uma tarefa ao Claude Code no canvas sem abrir abas soltas de terminal.</p>
+          
+          <div id="step-desc-1" class="rounded-lg border" style="padding: 12px; border-color: rgba(99, 102, 241, 0.5); background: rgba(99, 102, 241, 0.12);">
+            <div class="font-bold text-indigo" style="margin-bottom: 4px;">1. Sua Demanda</div>
+            <p class="text-secondary" style="font-size: 11px;">Você define a meta no nó do Claude sem abrir abas soltas de terminal.</p>
           </div>
-          <div id="step-desc-2" class="rounded-lg border" style="padding: 10px; opacity: 0.5;">
-            <div class="font-bold text-main" style="margin-bottom: 2px;">2. Plano Estruturado</div>
-            <p class="text-muted" style="font-size: 11px;">O arquiteto redige o plano e publica o artefato no canvas via <code>cgli create-artifact</code>.</p>
+
+          <div id="step-desc-2" class="rounded-lg border" style="padding: 12px; opacity: 0.5;">
+            <div class="font-bold text-primary" style="margin-bottom: 4px;">2. Plano Arquitetural</div>
+            <p class="text-secondary" style="font-size: 11px;">O arquiteto cria o plano técnico no canvas antes de tocar no código.</p>
           </div>
-          <div id="step-desc-3" class="rounded-lg border" style="padding: 10px; opacity: 0.5;">
-            <div class="font-bold text-main" style="margin-bottom: 2px;">3. Revisão com TextAnchor</div>
-            <p class="text-muted" style="font-size: 11px;">Você seleciona um trecho do plano, anota diretrizes obrigatórias e aprova a execução.</p>
+
+          <div id="step-desc-3" class="rounded-lg border" style="padding: 12px; opacity: 0.5;">
+            <div class="font-bold text-primary" style="margin-bottom: 4px;">3. Sua Canetada</div>
+            <p class="text-secondary" style="font-size: 11px;">Você grifa o parágrafo crítico, impõe regras de negócio e clica em Aprovar.</p>
           </div>
-          <div id="step-desc-4" class="rounded-lg border" style="padding: 10px; opacity: 0.5;">
-            <div class="font-bold text-main" style="margin-bottom: 2px;">4. Agente Executor</div>
-            <p class="text-muted" style="font-size: 11px;">O Antigravity (AGY) recebe o contexto aprovado e consulta o Obsidian Vault.</p>
+
+          <div id="step-desc-4" class="rounded-lg border" style="padding: 12px; opacity: 0.5;">
+            <div class="font-bold text-primary" style="margin-bottom: 4px;">4. Execução Guiada</div>
+            <p class="text-secondary" style="font-size: 11px;">O executor codifica apenas o plano aprovado, consultando o Obsidian.</p>
           </div>
-          <div id="step-desc-5" class="rounded-lg border" style="padding: 10px; opacity: 0.5;">
-            <div class="font-bold text-main" style="margin-bottom: 2px;">5. Diffs & Terminal VT100</div>
-            <p class="text-muted" style="font-size: 11px;">Alterações aparecem em tempo real no DiffNode enquanto o terminal compila o código.</p>
+
+          <div id="step-desc-5" class="rounded-lg border" style="padding: 12px; opacity: 0.5;">
+            <div class="font-bold text-primary" style="margin-bottom: 4px;">5. Diffs & Paz de Espírito</div>
+            <p class="text-secondary" style="font-size: 11px;">Você audita visualmente as linhas alteradas e os testes passando.</p>
           </div>
+
         </div>
       </div>
 
@@ -507,280 +509,171 @@
   </section>
 
   <!-- ========================================================================= -->
-  <!-- 4. TECHNICAL DEEP-DIVE: DUAL-VAULT OBSIDIAN -->
+  <!-- 4. O ANTES E DEPOIS (A DOR VS A PAZ DE ESPÍRITO) -->
   <!-- ========================================================================= -->
-  <section id="obsidian-memory" class="max-w-7xl px-4" style="margin-bottom: 80px;">
-    <div class="border-t" style="padding-top: 48px;">
-      
-      <div class="flex flex-col md:flex-row md:items-end justify-between gap-4" style="margin-bottom: 32px;">
-        <div>
-          <span class="text-emerald-400 font-mono text-xs uppercase tracking-wider font-bold">Memória Persistente de Longo Prazo</span>
-          <h2 class="text-3xl font-extrabold tracking-tight text-main" style="margin-top: 4px;">
-            Dual-Vault Obsidian Nativo (`cgli-vault`)
-          </h2>
-          <p class="text-muted text-sm" style="max-width: 640px; margin-top: 8px;">
-            Agentes não devem esquecer decisões arquiteturais entre sessões. O CGLI sincroniza automaticamente
-            dois vaults Obsidian estruturados com ULIDs monotônicos, busca BM25 e concorrência otimista.
-          </p>
-        </div>
-        <div class="flex items-center gap-2 font-mono text-xs">
-          <span style="padding: 4px 10px; border-radius: 6px; background: rgba(168, 85, 247, 0.15); color: #D8B4FE; border: 1px solid rgba(168, 85, 247, 0.3);">
-            Local: <code>.cgli/vault/</code>
-          </span>
-          <span style="padding: 4px 10px; border-radius: 6px; background: rgba(16, 185, 129, 0.15); color: #6EE7B7; border: 1px solid rgba(16, 185, 129, 0.3);">
-            Global: <code>~/.cgli/vault/</code>
-          </span>
-        </div>
-      </div>
+  <section id="before-after" class="max-w-5xl px-4" style="margin-bottom: 80px;">
+    
+    <div style="text-align: center; margin-bottom: 40px;">
+      <span class="text-xs uppercase tracking-wider font-bold" style="color: #F59E0B;">O Diagnóstico da Rotina</span>
+      <h2 class="text-3xl font-extrabold tracking-tight text-primary" style="margin-top: 6px;">
+        Por que codar com IA ainda dá tanta ansiedade?
+      </h2>
+      <p class="text-secondary text-base" style="max-width: 640px; margin: 8px auto 0;">
+        A maioria dos desenvolvedores passa o dia em um ciclo exaustivo de abas soltas e correções manuais.
+      </p>
+    </div>
 
-      <!-- Obsidian Vault Explorer Widget -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 rounded-2xl border" style="background: var(--card-bg); padding: 24px; box-shadow: 0 10px 30px var(--shadow-color);">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      
+      <!-- O Caos Tradicional -->
+      <div class="rounded-2xl border" style="padding: 24px; background: var(--bg-surface); border-color: rgba(239, 68, 68, 0.3);">
+        <div class="flex items-center gap-2" style="margin-bottom: 16px;">
+          <span style="font-size: 18px;">❌</span>
+          <h3 class="font-bold text-lg text-primary">Como você programa hoje (Sem CGLI)</h3>
+        </div>
         
-        <!-- Left: Search & Note List -->
-        <div class="lg:col-span-5 flex flex-col gap-3">
-          <div style="position: relative;">
-            <input id="vaultSearchInput" type="text" placeholder="Buscar notas por título, tag ou BM25..."
-                   style="width: 100%; padding: 8px 14px; border-radius: 10px; font-size: 12px; background: var(--card-header); border: 1px solid var(--card-border); color: var(--text-main); outline: none;" />
-          </div>
+        <ul style="list-style: none; display: flex; flex-direction: column; gap: 14px; font-size: 13px; color: var(--text-secondary);">
+          <li class="flex items-start gap-2.5">
+            <span style="color: #EF4444; font-weight: 700;">•</span>
+            <div><strong>O inferno do Alt+Tab:</strong> 12 abas abertas (terminal do Claude, terminal de build, VS Code, Git diff, Notion). Você gasta tempo procurando onde está cada saída.</div>
+          </li>
+          <li class="flex items-start gap-2.5">
+            <span style="color: #EF4444; font-weight: 700;">•</span>
+            <div><strong>O "Enter" no escuro:</strong> O agente cospe 700 linhas no terminal. Ler diff cru no terminal cansa a vista; você aceita e descobre 30 minutos depois que quebrou outra tela.</div>
+          </li>
+          <li class="flex items-start gap-2.5">
+            <span style="color: #EF4444; font-weight: 700;">•</span>
+            <div><strong>Amnésia constante:</strong> Você explicou como seu banco funciona na terça. Na quarta, em uma nova sessão, o agente sugere a biblioteca que você proibiu.</div>
+          </li>
+          <li class="flex items-start gap-2.5">
+            <span style="color: #EF4444; font-weight: 700;">•</span>
+            <div><strong>Agente faz-tudo estourando contexto:</strong> O mesmo agente tenta arquitetar, codar e rodar testes na mesma conversa, degradando a qualidade do raciocínio.</div>
+          </li>
+        </ul>
+      </div>
 
-          <div class="flex flex-col gap-2" style="max-height: 280px; overflow-y: auto;">
-            <button onclick="selectDemoNote('adr001')" class="demo-note-btn rounded-lg border text-xs flex items-center justify-between"
-                    style="width: 100%; text-align: left; padding: 10px; cursor: pointer; background: rgba(16, 185, 129, 0.12); border-color: rgba(16, 185, 129, 0.4); color: var(--text-main);">
-              <div>
-                <span class="font-bold text-emerald-300" style="display: block;">ADR-001: Refatoração 100% Rust</span>
-                <span class="font-mono text-muted" style="font-size: 10px;">40-decisions/01M736XMWE1GB...md</span>
-              </div>
-              <span class="font-bold text-emerald-400" style="font-size: 9px; padding: 2px 6px; border-radius: 4px; background: #064E3B;">LOCAL</span>
-            </button>
-
-            <button onclick="selectDemoNote('spec002')" class="demo-note-btn rounded-lg border text-xs flex items-center justify-between"
-                    style="width: 100%; text-align: left; padding: 10px; cursor: pointer; background: var(--card-bg); border-color: var(--card-border); color: var(--text-main);">
-              <div>
-                <span class="font-bold text-main" style="display: block;">SPEC-002: Motor ANSI VT100 Nativo</span>
-                <span class="font-mono text-muted" style="font-size: 10px;">40-decisions/01M736XMWZM0...md</span>
-              </div>
-              <span class="font-bold text-emerald-400" style="font-size: 9px; padding: 2px 6px; border-radius: 4px; background: #064E3B;">LOCAL</span>
-            </button>
-
-            <button onclick="selectDemoNote('learning001')" class="demo-note-btn rounded-lg border text-xs flex items-center justify-between"
-                    style="width: 100%; text-align: left; padding: 10px; cursor: pointer; background: var(--card-bg); border-color: var(--card-border); color: var(--text-main);">
-              <div>
-                <span class="font-bold text-main" style="display: block;">Convenção: Git Commit & Push Automático</span>
-                <span class="font-mono text-muted" style="font-size: 10px;">20-learnings/01M736X...md</span>
-              </div>
-              <span class="font-bold text-purple-300" style="font-size: 9px; padding: 2px 6px; border-radius: 4px; background: #581C87;">GLOBAL</span>
-            </button>
-          </div>
+      <!-- A Vida com CGLI -->
+      <div class="rounded-2xl border" style="padding: 24px; background: var(--bg-surface); border-color: rgba(16, 185, 129, 0.4);">
+        <div class="flex items-center gap-2" style="margin-bottom: 16px;">
+          <span style="font-size: 18px;">✅</span>
+          <h3 class="font-bold text-lg text-primary">Como você programa com o CGLI</h3>
         </div>
 
-        <!-- Right: Note Content Preview -->
-        <div class="lg:col-span-7 rounded-xl border font-mono text-xs flex flex-col justify-between"
-             style="background: #030712; padding: 16px; border-color: var(--card-border);">
-          <div>
-            <div class="flex items-center justify-between border-b" style="padding-bottom: 8px; margin-bottom: 12px; border-color: #1E293B; font-size: 11px;">
-              <span id="notePreviewPath" style="color: #94A3B8;">40-decisions/01M736XMWE1GBH5MJYSNXW205G--decision--adr-001.md</span>
-              <span id="notePreviewEtag" class="text-emerald-400" style="font-size: 10px;">ETag: sha256:9f86d081884c7d65</span>
-            </div>
-            <div id="notePreviewContent" style="color: #F1F5F9; white-space: pre-wrap; line-height: 1.6; font-size: 11px;">
----
-id: 01M736XMWE1GBH5MJYSNXW205G
-type: decision
-status: active
-scope: project
-title: ADR-001: Refatoração 100% Rust
-tags: [rust, leptos, axum, cgli-vault]
-updated_at: 2026-11-10T17:08:33Z
----
-
-# ADR-001: Migração Completa para Rust Puro
-
-## Contexto
-Eliminar o overhead de Node.js e React no ecossistema Tauri v2, unificando a stack em Leptos 0.6 CSR (WASM) com Axum Bridge.
-
-## Consequências Positivas
-- 0ms de interpretação JavaScript no backend.
-- Concorrência de escrita atômica garantida por Single-Writer Queue.
-            </div>
-          </div>
-          <div class="border-t flex items-center justify-between text-xs" style="margin-top: 16px; padding-top: 10px; border-color: #1E293B; color: #94A3B8;">
-            <span>Formato compatível com Obsidian Desktop</span>
-            <button onclick="copyCurrentNote()" style="padding: 4px 10px; border-radius: 6px; background: #1E293B; color: #FFF; border: none; cursor: pointer;">
-              Copiar Nota
-            </button>
-          </div>
-        </div>
-
+        <ul style="list-style: none; display: flex; flex-direction: column; gap: 14px; font-size: 13px; color: var(--text-secondary);">
+          <li class="flex items-start gap-2.5">
+            <span style="color: #10B981; font-weight: 700;">•</span>
+            <div><strong>Mesa de cirurgia unificada:</strong> O arquiteto, o executor, os planos, o Obsidian e os diffs estão todos visíveis no mesmo canvas interativo.</div>
+          </li>
+          <li class="flex items-start gap-2.5">
+            <span style="color: #10B981; font-weight: 700;">•</span>
+            <div><strong>Aprovação com canetada (TextAnchor):</strong> Você grifa o parágrafo que quer ajustar no plano e dá seu aval. O executor não toca em nada antes disso.</div>
+          </li>
+          <li class="flex items-start gap-2.5">
+            <span style="color: #10B981; font-weight: 700;">•</span>
+            <div><strong>Memória permanente no repositório:</strong> Toda decisão arquitetural (ADR) é gravada em Markdown no Obsidian. Novos agentes leem as regras automaticamente.</div>
+          </li>
+          <li class="flex items-start gap-2.5">
+            <span style="color: #10B981; font-weight: 700;">•</span>
+            <div><strong>Especialização de papéis:</strong> Quem planeja não codifica às pressas. Cada agente atua no seu escopo específico, preservando a sanidade da base de código.</div>
+          </li>
+        </ul>
       </div>
 
     </div>
+
   </section>
 
   <!-- ========================================================================= -->
-  <!-- 5. MOTOR VT100 EM RUST PURO (cgli-pty-vt) -->
+  <!-- 5. CASOS DE USO REAIS: ONDE ELE SALVA A SUA SEMANA -->
   <!-- ========================================================================= -->
-  <section id="native-terminal" class="max-w-7xl px-4" style="margin-bottom: 80px;">
-    <div class="border-t" style="padding-top: 48px;">
-      
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-        <!-- Text details -->
-        <div class="lg:col-span-5 flex flex-col gap-3">
-          <span class="text-sky-400 font-mono text-xs uppercase tracking-wider font-bold">Sem xterm.js • Sem C++ • 100% Rust</span>
-          <h2 class="text-3xl font-extrabold tracking-tight text-main">
-            Motor ANSI/VT100 Nativo (`cgli-pty-vt`)
-          </h2>
-          <p class="text-muted text-sm" style="line-height: 1.6;">
-            Eliminamos mais de 400KB de dependências complexas de terminal. O <code>cgli-pty-vt</code> implementa
-            um parser ANSI completo em Rust puro, renderizado diretamente em nós reativos Leptos,
-            com suporte a <strong>TrueColor 24-bit</strong> e detecção instantânea de marcadores de orquestração <code>&lt;&lt;&lt;CGLI:...&gt;&gt;&gt;</code>.
-          </p>
-
-          <div class="flex flex-col gap-2 text-xs" style="padding-top: 8px;">
-            <div class="flex items-center gap-2">
-              <span class="text-emerald-400 font-bold">✔</span>
-              <span>SGR 16 cores, 256 cores e TrueColor 24-bit (RGB)</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="text-emerald-400 font-bold">✔</span>
-              <span>Extração automática de ações do canvas sem bloquear stdout</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="text-emerald-400 font-bold">✔</span>
-              <span>Sessões PTY assíncronas via Axum SSE Stream</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Terminal Simulator -->
-        <div class="lg:col-span-7 rounded-2xl border font-mono text-xs"
-             style="background: #011E48; padding: 16px; border-color: rgba(0, 120, 212, 0.6); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-          <div class="flex items-center justify-between border-b text-sm"
-               style="padding-bottom: 8px; margin-bottom: 12px; border-color: rgba(0, 120, 212, 0.4); color: #FFF;">
-            <div class="flex items-center gap-2">
-              <div style="width: 10px; height: 10px; border-radius: 9999px; background: #0078D4;"></div>
-              <span class="font-bold">PowerShell / Bash (cgli-pty-vt)</span>
-            </div>
-            <div class="flex items-center gap-2 text-xs">
-              <button onclick="runTermDemo('status')" style="padding: 2px 8px; border-radius: 4px; background: rgba(0,120,212,0.4); color: #FFF; border: none; cursor: pointer;">cgli status</button>
-              <button onclick="runTermDemo('memory')" style="padding: 2px 8px; border-radius: 4px; background: rgba(0,120,212,0.4); color: #FFF; border: none; cursor: pointer;">cgli memory list</button>
-              <button onclick="runTermDemo('test')" style="padding: 2px 8px; border-radius: 4px; background: rgba(0,120,212,0.4); color: #FFF; border: none; cursor: pointer;">cargo test</button>
-            </div>
-          </div>
-
-          <div id="termScreen" style="height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-size: 11px; line-height: 1.5; color: #EEEDF0;">
-            <div><span class="text-emerald-400 font-bold">✔ CGLI 100% Rust Engine</span> — <span class="text-sky-300 font-bold">cgli-pty-vt ANSI/VT100</span></div>
-            <div>antigravity@workspace:~/CaioFelipe/CGLI$ rustc --version</div>
-            <div style="color: #94A3B8;">rustc 1.99.1-nightly (01e913d87 2026-10-13)</div>
-            <div style="color: #64748B; padding-top: 4px;">Clique nos botões acima para executar comandos no motor VT100 em tempo real...</div>
-          </div>
-        </div>
-
-      </div>
-
+  <section id="use-cases" class="max-w-6xl px-4" style="margin-bottom: 80px;">
+    
+    <div style="text-align: center; margin-bottom: 40px;">
+      <span class="text-xs uppercase tracking-wider font-bold" style="color: #6366F1;">Aplicações Práticas</span>
+      <h2 class="text-3xl font-extrabold tracking-tight text-primary" style="margin-top: 6px;">
+        Onde o CGLI faz a diferença real no seu trabalho
+      </h2>
     </div>
-  </section>
 
-  <!-- ========================================================================= -->
-  <!-- 6. ARCHITECTURE OF THE 6 CARGO CRATES -->
-  <!-- ========================================================================= -->
-  <section id="architecture" class="max-w-7xl px-4" style="margin-bottom: 80px;">
-    <div class="border-t" style="padding-top: 48px;">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
       
-      <div style="text-align: center; max-width: 640px; margin: 0 auto 36px;">
-        <span class="text-indigo-400 font-mono text-xs uppercase tracking-wider font-bold">Engenharia Limpa</span>
-        <h2 class="text-3xl font-extrabold tracking-tight text-main" style="margin-top: 4px;">
-          Arquitetura Modular dos 6 Crates Rust
-        </h2>
-        <p class="text-muted text-sm" style="margin-top: 8px;">
-          Todo o repositório é organizado em crates desacoplados, com separação estrita de responsabilidades
-          e sem dependência de bibliotecas web pesadas ou runtimes externos.
+      <div class="rounded-2xl border" style="padding: 24px; background: var(--bg-surface);">
+        <div style="font-size: 28px; margin-bottom: 12px;">🛡️</div>
+        <h3 class="text-lg font-bold text-primary" style="margin-bottom: 8px;">Refatorações Perigosas</h3>
+        <p class="text-sm text-secondary" style="line-height: 1.6;">
+          Trocar a camada de autenticação, migrar ORMs ou reescrever rotas críticas. Em vez de torcer para a IA não quebrar módulos vizinhos,
+          você aprova o plano etapa por etapa e audita cada diff em verde e vermelho.
         </p>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        
-        <div class="rounded-2xl border" style="padding: 20px; background: var(--card-bg);">
-          <div class="flex items-center justify-between" style="margin-bottom: 8px;">
-            <span class="font-mono font-bold text-sm text-indigo-400">cgli-core</span>
-            <span class="font-mono text-xs" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(99,102,241,0.15); color: #818CF8;">Domain</span>
-          </div>
-          <p class="text-xs text-muted" style="line-height: 1.6;">
-            Estruturas de domínio canônicas (`CanvasNode`, `Position2D`, `AgentRole`), helpers do grafo e parser nativo de Unified Diff com estatísticas de adições/remoções.
-          </p>
-        </div>
+      <div class="rounded-2xl border" style="padding: 24px; background: var(--bg-surface);">
+        <div style="font-size: 28px; margin-bottom: 12px;">⚡</div>
+        <h3 class="text-lg font-bold text-primary" style="margin-bottom: 8px;">Features Complexas Full-Stack</h3>
+        <p class="text-sm text-secondary" style="line-height: 1.6;">
+          Deixe o Claude modelar os contratos da API e os schemas do banco em formato visual. Valide a coerência em 2 minutos.
+          O executor implementa o backend e os testes unitários sem inventar rotas que você não pediu.
+        </p>
+      </div>
 
-        <div class="rounded-2xl border" style="padding: 20px; background: var(--card-bg);">
-          <div class="flex items-center justify-between" style="margin-bottom: 8px;">
-            <span class="font-mono font-bold text-sm text-sky-400">cgli-pty-vt</span>
-            <span class="font-mono text-xs" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(2,132,199,0.15); color: #38BDF8;">VT100 Engine</span>
-          </div>
-          <p class="text-xs text-muted" style="line-height: 1.6;">
-            Emulador de terminal sem xterm.js. Buffer bidimensional de células, parser de sequências de escape ANSI/SGR TrueColor e componente Leptos reativo.
-          </p>
-        </div>
+      <div class="rounded-2xl border" style="padding: 24px; background: var(--bg-surface);">
+        <div style="font-size: 28px; margin-bottom: 12px;">🧠</div>
+        <h3 class="text-lg font-bold text-primary" style="margin-bottom: 8px;">Memória Histórica da Equipe</h3>
+        <p class="text-sm text-secondary" style="line-height: 1.6;">
+          Todas as decisões (ADRs) ficam salvas em arquivos Markdown reais no seu repositório (`.cgli/vault/`).
+          Seja um novo desenvolvedor ou um agente executando na semana seguinte, a memória do projeto nunca se perde.
+        </p>
+      </div>
 
-        <div class="rounded-2xl border" style="padding: 20px; background: var(--card-bg);">
-          <div class="flex items-center justify-between" style="margin-bottom: 8px;">
-            <span class="font-mono font-bold text-sm text-emerald-400">cgli-vault</span>
-            <span class="font-mono text-xs" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16,185,129,0.15); color: #34D399;">Dual-Vault</span>
-          </div>
-          <p class="text-xs text-muted" style="line-height: 1.6;">
-            Gerenciador de memória com ULID monotônico de 26 caracteres, SHA-256 ETag para concorrência otimista (`409 Conflict`), busca BM25 e journal compactor.
-          </p>
-        </div>
+    </div>
 
-        <div class="rounded-2xl border" style="padding: 20px; background: var(--card-bg);">
-          <div class="flex items-center justify-between" style="margin-bottom: 8px;">
-            <span class="font-mono font-bold text-sm text-amber-400">cgli-cli</span>
-            <span class="font-mono text-xs" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(245,158,11,0.15); color: #FBBF24;">Native CLI</span>
-          </div>
-          <p class="text-xs text-muted" style="line-height: 1.6;">
-            Binário nativo multiplataforma (`cgli`) invocado por Claude e AGY para publicar artefatos, interagir com memória e despachar subagentes sem Node.js.
-          </p>
-        </div>
+  </section>
 
-        <div class="rounded-2xl border" style="padding: 20px; background: var(--card-bg);">
-          <div class="flex items-center justify-between" style="margin-bottom: 8px;">
-            <span class="font-mono font-bold text-sm text-purple-400">cgli-desktop</span>
-            <span class="font-mono text-xs" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(168,85,247,0.15); color: #D8B4FE;">Axum Bridge</span>
-          </div>
-          <p class="text-xs text-muted" style="line-height: 1.6;">
-            Servidor HTTP/SSE Axum com fila Single-Writer FIFO (`VaultWriterQueue`), orquestração PTY (`portable-pty`) e gerador de estilos `encre-css` em Rust.
-          </p>
-        </div>
+  <!-- ========================================================================= -->
+  <!-- 6. COMO COMEÇAR (CALL TO ACTION DIRETO) -->
+  <!-- ========================================================================= -->
+  <section id="quickstart" class="max-w-5xl px-4" style="margin-bottom: 80px;">
+    <div class="rounded-2xl border" style="background: var(--bg-surface); padding: 36px 28px; text-align: center;">
+      
+      <h2 class="text-3xl font-extrabold tracking-tight text-primary">
+        Pronto para codar com agentes sem perder o controle?
+      </h2>
+      <p class="text-secondary text-sm" style="max-width: 580px; margin: 12px auto 24px; line-height: 1.6;">
+        O CGLI é 100% código aberto e roda inteiramente local na sua máquina. Seus arquivos e seus agentes permanecem no seu controle.
+      </p>
 
-        <div class="rounded-2xl border" style="padding: 20px; background: var(--card-bg);">
-          <div class="flex items-center justify-between" style="margin-bottom: 8px;">
-            <span class="font-mono font-bold text-sm text-rose-400">cgli-ui</span>
-            <span class="font-mono text-xs" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(251,113,133,0.15); color: #FB7185;">Leptos WASM</span>
-          </div>
-          <p class="text-xs text-muted" style="line-height: 1.6;">
-            Frontend em WebAssembly puro com Leptos 0.6 CSR. Todos os 9 nós customizados, Topbar, StashDrawer e modais renderizados sem React ou Virtual DOM.
-          </p>
-        </div>
-
+      <div class="inline-flex items-center gap-3 font-mono text-xs rounded-xl border"
+           style="padding: 12px 18px; background: #030712; max-width: 620px; width: 100%; justify-content: space-between;">
+        <span style="color: #38BDF8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          git clone https://github.com/CaioFelipe/CGLI.git && cd CGLI && cargo run -p cgli-desktop
+        </span>
+        <button onclick="copyInstallCmd()" style="padding: 4px 10px; border-radius: 6px; background: #1E293B; color: #FFF; border: none; cursor: pointer; flex-shrink: 0;">
+          Copiar
+        </button>
       </div>
 
     </div>
   </section>
 
   <!-- ========================================================================= -->
-  <!-- 7. FOOTER -->
+  <!-- 7. FOOTER (DISCRETO & TRANSPARENTE) -->
   <!-- ========================================================================= -->
-  <footer class="border-t" style="padding: 32px 16px; background: var(--card-bg); font-size: 12px; color: var(--text-muted);">
-    <div class="max-w-7xl flex flex-col md:flex-row items-center justify-between gap-4">
+  <footer class="border-t" style="padding: 32px 16px; background: var(--bg-base); font-size: 12px; color: var(--text-muted);">
+    <div class="max-w-6xl flex flex-col md:flex-row items-center justify-between gap-4">
       <div class="flex items-center gap-2">
-        <span class="font-bold text-main">CGLI — Canvas Agent Orchestrator</span>
+        <span class="font-bold text-primary">CGLI</span>
         <span>•</span>
-        <span>Código Aberto 100% Rust</span>
+        <span>Canvas Agent Orchestrator</span>
+        <span>•</span>
+        <a href="https://github.com/CaioFelipe/CGLI" target="_blank" style="color: inherit;">GitHub Open Source</a>
       </div>
       <div>
-        Projetado para engenheiros de software que exigem controle, transparência e zero ruído de IA.
+        Projetado para engenheiros de software que exigem controle, transparência e zero alucinação às cegas.
       </div>
     </div>
   </footer>
 
   <!-- ========================================================================= -->
-  <!-- 8. JAVASCRIPT: BEZIER ENGINE & CONTROLLER -->
+  <!-- 8. JAVASCRIPT: CONTROLLER & DINÂMICA DO CANVAS -->
   <!-- ========================================================================= -->
   <script>
     // Theme toggle
@@ -792,15 +685,20 @@ Eliminar o overhead de Node.js e React no ecossistema Tauri v2, unificando a sta
       if (isDark) {
         document.documentElement.classList.remove('dark');
         document.documentElement.classList.add('light');
-        themeText.innerText = '🌙 Modo Escuro';
+        themeText.innerText = '🌙 Escuro';
       } else {
         document.documentElement.classList.remove('light');
         document.documentElement.classList.add('dark');
-        themeText.innerText = '☀️ Modo Claro';
+        themeText.innerText = '☀️ Claro';
       }
       updateAllPaths();
     }
     themeBtn.addEventListener('click', toggleTheme);
+
+    function copyInstallCmd() {
+      navigator.clipboard.writeText('git clone https://github.com/CaioFelipe/CGLI.git && cd CGLI && cargo run -p cgli-desktop');
+      alert('Comando copiado para a área de transferência!');
+    }
 
     // Bézier Path calculation
     function getCenter(el) {
@@ -877,7 +775,7 @@ Eliminar o overhead de Node.js e React no ecossistema Tauri v2, unificando a sta
       }
     });
 
-    // Simulation Engine
+    // Workflow Simulation Engine
     let currentStep = 1;
     let isPlaying = false;
     let playInterval = null;
@@ -889,11 +787,11 @@ Eliminar o overhead de Node.js e React no ecossistema Tauri v2, unificando a sta
 
     function applySimulationStep(step) {
       currentStep = step;
-      stepCounter.innerText = `Passo ${step} / 5: ${
-        step === 1 ? 'Solicitação Inicial' :
-        step === 2 ? 'Geração de Plano' :
-        step === 3 ? 'Aprovação Humana' :
-        step === 4 ? 'Disparo do Executor' : 'Build & Diffs'
+      stepCounter.innerText = `Passo ${step}/5: ${
+        step === 1 ? 'Sua Demanda' :
+        step === 2 ? 'Plano Técnico' :
+        step === 3 ? 'Sua Canetada' :
+        step === 4 ? 'Execução Guiada' : 'Diff & Testes'
       }`;
 
       for (let i = 1; i <= 5; i++) {
@@ -904,8 +802,8 @@ Eliminar o overhead de Node.js e React no ecossistema Tauri v2, unificando a sta
             el.style.background = 'rgba(99, 102, 241, 0.15)';
             el.style.opacity = '1';
           } else {
-            el.style.borderColor = 'var(--card-border)';
-            el.style.background = 'var(--card-bg)';
+            el.style.borderColor = 'var(--border-subtle)';
+            el.style.background = 'var(--bg-surface)';
             el.style.opacity = '0.5';
           }
         }
@@ -917,11 +815,11 @@ Eliminar o overhead de Node.js e React no ecossistema Tauri v2, unificando a sta
       const mem = document.getElementById('node-mem');
       const diff = document.getElementById('node-diff');
 
-      claude.style.boxShadow = step === 1 ? '0 0 25px rgba(234, 88, 12, 0.6)' : '';
-      art.style.boxShadow = (step === 2 || step === 3) ? '0 0 25px rgba(99, 102, 241, 0.6)' : '';
-      agy.style.boxShadow = (step === 4 || step === 5) ? '0 0 25px rgba(2, 132, 199, 0.6)' : '';
-      mem.style.boxShadow = step === 4 ? '0 0 20px rgba(16, 185, 129, 0.6)' : '';
-      diff.style.boxShadow = step === 5 ? '0 0 25px rgba(251, 113, 133, 0.6)' : '';
+      claude.style.boxShadow = step === 1 ? '0 0 25px rgba(234, 88, 12, 0.5)' : '';
+      art.style.boxShadow = (step === 2 || step === 3) ? '0 0 25px rgba(99, 102, 241, 0.5)' : '';
+      agy.style.boxShadow = (step === 4 || step === 5) ? '0 0 25px rgba(2, 132, 199, 0.5)' : '';
+      mem.style.boxShadow = step === 4 ? '0 0 20px rgba(16, 185, 129, 0.5)' : '';
+      diff.style.boxShadow = step === 5 ? '0 0 25px rgba(244, 63, 94, 0.5)' : '';
 
       updateAllPaths();
     }
@@ -941,7 +839,7 @@ Eliminar o overhead de Node.js e React no ecossistema Tauri v2, unificando a sta
         clearInterval(playInterval);
         isPlaying = false;
         playIcon.innerText = '▶';
-        playText.innerText = 'Reproduzir Fluxo';
+        playText.innerText = 'Ver Fluxo da Feature';
       } else {
         isPlaying = true;
         playIcon.innerText = '⏸';
@@ -949,122 +847,24 @@ Eliminar o overhead de Node.js e React no ecossistema Tauri v2, unificando a sta
         playInterval = setInterval(() => {
           const next = currentStep >= 5 ? 1 : currentStep + 1;
           applySimulationStep(next);
-        }, 3000);
+        }, 3200);
       }
     });
 
     document.getElementById('btnResetCanvas').addEventListener('click', () => {
-      document.getElementById('node-claude').style.left = '35px';
-      document.getElementById('node-claude').style.top = '60px';
-      document.getElementById('node-art').style.left = '390px';
-      document.getElementById('node-art').style.top = '40px';
-      document.getElementById('node-agy').style.left = '760px';
-      document.getElementById('node-agy').style.top = '60px';
-      document.getElementById('node-mem').style.left = '390px';
+      document.getElementById('node-claude').style.left = '30px';
+      document.getElementById('node-claude').style.top = '40px';
+      document.getElementById('node-art').style.left = '380px';
+      document.getElementById('node-art').style.top = '30px';
+      document.getElementById('node-agy').style.left = '750px';
+      document.getElementById('node-agy').style.top = '40px';
+      document.getElementById('node-mem').style.left = '380px';
       document.getElementById('node-mem').style.top = '370px';
-      document.getElementById('node-diff').style.left = '760px';
+      document.getElementById('node-diff').style.left = '750px';
       document.getElementById('node-diff').style.top = '320px';
       applySimulationStep(1);
       updateAllPaths();
     });
-
-    // Notes Data
-    const demoNotes = {
-      adr001: {
-        path: '40-decisions/01M736XMWE1GBH5MJYSNXW205G--decision--adr-001.md',
-        etag: 'sha256:9f86d081884c7d65',
-        content: `---
-id: 01M736XMWE1GBH5MJYSNXW205G
-type: decision
-status: active
-scope: project
-title: ADR-001: Refatoração 100% Rust
-tags: [rust, leptos, axum, cgli-vault]
-updated_at: 2026-11-10T17:08:33Z
----
-
-# ADR-001: Migração Completa para Rust Puro
-
-## Contexto
-Eliminar o overhead de Node.js e React no ecossistema Tauri v2, unificando a stack em Leptos 0.6 CSR (WASM) com Axum Bridge.
-
-## Consequências Positivas
-- 0ms de interpretação JavaScript no backend.
-- Concorrência de escrita atômica garantida por Single-Writer Queue.`
-      },
-      spec002: {
-        path: '40-decisions/01M736XMWZM0SVCAKQQ2W58752--spec--spec-002.md',
-        etag: 'sha256:3a18e0f6b48c1724',
-        content: `---
-id: 01M736XMWZM0SVCAKQQ2W58752
-type: spec
-status: approved
-scope: project
-title: SPEC-002: Motor ANSI VT100 Nativo (cgli-pty-vt)
-tags: [vt100, terminal, wasm, rust]
-updated_at: 2026-11-10T17:08:35Z
----
-
-# SPEC-002: Emulador ANSI/VT100 em Rust
-
-## Requisitos Técnicos
-1. Parser SGR para 16 cores, 256 cores e 24-bit TrueColor.
-2. Renderização direta em nós reativos Leptos sem canvas embaçado.`
-      },
-      learning001: {
-        path: '20-learnings/01M736XMK9L0927891--learning--git-push.md',
-        etag: 'sha256:8b091fca7182ec88',
-        content: `---
-id: 01M736XMK9L0927891
-type: learning
-status: active
-scope: global
-title: Convenção de Branches e Git Push Automático
-tags: [git, ci, automacao]
-updated_at: 2026-11-10T17:00:00Z
----
-
-# Convenção Global do Desenvolvedor
-
-Sempre que alterações em um projeto forem concluídas e testadas, realizar git commit e git push para o repositório remoto sem intervenção manual.`
-      }
-    };
-
-    function selectDemoNote(key) {
-      const data = demoNotes[key];
-      if (!data) return;
-      document.getElementById('notePreviewPath').innerText = data.path;
-      document.getElementById('notePreviewEtag').innerText = `ETag: ${data.etag}`;
-      document.getElementById('notePreviewContent').innerText = data.content;
-    }
-
-    function copyCurrentNote() {
-      const text = document.getElementById('notePreviewContent').innerText;
-      navigator.clipboard.writeText(text);
-      alert('Conteúdo da nota copiado!');
-    }
-
-    function runTermDemo(type) {
-      const scr = document.getElementById('termScreen');
-      if (type === 'status') {
-        scr.innerHTML += `
-          <div style="padding-top: 6px;"><span class="text-sky-300 font-bold">$ cgli status</span></div>
-          <div class="text-emerald-300">{"status":"ok","port":41732,"queue_depth":0,"last_write_ms":0}</div>
-        `;
-      } else if (type === 'memory') {
-        scr.innerHTML += `
-          <div style="padding-top: 6px;"><span class="text-sky-300 font-bold">$ cgli memory list --scope project</span></div>
-          <div style="color: #CBD5E1;">• [decision] ADR-001: Refatoração 100% Rust (40-decisions/01M736XMWE...)</div>
-          <div style="color: #CBD5E1;">• [spec] SPEC-002: Motor ANSI VT100 Nativo (40-decisions/01M736XMWZ...)</div>
-        `;
-      } else if (type === 'test') {
-        scr.innerHTML += `
-          <div style="padding-top: 6px;"><span class="text-sky-300 font-bold">$ cargo test --workspace</span></div>
-          <div class="text-emerald-400">test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured</div>
-        `;
-      }
-      scr.scrollTop = scr.scrollHeight;
-    }
 
     window.addEventListener('load', () => {
       updateAllPaths();
